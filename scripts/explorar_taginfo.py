@@ -70,13 +70,13 @@ def list_all_tables(cursor):
 
 
 def get_columns(cursor, tabname):
-    cursor.execute("""
-        SELECT c.colname, c.coltype, c.collength
-        FROM syscolumns c
-        JOIN systables t ON t.tabid = c.tabid
-        WHERE t.tabname = ?
-        ORDER BY c.colno
-    """, tabname)
+    cursor.execute(
+        "SELECT c.colno, c.colname, c.coltype, c.collength "
+        "FROM syscolumns c, systables t "
+        "WHERE c.tabid = t.tabid "
+        f"AND t.tabname = '{tabname}' "
+        "ORDER BY c.colno"
+    )
     return cursor.fetchall()
 
 
@@ -156,7 +156,7 @@ def main():
 
     for tname in found_candidates:
         cols = get_columns(cur, tname)
-        colnames = [c[0] for c in cols]
+        colnames = [c[1] for c in cols]
         cnt = table_count(cur, tname)
 
         if not matches_keywords(tname, colnames):
@@ -167,7 +167,7 @@ def main():
         log(f"TABLA: {tname}  ({cnt} filas)")
         log(f"COLUMNAS:")
         for c in cols:
-            log(f"  {c[0]:<30} {coltype_name(c[1]):<20} len={c[2]}")
+            log(f"  {c[1]:<30} {coltype_name(c[2]):<20} len={c[3]}")
 
         if cnt > 0:
             rows = sample_rows(cur, tname)
@@ -184,7 +184,7 @@ def main():
             continue
         try:
             cols = get_columns(cur, tname)
-            colnames = [c[0].lower() for c in cols]
+            colnames = [c[1].lower() for c in cols]
             # buscar columnas que sugieran pedidos/órdenes
             hits = [c for c in colnames if any(kw in c for kw in
                     ["status", "stato", "venc", "due_date", "plazo",
@@ -201,26 +201,26 @@ def main():
         log(f"TABLA: {tname}  ({cnt} filas)  hits={hits}")
         log("COLUMNAS:")
         for c in cols:
-            log(f"  {c[0]:<30} {coltype_name(c[1]):<20} len={c[2]}")
+            log(f"  {c[1]:<30} {coltype_name(c[2]):<20} len={c[3]}")
 
     # 5) Intentar queries directas similares a TagInfo
     log("\n\n--- PRUEBAS DE QUERIES TAGINFO ---")
     today = date.today()
     test_queries = [
-        ("Todas las tablas con 'status' y 'fecha'", """
-            SELECT t.tabname
-            FROM systables t
-            JOIN syscolumns c1 ON c1.tabid = t.tabid AND c1.colname LIKE '%status%'
-            JOIN syscolumns c2 ON c2.tabid = t.tabid AND c2.colname LIKE '%fecha%'
-            WHERE t.tabtype = 'T' AND t.tabid > 99
-        """),
-        ("Todas las tablas con 'valor' o 'amount' o 'importe'", """
-            SELECT DISTINCT t.tabname
-            FROM systables t
-            JOIN syscolumns c ON c.tabid = t.tabid
-            WHERE t.tabtype = 'T' AND t.tabid > 99
-              AND (c.colname LIKE '%valor%' OR c.colname LIKE '%amount%' OR c.colname LIKE '%importe%')
-        """),
+        ("Todas las tablas con 'status' y 'fecha'",
+            "SELECT DISTINCT t.tabname "
+            "FROM systables t, syscolumns c1, syscolumns c2 "
+            "WHERE c1.tabid = t.tabid AND c1.colname LIKE '%status%' "
+            "AND c2.tabid = t.tabid AND c2.colname LIKE '%fecha%' "
+            "AND t.tabtype = 'T' AND t.tabid > 99"
+        ),
+        ("Todas las tablas con 'valor' o 'amount' o 'importe'",
+            "SELECT DISTINCT t.tabname "
+            "FROM systables t, syscolumns c "
+            "WHERE c.tabid = t.tabid "
+            "AND t.tabtype = 'T' AND t.tabid > 99 "
+            "AND (c.colname LIKE '%valor%' OR c.colname LIKE '%amount%' OR c.colname LIKE '%importe%')"
+        ),
     ]
 
     for desc, q in test_queries:
