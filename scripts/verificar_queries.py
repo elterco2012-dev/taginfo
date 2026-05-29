@@ -27,9 +27,13 @@ def run(cursor, label, sql, params=None):
         else:
             cursor.execute(sql)
         rows = cursor.fetchall()
-        return rows
+        return rows if rows else []
     except Exception as e:
         return [("ERROR", str(e))]
+
+
+def first(rows, default=(None, None, None)):
+    return rows[0] if rows else default
 
 
 def main():
@@ -144,7 +148,8 @@ def main():
           AND (h.kzlock > 0 OR h.aufkstat < 0)
           AND p.kzerl <> 'J'
     """)
-    log(f"  ALT (kzlock>0 OR aufkstat<0): Ordenes={rows[0][0]}  Pos={rows[0][1]}  Valor={rows[0][2]}")
+    r = first(rows)
+    log(f"  ALT (kzlock>0 OR aufkstat<0): Ordenes={r[0]}  Pos={r[1]}  Valor={r[2]}")
 
     # 3. BLOQUEADO (Status < -1)
     log("\n--- 3. Bloqueado (Status < -1) ---")
