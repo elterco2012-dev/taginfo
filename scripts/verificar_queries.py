@@ -29,7 +29,8 @@ def run(cursor, label, sql, params=None):
         rows = cursor.fetchall()
         return rows if rows else []
     except Exception as e:
-        return [("ERROR", str(e))]
+        print(f"    SQL ERROR: {e}")
+        return []
 
 
 def first(rows, default=(None, None, None)):
