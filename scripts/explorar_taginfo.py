@@ -71,7 +71,7 @@ def list_all_tables(cursor):
 
 def get_columns(cursor, tabname):
     cursor.execute(
-        "SELECT c.colname, c.coltype, c.collength "
+        "SELECT c.colno, c.colname, c.coltype, c.collength "
         "FROM syscolumns c, systables t "
         "WHERE c.tabid = t.tabid "
         f"AND t.tabname = '{tabname}' "
@@ -156,7 +156,7 @@ def main():
 
     for tname in found_candidates:
         cols = get_columns(cur, tname)
-        colnames = [c[0] for c in cols]
+        colnames = [c[1] for c in cols]
         cnt = table_count(cur, tname)
 
         if not matches_keywords(tname, colnames):
@@ -167,7 +167,7 @@ def main():
         log(f"TABLA: {tname}  ({cnt} filas)")
         log(f"COLUMNAS:")
         for c in cols:
-            log(f"  {c[0]:<30} {coltype_name(c[1]):<20} len={c[2]}")
+            log(f"  {c[1]:<30} {coltype_name(c[2]):<20} len={c[3]}")
 
         if cnt > 0:
             rows = sample_rows(cur, tname)
@@ -184,7 +184,7 @@ def main():
             continue
         try:
             cols = get_columns(cur, tname)
-            colnames = [c[0].lower() for c in cols]
+            colnames = [c[1].lower() for c in cols]
             # buscar columnas que sugieran pedidos/órdenes
             hits = [c for c in colnames if any(kw in c for kw in
                     ["status", "stato", "venc", "due_date", "plazo",
@@ -201,7 +201,7 @@ def main():
         log(f"TABLA: {tname}  ({cnt} filas)  hits={hits}")
         log("COLUMNAS:")
         for c in cols:
-            log(f"  {c[0]:<30} {coltype_name(c[1]):<20} len={c[2]}")
+            log(f"  {c[1]:<30} {coltype_name(c[2]):<20} len={c[3]}")
 
     # 5) Intentar queries directas similares a TagInfo
     log("\n\n--- PRUEBAS DE QUERIES TAGINFO ---")
