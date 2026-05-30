@@ -1,10 +1,10 @@
 """
-TagInfo Web — DAILY INFO 2 SALES
+TagInfo Web - DAILY INFO 2 SALES
 Servidor HTTP minimalista (sin Flask). Solo pyodbc.
-SOLO LECTURA — no INSERT/UPDATE/DELETE/DDL.
+SOLO LECTURA - no INSERT/UPDATE/DELETE/DDL.
 
 Uso:
-    C:\Users\aarmoa\AppData\Local\Programs\Python\Python312-32\python.exe taginfo_web.py
+    python.exe taginfo_web.py
 Abrir: http://localhost:8765
 """
 
