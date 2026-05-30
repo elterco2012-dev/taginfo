@@ -57,7 +57,7 @@ def fetch_reactor():
     conn = get_reactor()
     cur  = conn.cursor()
 
-    # Find most recent order_date with significant activity
+    # Most recent order_date with significant activity
     rows = run(cur, """
         SELECT DATE(order_date) d FROM order_placed
         GROUP BY DATE(order_date) HAVING COUNT(*) >= 50
@@ -66,21 +66,29 @@ def fetch_reactor():
     target = rows[0][0] if rows else (date.today() - timedelta(days=1))
     target_str = str(target)
 
-    # KPIs
+    # KPIs — order_placed only (fast)
     rows = run(cur, """
-        SELECT COUNT(DISTINCT op.id), COUNT(DISTINCT op.id_user),
-               SUM(op.total), COUNT(od.id)
+        SELECT COUNT(DISTINCT id) pedidos,
+               COUNT(DISTINCT id_user) vendedores,
+               SUM(total) valor
+        FROM order_placed
+        WHERE DATE(order_date) = ?
+    """, (target_str,))
+    pedidos, vendedores, valor = (rows[0] if rows else (0, 0, 0))
+    pedidos    = pedidos    or 0
+    vendedores = vendedores or 0
+    valor      = float(valor or 0)
+
+    # Line count — separate query to isolate slowness
+    rows_lin = run(cur, """
+        SELECT COUNT(od.id) lineas
         FROM order_placed op
-        LEFT JOIN order_detail od ON od.id_order_placed = op.id
+        JOIN order_detail od ON od.id_order_placed = op.id
         WHERE DATE(op.order_date) = ?
     """, (target_str,))
-    pedidos, vendedores, valor, lineas = (rows[0] if rows else (0,0,0,0))
-    pedidos   = pedidos   or 0
-    vendedores= vendedores or 0
-    valor     = float(valor or 0)
-    lineas    = lineas    or 0
+    lineas = (rows_lin[0][0] or 0) if rows_lin else 0
 
-    # By status (current id_order_status on order_placed)
+    # By status — current id_order_status on order_placed (source of truth)
     status_rows = run(cur, """
         SELECT op.id_order_status, os.name, COUNT(*) cnt, SUM(op.total) val
         FROM order_placed op
@@ -93,55 +101,40 @@ def fetch_reactor():
     for r in status_rows:
         by_status[int(r[0])] = {"name": r[1], "cnt": r[2], "val": float(r[3] or 0)}
 
-    # Last status from history for Anulados + Retenidos
-    # (latest entry per order for the target date)
-    anul_ret = run(cur, """
-        SELECT os.id, os.name, COUNT(DISTINCT osh.id_order_placed) cnt
-        FROM order_status_history osh
-        JOIN order_status os ON os.id = osh.id_order_status
-        WHERE DATE(osh.date_created) >= ?
-          AND osh.id_order_status IN (14, 15)
-          AND osh.id = (
-              SELECT MAX(h2.id) FROM order_status_history h2
-              WHERE h2.id_order_placed = osh.id_order_placed
-          )
-        GROUP BY os.id, os.name
-    """, (target_str,))
-    anulados  = next((r[2] for r in anul_ret if r[0] == 14), 0)
-    retenidos = next((r[2] for r in anul_ret if r[0] == 15), 0)
-
-    # Monthly trend — last 13 months
+    # Monthly trend — 12 months, order_placed only (fast, no JOIN)
     trend_rows = run(cur, """
         SELECT DATE_FORMAT(order_date, '%Y-%m') mes,
                COUNT(DISTINCT id) pedidos,
-               COUNT(od.id) lineas,
-               SUM(op.total) valor
-        FROM order_placed op
-        LEFT JOIN order_detail od ON od.id_order_placed = op.id
-        WHERE op.order_date >= DATE_SUB(CURDATE(), INTERVAL 13 MONTH)
-          AND DATE(op.order_date) <= CURDATE()
-        GROUP BY DATE_FORMAT(op.order_date, '%Y-%m')
+               SUM(total) valor
+        FROM order_placed
+        WHERE order_date >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+          AND DATE(order_date) <= CURDATE()
+        GROUP BY DATE_FORMAT(order_date, '%Y-%m')
         ORDER BY mes
     """)
     trend = [
-        {"mes": r[0], "pedidos": r[1] or 0, "lineas": r[2] or 0, "valor": float(r[3] or 0)}
+        {"mes": r[0], "pedidos": r[1] or 0, "valor": float(r[2] or 0)}
         for r in trend_rows
     ]
 
     conn.close()
+
+    anulados  = by_status.get(14, {}).get("cnt", 0)
+    retenidos = by_status.get(15, {}).get("cnt", 0)
+
     return {
         "target_date":         target_str,
         "target_date_display": target.strftime("%d/%m/%Y") if hasattr(target, "strftime") else str(target),
-        "pedidos":    pedidos,
-        "vendedores": vendedores,
-        "valor":      valor,
-        "lineas":     lineas,
-        "avg_lineas": round(lineas / pedidos, 1) if pedidos else 0,
+        "pedidos":      pedidos,
+        "vendedores":   vendedores,
+        "valor":        valor,
+        "lineas":       lineas,
+        "avg_lineas":   round(lineas / pedidos, 1) if pedidos else 0,
         "avg_ped_vend": round(pedidos / vendedores, 1) if vendedores else 0,
-        "by_status":  by_status,
-        "anulados":   anulados,
-        "retenidos":  retenidos,
-        "trend":      trend,
+        "by_status":    by_status,
+        "anulados":     anulados,
+        "retenidos":    retenidos,
+        "trend":        trend,
     }
 
 
@@ -263,9 +256,9 @@ def fetch_data():
         print(f"MSPA ERROR: {e}")
 
     return {
-        "timestamp":    datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-        "reactor":      reactor_data or {},
-        "mspa":         mspa_data    or {},
+        "timestamp":     datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+        "reactor":       reactor_data or {},
+        "mspa":          mspa_data    or {},
         "reactor_error": reactor_error,
         "mspa_error":    mspa_error,
     }
@@ -284,13 +277,14 @@ def get_cached_data():
             except Exception as e:
                 print(f"  [{now.strftime('%H:%M:%S')}] ERROR: {e}")
                 if _cache_data is None:
-                    _cache_data = {"error": str(e), "timestamp": now.strftime("%d/%m/%Y %H:%M:%S"),
+                    _cache_data = {"error": str(e),
+                                   "timestamp": now.strftime("%d/%m/%Y %H:%M:%S"),
                                    "reactor": {}, "mspa": {}}
         return _cache_data
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# HTML
+# HTML — tema claro
 # ─────────────────────────────────────────────────────────────────────────────
 HTML_PAGE = r"""<!DOCTYPE html>
 <html lang="es">
@@ -300,91 +294,146 @@ HTML_PAGE = r"""<!DOCTYPE html>
 <title>Würth — Operations Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
-:root {
-  --bg:#0a0e1a; --surface:#111827; --surface2:#1a2234; --border:#1e2a3a;
-  --border2:#2d3a4a; --text:#e2e8f0; --text2:#94a3b8; --text3:#4b5a6e;
-  --blue:#3b82f6; --cyan:#06b6d4; --green:#10b981; --amber:#f59e0b;
-  --red:#ef4444; --orange:#f97316; --purple:#8b5cf6; --teal:#14b8a6;
-  --red-dim:rgba(239,68,68,.1); --amber-dim:rgba(245,158,11,.1);
-  --green-dim:rgba(16,185,129,.1); --blue-dim:rgba(59,130,246,.1);
+:root{
+  --bg:#f0f2f5;
+  --surface:#ffffff;
+  --surface2:#f8fafc;
+  --border:#e2e8f0;
+  --border2:#cbd5e1;
+  --text:#0f172a;
+  --text2:#475569;
+  --text3:#94a3b8;
+  --blue:#2563eb;
+  --cyan:#0891b2;
+  --green:#059669;
+  --amber:#d97706;
+  --red:#dc2626;
+  --orange:#ea580c;
+  --purple:#7c3aed;
+  --red-bg:#fef2f2;
+  --amber-bg:#fffbeb;
+  --green-bg:#f0fdf4;
 }
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;min-height:100vh}
 
-/* ── Header ── */
-.hdr{background:linear-gradient(135deg,#0d1424 0%,#0f1a2e 100%);border-bottom:1px solid var(--border2);padding:10px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+/* Header */
+.hdr{
+  background:#ffffff;
+  border-bottom:2px solid #cc0000;
+  padding:10px 24px;
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  box-shadow:0 1px 4px rgba(0,0,0,.08);
+}
 .hdr-left{display:flex;align-items:center;gap:14px}
-.logo{background:#cc0000;color:#fff;font-weight:900;font-size:18px;padding:4px 10px;letter-spacing:3px;border-radius:4px;flex-shrink:0}
-.hdr-title{font-size:15px;font-weight:700;letter-spacing:.3px}
+/* Logo SVG text */
+.logo-wrap{display:flex;align-items:center;gap:8px}
+.logo-shield{
+  background:#cc0000;color:#fff;font-weight:900;font-size:16px;
+  padding:5px 9px;letter-spacing:2px;border-radius:3px;line-height:1;
+}
+.logo-text{font-size:20px;font-weight:900;letter-spacing:3px;color:#cc0000}
+.hdr-divider{width:1px;height:32px;background:var(--border2);margin:0 4px}
+.hdr-title{font-size:14px;font-weight:700;color:var(--text)}
 .hdr-sub{font-size:10px;color:var(--text3);margin-top:2px}
 .hdr-right{display:flex;align-items:center;gap:18px;flex-shrink:0}
-.badge{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:4px 10px;font-size:12px;color:var(--cyan);font-weight:600;white-space:nowrap}
-.hdr-meta{font-size:11px;color:var(--text3);text-align:right;line-height:1.7}
+.badge{
+  background:#fff7f7;border:1.5px solid #cc0000;
+  border-radius:6px;padding:4px 12px;
+  font-size:12px;color:#cc0000;font-weight:700;white-space:nowrap;
+}
+.hdr-meta{font-size:11px;color:var(--text3);text-align:right;line-height:1.8}
 .hdr-meta b{color:var(--text2)}
-.live{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text3)}
-.dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;flex-shrink:0}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
+.live{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text3)}
+.dot{width:8px;height:8px;border-radius:50%;background:#16a34a;animation:pulse 2s infinite;flex-shrink:0}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.3)}}
 
-/* ── Layout ── */
+/* Layout */
 .main{padding:16px 24px;display:flex;flex-direction:column;gap:14px}
 .sec-lbl{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px}
 .err{color:var(--red);font-size:11px;margin-top:4px}
 
-/* ── KPI Cards ── */
+/* KPI */
 .kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
-.kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;position:relative;overflow:hidden;transition:border-color .2s}
-.kpi:hover{border-color:var(--border2)}
+.kpi{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:16px;
+  box-shadow:0 1px 3px rgba(0,0,0,.06);
+  position:relative;overflow:hidden;
+}
 .kpi::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:10px 10px 0 0}
 .kpi.c-blue::after{background:var(--blue)}
 .kpi.c-cyan::after{background:var(--cyan)}
 .kpi.c-purple::after{background:var(--purple)}
 .kpi.c-orange::after{background:var(--orange)}
 .kpi.c-green::after{background:var(--green)}
-.kpi-lbl{font-size:10px;color:var(--text3);margin-bottom:6px;font-weight:500}
-.kpi-val{font-size:30px;font-weight:800;line-height:1}
-.kpi-val.c-blue{color:var(--blue)}
-.kpi-val.c-cyan{color:var(--cyan)}
-.kpi-val.c-purple{color:var(--purple)}
-.kpi-val.c-orange{color:var(--orange)}
-.kpi-val.c-green{color:var(--green)}
-.kpi-sub{font-size:10px;color:var(--text3);margin-top:4px}
+.kpi-lbl{font-size:10px;color:var(--text3);margin-bottom:6px;font-weight:500;text-transform:uppercase;letter-spacing:.5px}
+.kpi-val{font-size:32px;font-weight:800;line-height:1}
+.c-blue .kpi-val{color:var(--blue)}
+.c-cyan .kpi-val{color:var(--cyan)}
+.c-purple .kpi-val{color:var(--purple)}
+.c-orange .kpi-val{color:var(--orange)}
+.c-green .kpi-val{color:var(--green)}
+.kpi-sub{font-size:10px;color:var(--text3);margin-top:5px}
 
-/* ── Status flow ── */
-.flow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px}
-.chip{display:flex;align-items:center;gap:5px;border:1px solid var(--border2);border-radius:20px;padding:5px 11px;font-size:12px;white-space:nowrap;transition:all .2s}
-.chip-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-.chip-name{color:var(--text3)}
-.chip-cnt{font-weight:700;color:var(--text)}
-.chip.red{border-color:var(--red);background:var(--red-dim)}
-.chip.red .chip-cnt{color:var(--red)}
-.chip.amber{border-color:var(--amber);background:var(--amber-dim)}
-.chip.amber .chip-cnt{color:var(--amber)}
-.chip.green{border-color:var(--green);background:var(--green-dim)}
-.chip.green .chip-cnt{color:var(--green)}
-.arr{color:var(--text3);font-size:14px;flex-shrink:0}
+/* Status — solo Anulado y Retenido */
+.status-wrap{
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:14px 20px;box-shadow:0 1px 3px rgba(0,0,0,.06);
+  display:flex;align-items:center;gap:24px;flex-wrap:wrap;
+}
+.status-group{display:flex;align-items:center;gap:10px}
+.status-pill{
+  display:flex;align-items:center;gap:8px;
+  border-radius:8px;padding:10px 18px;
+  border:1.5px solid;
+}
+.status-pill.red{background:var(--red-bg);border-color:#fca5a5}
+.status-pill.amber{background:var(--amber-bg);border-color:#fcd34d}
+.status-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.status-info{display:flex;flex-direction:column}
+.status-name{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)}
+.status-cnt{font-size:22px;font-weight:800;line-height:1.1}
+.status-val{font-size:11px;font-weight:600;margin-top:2px}
+.status-pill.red .status-cnt{color:var(--red)}
+.status-pill.red .status-val{color:var(--red)}
+.status-pill.amber .status-cnt{color:var(--amber)}
+.status-pill.amber .status-val{color:var(--amber)}
+.status-divider{width:1px;height:50px;background:var(--border2)}
+.status-note{font-size:11px;color:var(--text3);flex:1}
 
-/* ── Bottom grid ── */
+/* Bottom */
 .bottom{display:grid;grid-template-columns:1fr 360px;gap:14px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px}
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);
+}
 .chart-wrap{height:250px;position:relative}
 
-/* ── MSPA table ── */
-.mspa-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border)}
+/* MSPA */
+.mspa-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 0;border-bottom:1px solid var(--border);
+}
 .mspa-row:last-child{border-bottom:none}
-.mspa-lbl{font-size:11px;color:var(--text2);flex:1}
-.mspa-nums{display:flex;gap:14px;text-align:right;flex-shrink:0}
-.mspa-val{font-size:13px;font-weight:700;color:var(--text);min-width:80px}
-.mspa-sub{font-size:10px;color:var(--text3);margin-top:1px}
+.mspa-lbl{font-size:12px;color:var(--text2);flex:1}
+.mspa-val{font-size:14px;font-weight:700;color:var(--text);text-align:right;min-width:90px}
+.mspa-sub{font-size:10px;color:var(--text3);text-align:right;margin-top:1px}
+.mspa-row.hi .mspa-lbl{color:var(--amber)}
 .mspa-row.hi .mspa-val{color:var(--amber)}
-.mspa-row.venta .mspa-val{color:var(--green);font-size:16px}
-.mspa-row.venta .mspa-lbl{color:var(--green);font-weight:600}
+.mspa-row.venta .mspa-lbl{color:var(--green);font-weight:700}
+.mspa-row.venta .mspa-val{color:var(--green);font-size:17px}
 </style>
 </head>
 <body>
 
 <div class="hdr">
   <div class="hdr-left">
-    <div class="logo">WÜRTH</div>
+    <div class="logo-wrap">
+      <div class="logo-shield">W</div>
+      <div class="logo-text">WÜRTH</div>
+    </div>
+    <div class="hdr-divider"></div>
     <div>
       <div class="hdr-title">Operations Dashboard</div>
       <div class="hdr-sub">Reactor · MSPA · Tiempo Real</div>
@@ -402,51 +451,72 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
 <div class="main">
 
-  <!-- KPIs Reactor -->
+  <!-- KPIs -->
   <div>
     <div class="sec-lbl" id="sec-reactor">Pedidos Informados · —</div>
     <div id="err-r" class="err"></div>
     <div class="kpi-grid">
       <div class="kpi c-blue">
         <div class="kpi-lbl">Pedidos Informados</div>
-        <div class="kpi-val c-blue" id="k-ped">—</div>
+        <div class="kpi-val" id="k-ped">—</div>
         <div class="kpi-sub" id="k-ped-sub">&nbsp;</div>
       </div>
       <div class="kpi c-cyan">
         <div class="kpi-lbl">Vendedores Activos</div>
-        <div class="kpi-val c-cyan" id="k-vend">—</div>
+        <div class="kpi-val" id="k-vend">—</div>
         <div class="kpi-sub" id="k-vend-sub">&nbsp;</div>
       </div>
       <div class="kpi c-purple">
         <div class="kpi-lbl">Total Líneas</div>
-        <div class="kpi-val c-purple" id="k-lin">—</div>
+        <div class="kpi-val" id="k-lin">—</div>
         <div class="kpi-sub" id="k-lin-sub">&nbsp;</div>
       </div>
       <div class="kpi c-orange">
-        <div class="kpi-lbl">Avg Líneas / Pedido</div>
-        <div class="kpi-val c-orange" id="k-avg">—</div>
-        <div class="kpi-sub" id="k-avg-sub">&nbsp;</div>
+        <div class="kpi-lbl">Promedio Líneas / Pedido</div>
+        <div class="kpi-val" id="k-avg">—</div>
+        <div class="kpi-sub">artículos por pedido</div>
       </div>
       <div class="kpi c-green">
         <div class="kpi-lbl">Valor Informado</div>
-        <div class="kpi-val c-green" id="k-val">—</div>
-        <div class="kpi-sub">$ARS</div>
+        <div class="kpi-val" id="k-val">—</div>
+        <div class="kpi-sub">$ARS · precio lista</div>
       </div>
     </div>
   </div>
 
-  <!-- Status flow -->
+  <!-- Anulados + Retenidos -->
   <div>
-    <div class="sec-lbl">Estado de Pedidos del Día</div>
-    <div class="flow" id="flow">
-      <span style="color:var(--text3)">Cargando...</span>
+    <div class="sec-lbl">Pedidos Retenidos y Anulados del Día</div>
+    <div class="status-wrap">
+      <div class="status-group">
+        <div class="status-pill red">
+          <div class="status-dot" style="background:#dc2626"></div>
+          <div class="status-info">
+            <span class="status-name">Anulados</span>
+            <span class="status-cnt" id="s-anul-cnt">—</span>
+            <span class="status-val" id="s-anul-val">$—</span>
+          </div>
+        </div>
+      </div>
+      <div class="status-divider"></div>
+      <div class="status-group">
+        <div class="status-pill amber">
+          <div class="status-dot" style="background:#d97706"></div>
+          <div class="status-info">
+            <span class="status-name">Retenidos</span>
+            <span class="status-cnt" id="s-ret-cnt">—</span>
+            <span class="status-val" id="s-ret-val">$—</span>
+          </div>
+        </div>
+      </div>
+      <div class="status-note" id="s-note">Cargando...</div>
     </div>
   </div>
 
   <!-- Chart + MSPA -->
   <div class="bottom">
     <div class="card">
-      <div class="sec-lbl">Tendencia Mensual — Pedidos Informados (últimos 13 meses)</div>
+      <div class="sec-lbl">Tendencia Mensual — Pedidos Informados (últimos 12 meses)</div>
       <div class="chart-wrap"><canvas id="chart"></canvas></div>
     </div>
     <div class="card">
@@ -459,149 +529,140 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </div>
 
 <script>
-let chartObj = null, countdown = 60;
+let chartObj=null, countdown=60;
 
-const STATUS = {
-  10:{name:'Nuevo',          color:'#3b82f6', cls:''},
-  11:{name:'Pendiente',      color:'#06b6d4', cls:''},
-  17:{name:'Generado',       color:'#a78bfa', cls:''},
-  12:{name:'En Proceso',     color:'#8b5cf6', cls:''},
-  13:{name:'Facturado',      color:'#10b981', cls:'green'},
-  18:{name:'Fact+Backorder', color:'#34d399', cls:'green'},
-  14:{name:'Anulado',        color:'#ef4444', cls:'red'},
-  15:{name:'Retenido',       color:'#f59e0b', cls:'amber'},
-  16:{name:'Backorder',      color:'#f97316', cls:''},
-};
-const STATUS_ORDER = [10,11,17,12,13,18,14,15,16];
-
-const MSPA_DEF = [
-  {k:'backorders', l:'Backorders (Plazos viejos)',       cls:''},
-  {k:'bloqueados', l:'Bloqueados por Límite Crédito',    cls:''},
-  {k:'neg_status', l:'Bloqueados (Status < -1)',          cls:''},
-  {k:'futuros',    l:'Pedidos Abiertos (Futuros)',        cls:''},
-  {k:'produccion', l:'Producción Abierta',                cls:''},
-  {k:'remitos',    l:'Remitos / Facturas Abiertas',       cls:''},
-  {k:'venta',      l:'Venta del Día',                     cls:'venta'},
+const MSPA_DEF=[
+  {k:'backorders', l:'Backorders (Plazos viejos)',    cls:''},
+  {k:'bloqueados', l:'Bloqueados por Límite Crédito', cls:''},
+  {k:'neg_status', l:'Bloqueados (Status < -1)',       cls:''},
+  {k:'futuros',    l:'Pedidos Abiertos (Futuros)',     cls:''},
+  {k:'produccion', l:'Producción Abierta',             cls:''},
+  {k:'remitos',    l:'Remitos / Facturas Abiertas',    cls:''},
+  {k:'venta',      l:'Venta del Día',                  cls:'venta'},
 ];
 
-function fmtN(n, dec=0) {
+function fmtN(n,dec=0){
   if(n===null||n===undefined) return '—';
   return Number(n).toLocaleString('es-AR',{minimumFractionDigits:dec,maximumFractionDigits:dec});
 }
-function fmtK(n) {
-  n = Number(n)||0;
+function fmtK(n){
+  n=Number(n)||0;
   if(n>=1e9) return (n/1e9).toFixed(1)+'B';
   if(n>=1e6) return (n/1e6).toFixed(1)+'M';
   if(n>=1e3) return (n/1e3).toFixed(0)+'K';
   return fmtN(n,0);
 }
-function fmtM(n) {
-  return '$'+fmtK(n);
-}
 
-function renderChart(trend) {
-  const labels  = trend.map(t=>{
-    const [y,m]=t.mes.split('-');
-    return ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][+m-1]+' '+y.slice(2);
+function renderChart(trend){
+  if(!trend||!trend.length) return;
+  const labels=trend.map(t=>{
+    const[y,m]=t.mes.split('-');
+    return ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][+m-1]+'\n'+y;
   });
-  const ctx = document.getElementById('chart').getContext('2d');
+  const ctx=document.getElementById('chart').getContext('2d');
   if(chartObj) chartObj.destroy();
-  chartObj = new Chart(ctx,{
+  chartObj=new Chart(ctx,{
     data:{
       labels,
       datasets:[
-        {type:'bar', label:'Pedidos', data:trend.map(t=>t.pedidos),
-         backgroundColor:'rgba(59,130,246,.65)', borderColor:'#3b82f6', borderWidth:1,
-         yAxisID:'y1', order:2},
-        {type:'line', label:'Líneas', data:trend.map(t=>t.lineas),
-         borderColor:'#8b5cf6', backgroundColor:'rgba(139,92,246,.08)',
-         borderWidth:2, pointRadius:3, pointBg:'#8b5cf6', tension:.3,
-         yAxisID:'y2', order:1, fill:true},
-        {type:'line', label:'Valor (M$)', data:trend.map(t=>+(t.valor/1e6).toFixed(1)),
-         borderColor:'#10b981', backgroundColor:'transparent',
-         borderWidth:2, pointRadius:2, tension:.3,
-         yAxisID:'y3', order:0},
+        {
+          type:'bar',label:'Pedidos',data:trend.map(t=>t.pedidos),
+          backgroundColor:'rgba(37,99,235,.75)',borderColor:'#2563eb',
+          borderWidth:1,yAxisID:'y1',order:2
+        },
+        {
+          type:'line',label:'Valor (M$)',
+          data:trend.map(t=>+(t.valor/1e6).toFixed(1)),
+          borderColor:'#059669',backgroundColor:'rgba(5,150,105,.08)',
+          borderWidth:2.5,pointRadius:4,pointBackgroundColor:'#059669',
+          tension:.35,yAxisID:'y2',order:1,fill:true
+        }
       ]
     },
     options:{
-      responsive:true, maintainAspectRatio:false,
+      responsive:true,maintainAspectRatio:false,
       interaction:{mode:'index',intersect:false},
       plugins:{
-        legend:{labels:{color:'#64748b',font:{size:10},boxWidth:12}},
-        tooltip:{backgroundColor:'#1e293b',titleColor:'#e2e8f0',bodyColor:'#94a3b8',
-                 callbacks:{label:ctx=>ctx.dataset.label+': '+fmtN(ctx.parsed.y,0)}}
+        legend:{labels:{color:'#475569',font:{size:11},boxWidth:12,padding:16}},
+        tooltip:{
+          backgroundColor:'#fff',titleColor:'#0f172a',bodyColor:'#475569',
+          borderColor:'#e2e8f0',borderWidth:1,
+          callbacks:{label:ctx=>' '+ctx.dataset.label+': '+fmtN(ctx.parsed.y,0)}
+        }
       },
       scales:{
-        x:{ticks:{color:'#4b5a6e',font:{size:9}},grid:{color:'#1a2234'}},
-        y1:{type:'linear',position:'left',
-            ticks:{color:'#3b82f6',font:{size:9}},grid:{color:'#1a2234'},
-            title:{display:true,text:'Pedidos',color:'#3b82f6',font:{size:9}}},
-        y2:{type:'linear',position:'right',display:false},
-        y3:{type:'linear',position:'right',
-            ticks:{color:'#10b981',font:{size:9},callback:v=>v+'M'},
-            grid:{drawOnChartArea:false},
-            title:{display:true,text:'Valor M$',color:'#10b981',font:{size:9}}},
+        x:{ticks:{color:'#94a3b8',font:{size:9}},grid:{color:'#f1f5f9'}},
+        y1:{
+          type:'linear',position:'left',
+          ticks:{color:'#2563eb',font:{size:9}},
+          grid:{color:'#f1f5f9'},
+          title:{display:true,text:'Pedidos',color:'#2563eb',font:{size:9}}
+        },
+        y2:{
+          type:'linear',position:'right',
+          ticks:{color:'#059669',font:{size:9},callback:v=>v+'M'},
+          grid:{drawOnChartArea:false},
+          title:{display:true,text:'Valor M$',color:'#059669',font:{size:9}}
+        }
       }
     }
   });
 }
 
-function render(data) {
-  document.getElementById('ts').textContent = data.timestamp||'—';
-  document.getElementById('err-r').textContent = data.reactor_error ? '⚠ '+data.reactor_error : '';
-  document.getElementById('err-m').textContent = data.mspa_error    ? '⚠ '+data.mspa_error    : '';
+function render(data){
+  document.getElementById('ts').textContent=data.timestamp||'—';
+  document.getElementById('err-r').textContent=data.reactor_error?'⚠ '+data.reactor_error:'';
+  document.getElementById('err-m').textContent=data.mspa_error?'⚠ '+data.mspa_error:'';
 
-  const r = data.reactor||{};
-  const dp = r.target_date_display||'—';
-  document.getElementById('date-badge').textContent = 'Pedidos del '+dp;
-  document.getElementById('sec-reactor').textContent = 'Pedidos Informados · '+dp;
+  const r=data.reactor||{};
+  const dp=r.target_date_display||'—';
+  document.getElementById('date-badge').textContent='Pedidos del '+dp;
+  document.getElementById('sec-reactor').textContent='Pedidos Informados · '+dp;
 
-  document.getElementById('k-ped').textContent = fmtN(r.pedidos,0);
-  document.getElementById('k-ped-sub').textContent = r.anulados ? r.anulados+' anulados · '+r.retenidos+' retenidos' : ' ';
-  document.getElementById('k-vend').textContent = fmtN(r.vendedores,0);
-  document.getElementById('k-vend-sub').textContent = r.avg_ped_vend ? r.avg_ped_vend+' ped/vendedor' : ' ';
-  document.getElementById('k-lin').textContent = fmtN(r.lineas,0);
-  document.getElementById('k-lin-sub').textContent = ' ';
-  document.getElementById('k-avg').textContent = r.avg_lineas||'—';
-  document.getElementById('k-avg-sub').textContent = 'líneas por pedido';
-  document.getElementById('k-val').textContent = fmtK(r.valor||0);
+  document.getElementById('k-ped').textContent=fmtN(r.pedidos,0);
+  document.getElementById('k-ped-sub').textContent=(r.pedidos&&r.vendedores)
+    ? fmtN(r.avg_ped_vend,1)+' ped/vendedor' : ' ';
+  document.getElementById('k-vend').textContent=fmtN(r.vendedores,0);
+  document.getElementById('k-vend-sub').textContent=r.vendedores
+    ? 'de '+fmtN(r.pedidos,0)+' pedidos' : ' ';
+  document.getElementById('k-lin').textContent=fmtN(r.lineas,0);
+  document.getElementById('k-lin-sub').textContent=r.lineas&&r.pedidos
+    ? fmtN(r.avg_lineas,1)+' promedio por pedido' : ' ';
+  document.getElementById('k-avg').textContent=r.avg_lineas||'—';
+  document.getElementById('k-val').textContent='$'+fmtK(r.valor||0);
 
-  // Status flow
-  const bs = r.by_status||{};
-  const flowEl = document.getElementById('flow');
-  let fhtml = '';
-  STATUS_ORDER.forEach((sid,i)=>{
-    const s = STATUS[sid]||{name:String(sid),color:'#64748b',cls:''};
-    const d = bs[sid]||{cnt:0};
-    if(i>0) fhtml += '<span class="arr">›</span>';
-    fhtml += `<div class="chip ${s.cls}">
-      <span class="chip-dot" style="background:${s.color}"></span>
-      <span class="chip-name">${s.name}</span>
-      <span class="chip-cnt">${d.cnt||0}</span>
-    </div>`;
-  });
-  flowEl.innerHTML = fhtml;
+  // Anulados + Retenidos
+  const bs=r.by_status||{};
+  const an=bs[14]||{cnt:0,val:0};
+  const re=bs[15]||{cnt:0,val:0};
+  document.getElementById('s-anul-cnt').textContent=fmtN(an.cnt,0);
+  document.getElementById('s-anul-val').textContent='$'+fmtK(an.val);
+  document.getElementById('s-ret-cnt').textContent=fmtN(re.cnt,0);
+  document.getElementById('s-ret-val').textContent='$'+fmtK(re.val);
+  const total_an_re=(an.cnt||0)+(re.cnt||0);
+  const pct=r.pedidos?((total_an_re/r.pedidos)*100).toFixed(1):0;
+  document.getElementById('s-note').textContent=
+    total_an_re+' pedidos no facturados ('+pct+'% del total informado)  ·  '
+    +'Estado actual según Reactor · '+dp;
 
   // Chart
-  if(r.trend && r.trend.length) renderChart(r.trend.slice(-13));
+  if(r.trend&&r.trend.length) renderChart(r.trend);
 
   // MSPA
-  const m = data.mspa||{};
-  let mhtml = '';
+  const m=data.mspa||{};
+  let mhtml='';
   MSPA_DEF.forEach(row=>{
-    const d = m[row.k]||{ords:0,pos:0,val:0};
-    const hi = d.val>0 && row.cls!=='venta' ? ' hi' : '';
-    mhtml += `<div class="mspa-row ${row.cls}${hi}">
+    const d=m[row.k]||{ords:0,pos:0,val:0};
+    const hi=d.val>0&&row.cls!=='venta'?' hi':'';
+    mhtml+=`<div class="mspa-row ${row.cls}${hi}">
       <div class="mspa-lbl">${row.l}</div>
-      <div class="mspa-nums">
-        <div>
-          <div class="mspa-val">${fmtM(d.val)}</div>
-          <div class="mspa-sub">${d.ords} ord · ${d.pos} pos</div>
-        </div>
+      <div>
+        <div class="mspa-val">$${fmtK(d.val)}</div>
+        <div class="mspa-sub">${d.ords} ord · ${d.pos} pos</div>
       </div>
     </div>`;
   });
-  document.getElementById('mspa-body').innerHTML = mhtml;
+  document.getElementById('mspa-body').innerHTML=mhtml;
 }
 
 async function load(){
@@ -622,36 +683,30 @@ setInterval(tick,1000);
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# HTTP server
-# ─────────────────────────────────────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
-    def log_message(self, fmt, *args):
-        pass
+    def log_message(self, fmt, *args): pass
 
     def send_json(self, data):
-        body = json.dumps(data, ensure_ascii=False, cls=_Enc).encode()
+        body=json.dumps(data,ensure_ascii=False,cls=_Enc).encode()
         self.send_response(200)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", len(body))
+        self.send_header("Content-Type","application/json; charset=utf-8")
+        self.send_header("Content-Length",len(body))
         self.end_headers()
         self.wfile.write(body)
 
     def send_html(self, html):
-        body = html.encode()
+        body=html.encode()
         self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", len(body))
+        self.send_header("Content-Type","text/html; charset=utf-8")
+        self.send_header("Content-Length",len(body))
         self.end_headers()
         self.wfile.write(body)
 
     def do_GET(self):
-        if self.path in ("/", "/index.html"):
-            self.send_html(HTML_PAGE)
-        elif self.path == "/api/data":
-            self.send_json(get_cached_data())
+        if self.path in ("/","/index.html"): self.send_html(HTML_PAGE)
+        elif self.path=="/api/data":         self.send_json(get_cached_data())
         else:
-            self.send_response(404)
-            self.end_headers()
+            self.send_response(404); self.end_headers()
 
 
 def main():
@@ -660,12 +715,10 @@ def main():
     print(f"FIRMA: {FIRMA}  |  SOLO LECTURA")
     print(f"Escuchando en http://localhost:{PORT}")
     print("Ctrl+C para detener\n")
-    server = HTTPServer(("0.0.0.0", PORT), Handler)
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\nDetenido.")
+    server=HTTPServer(("0.0.0.0",PORT),Handler)
+    try: server.serve_forever()
+    except KeyboardInterrupt: print("\nDetenido.")
 
 
-if __name__ == "__main__":
+if __name__=="__main__":
     main()
