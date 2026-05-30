@@ -9,10 +9,18 @@ Abrir: http://localhost:8765
 """
 
 import json
+import decimal
 import pyodbc
 import threading
 from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
+
+class _Enc(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, decimal.Decimal):
+            return float(o)
+        return super().default(o)
+
 
 DSN = "MSPA"
 FIRMA = 1
@@ -345,7 +353,7 @@ class Handler(BaseHTTPRequestHandler):
         pass  # silenciar log por cada request
 
     def send_json(self, data):
-        body = json.dumps(data, ensure_ascii=False).encode()
+        body = json.dumps(data, ensure_ascii=False, cls=_Enc).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", len(body))
