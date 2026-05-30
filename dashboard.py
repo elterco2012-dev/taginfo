@@ -59,7 +59,7 @@ def run(cur, sql, params=None):
 # ── Logo (base64 si existe wurth_logo.png en la misma carpeta) ────────────────
 def _load_logo():
     here = os.path.dirname(os.path.abspath(__file__))
-    for name in ["wurth_logo.png", "logo.png", "wurth.png",
+    for name in ["og-image.png", "wurth_logo.png", "logo.png", "wurth.png",
                  "wurth_logo.jpg", "logo.jpg",
                  "wurth_logo.svg", "logo.svg"]:
         path = os.path.join(here, name)
