@@ -46,28 +46,10 @@ def run(cur, sql):
         return []
 
 
-def fmt_in(lst):
-    return ",".join(str(k) for k in lst)
-
 
 def fetch_data():
     conn = get_conn()
     cur = conn.cursor()
-
-    # ── Crédito: paso 1 ──────────────────────────────────────────────────
-    kred_rows = run(cur, f"SELECT kdnr, kredlim FROM kund WHERE firma={FIRMA} AND kredlim > 0")
-    kredlim_map = {r[0]: r[1] for r in kred_rows}
-
-    totals = run(cur, f"""
-        SELECT h.kdnr, SUM(p.poswert)
-        FROM f090 h, f092 p
-        WHERE h.firma={FIRMA} AND p.firma={FIRMA}
-          AND h.auftrag=p.auftrag AND p.kzerl='0'
-          AND h.aufkstat<>8 AND h.belegart IN (6,7,11)
-        GROUP BY h.kdnr
-    """)
-    over  = [r[0] for r in totals if kredlim_map.get(r[0], 0) > 0 and r[1] and r[1] > kredlim_map.get(r[0], 0)]
-    under = [r[0] for r in totals if not (kredlim_map.get(r[0], 0) > 0 and r[1] and r[1] > kredlim_map.get(r[0], 0))]
 
     def q1(sql):
         rows = run(cur, sql)
@@ -75,79 +57,125 @@ def fetch_data():
             return rows[0][0] or 0, rows[0][1] or 0, float(rows[0][2]) if rows[0][2] else 0.0
         return 0, 0, 0.0
 
-    # ── 1. Backorders ────────────────────────────────────────────────────
-    if over:
-        back_val, back_ords, back_pos = q1(f"""
-            SELECT SUM(p.poswert), COUNT(DISTINCT h.auftrag), COUNT(*)
-            FROM f090 h, f092 p
-            WHERE h.firma={FIRMA} AND p.firma={FIRMA}
-              AND h.auftrag=p.auftrag AND p.kzerl='0'
-              AND h.aufkstat=0 AND h.belegart IN (6,7,11)
-              AND h.kdnr NOT IN ({fmt_in(over)})
-        """)
-    else:
-        # Sin over-limit → todos son Backorders
-        back_val, back_ords, back_pos = q1(f"""
-            SELECT SUM(p.poswert), COUNT(DISTINCT h.auftrag), COUNT(*)
-            FROM f090 h, f092 p
-            WHERE h.firma={FIRMA} AND p.firma={FIRMA}
-              AND h.auftrag=p.auftrag AND p.kzerl='0'
-              AND h.aufkstat=0 AND h.belegart IN (6,7,11)
-        """)
-
-    # ── 2. Bloqueados por límite de crédito ──────────────────────────────
-    if over:
-        bloq_val, bloq_ords, bloq_pos = q1(f"""
-            SELECT SUM(p.poswert), COUNT(DISTINCT h.auftrag), COUNT(*)
-            FROM f090 h, f092 p
-            WHERE h.firma={FIRMA} AND p.firma={FIRMA}
-              AND h.auftrag=p.auftrag AND p.kzerl='0'
-              AND h.aufkstat=0 AND h.belegart IN (6,7,11)
-              AND h.kdnr IN ({fmt_in(over)})
-        """)
-    else:
-        bloq_val, bloq_ords, bloq_pos = 0, 0, 0.0
-
-    # ── 3. Bloqueado Status < -1 ─────────────────────────────────────────
-    stat_val, stat_ords, stat_pos = q1(f"""
-        SELECT SUM(p.poswert), COUNT(DISTINCT h.auftrag), COUNT(*)
-        FROM f090 h, f092 p
-        WHERE h.firma={FIRMA} AND p.firma={FIRMA}
-          AND h.auftrag=p.auftrag AND h.aufkstat < -1 AND p.kzerl='0'
+    # ── 1. Backorders (Plazos viejos / selrueck) ─────────────────────────
+    # Fuente: taginfo2.4gl selrueck
+    # termin <= TODAY, kzentns='0', aufkstat>=0, aufart IN(0,2,4,6,7,8)
+    # (auftme-gliefme)>0, liefsp<>'2'&&<>'9' OR liefspkz='1'
+    # valor: poswert/auftme * (auftme - gliefme)
+    back_ords, back_pos, back_val = q1(f"""
+        SELECT COUNT(DISTINCT f092.auftrag), COUNT(*),
+               SUM(f092.poswert/f092.auftme * (f092.auftme - f092.gliefme))
+          FROM f090, f092, kund
+         WHERE f092.firma={FIRMA} AND f090.firma=f092.firma AND kund.firma=f090.firma
+           AND f090.auftrag=f092.auftrag AND kund.kdnr=f090.kdnr
+           AND f092.termin <= TODAY
+           AND f092.kzentns = '0'
+           AND f090.aufkstat >= 0
+           AND f090.aufart IN ('0','2','4','6','7','8')
+           AND (f092.auftme - f092.gliefme) > 0
+           AND f092.kzerl = '0'
+           AND f092.auftme <> 0
+           AND ((kund.liefsp <> '2' AND kund.liefsp <> '9') OR f090.liefspkz = '1')
     """)
 
-    # ── 4. Pedidos Abiertos (Plazos futuros) ─────────────────────────────
-    fut_val, fut_ords, fut_pos = q1(f"""
-        SELECT SUM(p.poswert), COUNT(DISTINCT h.auftrag), COUNT(*)
-        FROM f090 h, f092 p
-        WHERE h.firma={FIRMA} AND p.firma={FIRMA}
-          AND h.auftrag=p.auftrag AND p.kzerl='0'
-          AND h.belegart=11 AND h.aufkstat<>8
-          AND p.termin > TODAY AND p.liefme<>0
+    # ── 2. Bloqueados por Limite credito (selkredlim) ────────────────────
+    # Fuente: taginfo2.4gl selkredlim
+    # posstat<9, (aufkstat>=0 OR aufkstat=-9), liefsp='2'OR'9' AND liefspkz<>'1'
+    bloq_ords, bloq_pos, bloq_val = q1(f"""
+        SELECT COUNT(DISTINCT f092.auftrag), COUNT(*),
+               SUM(f092.poswert/f092.auftme * (f092.auftme - f092.gliefme))
+          FROM f090, f092, kund
+         WHERE f092.firma={FIRMA} AND f090.firma=f092.firma AND kund.firma=f090.firma
+           AND f090.auftrag=f092.auftrag AND kund.kdnr=f090.kdnr
+           AND f092.posstat < 9
+           AND (f090.aufkstat >= 0 OR f090.aufkstat = -9)
+           AND f090.aufart IN ('0','2','4','6','7','8')
+           AND (f092.auftme - f092.gliefme) > 0
+           AND f092.kzerl = '0'
+           AND f092.auftme <> 0
+           AND ((kund.liefsp = '2' OR kund.liefsp = '9') AND f090.liefspkz <> '1')
     """)
 
-    # ── 5. Ordenes de producción abiertas ────────────────────────────────
-    prod_val, prod_ords, prod_pos = q1(f"""
-        SELECT SUM(p.poswert), COUNT(DISTINCT h.auftrag), COUNT(*)
-        FROM f090 h, f092 p
-        WHERE h.firma={FIRMA} AND p.firma={FIRMA}
-          AND h.auftrag=p.auftrag AND h.aufkstat=2
-          AND p.posstat=2 AND p.kzerl='0'
+    # ── 3. Bloqueado Status < -1 (selneg) ───────────────────────────────
+    # Fuente: taginfo2.4gl selneg — aufkstat < -1, sin kredlim
+    stat_ords, stat_pos, stat_val = q1(f"""
+        SELECT COUNT(DISTINCT f092.auftrag), COUNT(*),
+               SUM(f092.poswert/f092.auftme * (f092.auftme - f092.gliefme))
+          FROM f090, f092, kund
+         WHERE f092.firma={FIRMA} AND f090.firma=f092.firma AND kund.firma=f090.firma
+           AND f090.auftrag=f092.auftrag AND kund.kdnr=f090.kdnr
+           AND f092.posstat < 9
+           AND f090.aufkstat < -1
+           AND f090.aufart IN ('0','2','4','6','7','8')
+           AND (f092.auftme - f092.gliefme) > 0
+           AND f092.kzerl = '0'
+           AND f092.auftme <> 0
+           AND ((kund.liefsp <> '2' AND kund.liefsp <> '9') OR f090.liefspkz = '1')
     """)
 
-    # ── 6. Remitos/Facturas abiertas ─────────────────────────────────────
-    rem_val, rem_ords, rem_pos = q1(f"""
-        SELECT SUM(p.poswert), COUNT(DISTINCT h.auftrag), COUNT(*)
-        FROM f090 h, f092 p
-        WHERE h.firma={FIRMA} AND p.firma={FIRMA}
-          AND h.auftrag=p.auftrag AND h.belegart=11 AND h.aufkstat=4
+    # ── 4. Pedidos Abiertos (Plazos futuros / seloffen) ──────────────────
+    # Fuente: taginfo2.4gl seloffen — termin > TODAY, aufkstat>=0
+    fut_ords, fut_pos, fut_val = q1(f"""
+        SELECT COUNT(DISTINCT f092.auftrag), COUNT(*),
+               SUM(f092.poswert/f092.auftme * (f092.auftme - f092.gliefme))
+          FROM f090, f092, kund
+         WHERE f092.firma={FIRMA} AND f090.firma=f092.firma AND kund.firma=f090.firma
+           AND f090.auftrag=f092.auftrag AND kund.kdnr=f090.kdnr
+           AND f092.termin > TODAY
+           AND f090.aufkstat >= 0
+           AND f090.aufart IN ('0','2','4','6','7','8')
+           AND (f092.auftme - f092.gliefme) > 0
+           AND f092.kzerl = '0'
+           AND f092.auftme <> 0
+           AND ((kund.liefsp <> '2' AND kund.liefsp <> '9') OR f090.liefspkz = '1')
     """)
 
-    # ── 7. Venta diaria ──────────────────────────────────────────────────
-    venta_val, venta_ords, venta_pos = q1(f"""
-        SELECT SUM(netwert), COUNT(DISTINCT renr), COUNT(*)
-        FROM sbas
-        WHERE firma={FIRMA} AND redat=TODAY AND belegart IN (8,11)
+    # ── 5. Produccion (selentns via f103) ───────────────────────────────
+    # Fuente: taginfo2.4gl selentns — f103 kzdfue=0, valor: poswert/auftme*sollme
+    prod_ords, prod_pos, prod_val = q1(f"""
+        SELECT COUNT(DISTINCT f103.auftrag), COUNT(*),
+               SUM(f092.poswert/f092.auftme * f103.sollme)
+          FROM f103, f090, f092
+         WHERE f103.firma={FIRMA} AND f090.firma=f103.firma AND f092.firma=f103.firma
+           AND f103.auftrag=f090.auftrag AND f103.auftrag=f092.auftrag
+           AND f103.posnr=f092.posnr
+           AND f092.auftme <> 0
+           AND (f103.kzdfue = 0 OR f103.kzdfue IS NULL)
+    """)
+
+    # ── 6. Remitos/Facturas abiertas (self105 + self107) ─────────────────
+    # Fuente: taginfo2.4gl self105 (Lieferscheine) + self107 (Rechnungen)
+    ls_ords, ls_pos, ls_val = q1(f"""
+        SELECT COUNT(DISTINCT f105.auftrag), COUNT(*),
+               SUM(f092.poswert/f092.auftme * f105.liefme)
+          FROM f105, f090, f092
+         WHERE f105.firma={FIRMA} AND f090.firma=f105.firma AND f092.firma=f105.firma
+           AND f105.auftrag=f090.auftrag AND f105.auftrag=f092.auftrag
+           AND f105.posnr=f092.posnr AND f092.auftme <> 0
+           AND f105.liefnr IN (SELECT liefnr FROM f104
+                                WHERE f104.firma={FIRMA} AND f104.liefstat < 9)
+    """)
+    re_ords, re_pos, re_val = q1(f"""
+        SELECT COUNT(DISTINCT f107.auftrag), COUNT(*),
+               SUM(f092.poswert/f092.auftme * f107.faktme)
+          FROM f107, f090, f092, f106
+         WHERE f107.firma={FIRMA} AND f107.firma=f106.firma AND f107.liefnr=f106.liefnr
+           AND f090.firma=f107.firma AND f092.firma=f107.firma
+           AND f107.auftrag=f090.auftrag AND f107.auftrag=f092.auftrag
+           AND f107.posnr=f092.posnr AND f107.lieflfdnr=0 AND f092.auftme <> 0
+           AND f090.aufart IN ('0','2','4','6','7','8')
+           AND (f106.periode='0' OR f106.periode=' ' OR f106.periode IS NULL)
+    """)
+    rem_ords = ls_ords + re_ords
+    rem_pos  = ls_pos  + re_pos
+    rem_val  = ls_val  + re_val
+
+    # ── 7. Venta diaria (sbascur) ────────────────────────────────────────
+    # Fuente: taginfo2.4gl sbascur — sbas redat=TODAY, todos belegart
+    venta_ords, venta_pos, venta_val = q1(f"""
+        SELECT COUNT(DISTINCT auftrag), COUNT(*), SUM(netwert)
+          FROM sbas
+         WHERE firma={FIRMA} AND redat=TODAY
     """)
 
     conn.close()
