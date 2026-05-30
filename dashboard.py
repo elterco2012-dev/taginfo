@@ -136,10 +136,10 @@ def fetch_reactor():
 
     # Work days per month
     wd_rows = run(cur, """
-        SELECT DATE_FORMAT(date, '%Y-%m') mes, COUNT(*) dias
+        SELECT CONCAT(year, '-', LPAD(month, 2, '0')) mes, days
         FROM work_days
-        WHERE date >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
-        GROUP BY DATE_FORMAT(date, '%Y-%m')
+        WHERE year >= YEAR(CURDATE()) - 1
+        ORDER BY year, month
     """)
     wd_map = {r[0]: r[1] for r in wd_rows} if wd_rows else {}
 
