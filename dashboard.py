@@ -504,13 +504,18 @@ def get_cached_data(override_date=None):
 
     # Enriquecer sellers de Reactor con nombres de f040 de MSPA
     # Reactor no tiene tabla users; f040.vertr usa la misma numeración que order_placed.id_user
+    # Solo mostrar vendedores que existen en f040 (activos); ignorar IDs fantasma
     if isinstance(reactor, dict) and isinstance(mspa, dict):
         vnames = mspa.get("vertr_names", {})
         for lst in ("sellers_ret", "sellers_an"):
+            enriched = []
             for s in reactor.get(lst, []):
                 uid = str(s.get("id", "")).strip()
                 if uid in vnames:
                     s["nombre"] = f"{vnames[uid]} ({uid})"
+                    enriched.append(s)
+                # silently drop ghost sellers (not in f040)
+            reactor[lst] = enriched
 
     return {
         "timestamp":      now.strftime("%d/%m/%Y %H:%M:%S"),
@@ -556,6 +561,8 @@ body.dark{
 }
 body.dark .hdr{background:#1e293b;border-bottom-color:#cc0000}
 body.dark .date-badge{background:#3b0d0d;border-color:var(--würth);color:#fca5a5}
+body.dark .date-picker-wrap{background:#1e293b;border-color:#475569}
+body.dark .date-picker-wrap input[type=date]{background:#0f172a;border-color:#475569;color:#f1f5f9;color-scheme:dark}
 body.dark .flow-cell.fl-ret{background:var(--amber-bg)}
 body.dark .flow-cell.fl-an{background:var(--red-bg)}
 body.dark .flow-cell.fl-fact{background:var(--green-bg)}
@@ -570,7 +577,18 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
 .hdr-title{font-size:14px;font-weight:700;color:var(--text)}
 .hdr-sub{font-size:10px;color:var(--text3);margin-top:2px}
 .hdr-right{display:flex;align-items:center;gap:14px;flex-shrink:0}
-.date-badge{background:#fff7f7;border:1.5px solid var(--würth);border-radius:6px;padding:4px 12px;font-size:12px;color:var(--würth);font-weight:700;white-space:nowrap}
+.date-badge{background:#fff7f7;border:1.5px solid var(--würth);border-radius:6px;padding:4px 12px;font-size:12px;color:var(--würth);font-weight:700;white-space:nowrap;cursor:pointer;user-select:none;position:relative}
+.date-badge:hover{background:#fee2e2}
+.date-picker-wrap{position:absolute;top:calc(100% + 6px);right:0;z-index:999;background:var(--surface);border:1px solid var(--border2);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:12px;display:none;min-width:220px}
+.date-picker-wrap.open{display:block}
+.date-picker-wrap input[type=date]{border:1px solid var(--border2);border-radius:6px;padding:6px 10px;font-size:13px;color:var(--text);background:var(--surface2);width:100%}
+.date-picker-wrap .dp-hint{font-size:10px;color:var(--text3);margin-top:6px;line-height:1.4}
+.date-picker-wrap .dp-go{margin-top:8px;width:100%;background:var(--würth);color:#fff;border:none;border-radius:6px;padding:6px;font-size:12px;font-weight:700;cursor:pointer}
+.date-picker-wrap .dp-go:hover{opacity:.88}
+.date-picker-wrap .dp-clear{margin-top:4px;width:100%;background:transparent;color:var(--text3);border:1px solid var(--border);border-radius:6px;padding:5px;font-size:11px;cursor:pointer}
+.tooltip-info{display:inline-block;color:var(--text3);font-size:10px;cursor:help;position:relative}
+.tooltip-info .tt{display:none;position:absolute;left:50%;transform:translateX(-50%);bottom:calc(100%+4px);background:#1e293b;color:#f1f5f9;padding:6px 10px;border-radius:6px;font-size:10px;white-space:nowrap;z-index:100;line-height:1.5}
+.tooltip-info:hover .tt{display:block}
 .freshness{font-size:10px;color:var(--text3);text-align:right;line-height:2.2}
 .freshness b{color:var(--text2);font-size:11px}
 .live{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text3)}
@@ -689,7 +707,16 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
     </div>
   </div>
   <div class="hdr-right">
-    <div class="date-badge" id="date-badge">Cargando...</div>
+    <div class="date-badge" id="date-badge" onclick="toggleDatePicker(event)">
+      <span id="date-badge-txt">Cargando...</span> 📅
+      <div class="date-picker-wrap" id="date-picker" onclick="event.stopPropagation()">
+        <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:6px">Seleccionar fecha</div>
+        <input type="date" id="dp-input" onkeydown="if(event.key==='Enter')gotoDate()">
+        <div class="dp-hint">Ingresá la fecha a consultar.<br>Solo días con &ge;50 pedidos tienen datos.</div>
+        <button class="dp-go" onclick="gotoDate()">Ver fecha</button>
+        <button class="dp-clear" onclick="gotoDate(true)">Volver al día actual</button>
+      </div>
+    </div>
     <div class="freshness">
       MSPA actualiza en <b id="next-m">—</b><br>
       Reactor actualiza en <b id="next-r">—</b>
@@ -753,7 +780,7 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
         <span class="alert-icon" id="ai-an"></span>
       </div>
       <div class="flow-cell fl-fact">
-        <div class="flow-label">Facturado hoy</div>
+        <div class="flow-label">Facturado hoy <span class="tooltip-info">ⓘ<span class="tt">Pedidos de este día que pasaron a<br>estado Facturado (Reactor status 13/18).<br>La Venta del Día (KPI) suma todo lo<br>facturado en MSPA/sbas ese día,<br>sin importar cuándo se ingresó el pedido.</span></span></div>
         <div class="flow-val" id="fl-fact-val">—</div>
         <div class="flow-sub" id="fl-fact-ped">—</div>
         <div class="flow-pct" id="fl-fact-pct">—%</div>
@@ -1005,7 +1032,7 @@ function render(data){
   const r=data.reactor||{};
   const m=data.mspa||{};
   const dp=r.target_date_display||'—';
-  document.getElementById('date-badge').textContent=(_customDate?'📅 ':'')+'Pedidos del '+dp;
+  document.getElementById('date-badge-txt').textContent='Pedidos del '+dp+(_customDate?' (manual)':'');
   document.getElementById('sec-reactor').textContent='Pedidos Informados · '+dp+(_customDate?' (fecha manual)':'');
 
   // KPIs
@@ -1125,6 +1152,23 @@ function toggleDark(){
 if(localStorage.getItem('wuerth-dark')==='1'||new URLSearchParams(location.search).get('dark')==='1'){
   document.body.classList.add('dark');
   document.getElementById('mode-btn').textContent='☀ Claro';
+}
+
+// Date picker
+function toggleDatePicker(e){
+  e.stopPropagation();
+  const dp=document.getElementById('date-picker');
+  dp.classList.toggle('open');
+  if(dp.classList.contains('open')&&_customDate){
+    document.getElementById('dp-input').value=_customDate;
+  }
+}
+document.addEventListener('click',()=>document.getElementById('date-picker').classList.remove('open'));
+
+function gotoDate(clear){
+  if(clear){window.location.href=window.location.pathname;return;}
+  const v=document.getElementById('dp-input').value;
+  if(v)window.location.href=window.location.pathname+'?date='+v;
 }
 
 load();
