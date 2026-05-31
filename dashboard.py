@@ -167,14 +167,45 @@ def fetch_reactor(target_date=None):
         trend.append({"mes": mes, "pedidos": peds, "valor": val,
                        "dias_hab": dias, "avg_dia": avg_pd})
 
-    # Comparison: same day-of-month, previous month (+ lineas para delta avg)
+    # Inverse wd_log: (year, month, wd_num) -> date_str
+    wd_inverse = {}
+    for ds, wn in wd_log.items():
+        try:
+            y2, m2, _ = ds.split('-')
+            wd_inverse[(int(y2), int(m2), wn)] = ds
+        except Exception:
+            pass
+
+    # Comparison: mismo día hábil del mes anterior (no mismo día calendario)
+    comp = None
     try:
-        if target_dt.month == 1:
-            prev_dt = target_dt.replace(year=target_dt.year - 1, month=12)
+        target_wd_num = wd_log.get(target_str)  # ej: 19
+        if target_wd_num:
+            prev_m = target_dt.month - 1 if target_dt.month > 1 else 12
+            prev_y = target_dt.year if target_dt.month > 1 else target_dt.year - 1
+            # Si el mes anterior tuvo menos días hábiles, usar el último disponible
+            max_wd_prev = max((wn for (y2, m2, wn) in wd_inverse if y2 == prev_y and m2 == prev_m),
+                              default=None)
+            eff_wd = min(target_wd_num, max_wd_prev) if max_wd_prev else None
+            prev_date_str = wd_inverse.get((prev_y, prev_m, eff_wd)) if eff_wd else None
+            if prev_date_str:
+                prev_dt = date.fromisoformat(prev_date_str)
+            else:
+                # Fallback: mismo día calendario si no hay wd_log para ese mes
+                if target_dt.month == 1:
+                    prev_dt = target_dt.replace(year=target_dt.year - 1, month=12)
+                else:
+                    last_day_prev = calendar.monthrange(target_dt.year, target_dt.month - 1)[1]
+                    prev_dt = target_dt.replace(month=target_dt.month - 1,
+                                                day=min(target_dt.day, last_day_prev))
         else:
-            last_day_prev = calendar.monthrange(target_dt.year, target_dt.month - 1)[1]
-            prev_dt = target_dt.replace(month=target_dt.month - 1,
-                                        day=min(target_dt.day, last_day_prev))
+            # target no está en wd_log (fin de semana/feriado): fallback calendario
+            if target_dt.month == 1:
+                prev_dt = target_dt.replace(year=target_dt.year - 1, month=12)
+            else:
+                last_day_prev = calendar.monthrange(target_dt.year, target_dt.month - 1)[1]
+                prev_dt = target_dt.replace(month=target_dt.month - 1,
+                                            day=min(target_dt.day, last_day_prev))
         comp_rows = run(cur, """
             SELECT COUNT(DISTINCT id) pedidos, COUNT(DISTINCT id_user) vendedores, SUM(total) valor
             FROM order_placed WHERE DATE(order_date) = ?
@@ -194,10 +225,10 @@ def fetch_reactor(target_date=None):
                     "valor":        float(cp[2] or 0),
                     "avg_lineas":   round(c_lin / c_ped, 1) if c_ped else 0,
                     "avg_ped_vend": round(c_ped / c_vend, 1) if c_vend else 0,
-                    "date":         str(prev_dt)}
-        else:
-            comp = None
-    except Exception:
+                    "date":         str(prev_dt),
+                    "wd_num":       eff_wd if target_wd_num else None}
+    except Exception as e:
+        print(f"  comp error: {e}")
         comp = None
 
     # Monthly meta
@@ -799,7 +830,7 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
         <div class="kpi-sub" id="k-avg-sub" style="font-size:9px;color:var(--text3)">vs. mismo día mes anterior</div>
       </div>
       <div class="kpi c-green">
-        <div class="kpi-lbl">Venta del Día</div>
+        <div class="kpi-lbl">Venta del Día · MSPA</div>
         <div class="kpi-val" id="k-venta">—</div>
         <div class="kpi-sub" id="k-venta-sub">&nbsp;</div>
       </div>
@@ -830,7 +861,7 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
         <span class="alert-icon" id="ai-an"></span>
       </div>
       <div class="flow-cell fl-fact">
-        <div class="flow-label">Facturado hoy <span class="tooltip-info">ⓘ<span class="tt">Pedidos de este día que pasaron a<br>estado Facturado (Reactor status 13/18).<br>La Venta del Día (KPI arriba) suma todo<br>lo facturado en MSPA/sbas ese día,<br>incluye pedidos de días anteriores.</span></span></div>
+        <div class="flow-label">Facturado <span class="tooltip-info">ⓘ<span class="tt">Pedidos de este día que pasaron a<br>estado Facturado (Reactor status 13/18).<br>La Venta del Día (KPI arriba) suma todo<br>lo facturado en MSPA/sbas ese día,<br>incluye pedidos de días anteriores.</span></span></div>
         <div class="flow-val" id="fl-fact-val">—</div>
         <div class="flow-sub" id="fl-fact-ped">—</div>
         <div class="flow-pct" id="fl-fact-pct">—%</div>
@@ -984,11 +1015,13 @@ function renderMeta(meta){
   if(!meta){document.getElementById('meta-row').innerHTML='<span style="color:var(--text3);font-size:11px">Sin datos</span>';return;}
   const curr=meta.curr_pedidos,last=meta.last_pedidos;
   const pctProg=last>0?Math.min((curr/last)*100,120):0;
-  const pacePos=meta.days_in_month>0?(meta.day_of_month/meta.days_in_month)*100:0;
-  const paceTarget=last>0?(pacePos/100)*last:0;
+  // Usar días hábiles para el pace si están disponibles
+  const pacePos=meta.curr_wd>0
+    ?(meta.dias_elapsed/meta.curr_wd)*100
+    :meta.days_in_month>0?(meta.day_of_month/meta.days_in_month)*100:0;
+  const paceTarget=last>0?(Math.min(pacePos,100)/100)*last:0;
   const onTrack=curr>=paceTarget;
   const fill=Math.min(pctProg,100);
-  const wdInfo=meta.curr_wd>0?`${meta.dias_elapsed}/${meta.curr_wd} días hábiles`:`Día ${meta.day_of_month}/${meta.days_in_month}`;
   let tagCls='tag-neutral',tagTxt='Sin referencia';
   if(last>0){
     const diff=curr-paceTarget;
@@ -1001,13 +1034,12 @@ function renderMeta(meta){
     <div class="meta-bar-wrap">
       <div class="meta-bar-bg">
         <div class="meta-bar-fill" style="width:${fill}%;background:${pctProg>100?'var(--green)':onTrack?'var(--blue)':'var(--amber)'}"></div>
-        <div class="meta-bar-pace" style="left:${pacePos.toFixed(1)}%"></div>
+        <div class="meta-bar-pace" style="left:${Math.min(pacePos,100).toFixed(1)}%"></div>
       </div>
-      <div class="meta-bar-labels"><span>${wdInfo}</span><span>${pctProg.toFixed(0)}% del mes anterior</span></div>
+      <div class="meta-bar-labels"><span>${pctProg.toFixed(0)}% del mes anterior</span></div>
     </div>
     <div class="meta-tags">
       <span class="meta-tag ${tagCls}">${tagTxt}</span>
-      ${meta.curr_wd>0?`<span class="meta-tag tag-neutral">${meta.curr_wd} días háb/mes</span>`:''}
     </div>`;
 }
 
@@ -1094,9 +1126,9 @@ function render(data){
 
   // KPIs
   const c=r.comp||null;
-  const compLbl=c?`vs. ${c.date||'mes anterior'}`:'vs. mismo día mes anterior';
+  const compLbl='vs. mismo día hábil mes anterior';
 
-  // Pedidos informados + delta explicado
+  // Pedidos informados + delta
   document.getElementById('k-ped').textContent=fmtN(r.pedidos,0);
   if(c){
     const dEl=document.getElementById('d-ped');
@@ -1104,7 +1136,7 @@ function render(data){
       `<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`;
   }
 
-  // Pedidos / Vendedor (reemplaza Vendedores Activos)
+  // Pedidos / Vendedor
   const apv=r.avg_ped_vend||0;
   document.getElementById('k-vend').textContent=fmtN(apv,1);
   if(c&&c.avg_ped_vend){
