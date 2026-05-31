@@ -248,7 +248,7 @@ def fetch_reactor(target_date=None):
         SELECT id_user, COUNT(*) cnt, SUM(total) val
         FROM order_placed
         WHERE DATE(order_date) = ? AND id_order_status = 15
-        GROUP BY id_user ORDER BY cnt DESC LIMIT 10
+        GROUP BY id_user ORDER BY cnt DESC LIMIT 15
     """, (target_str,))
     sellers_ret = [{"id": r[0], "nombre": seller_name(r[0]),
                     "cnt": int(r[1] or 0), "val": float(r[2] or 0)} for r in ret_rows]
@@ -257,7 +257,7 @@ def fetch_reactor(target_date=None):
         SELECT id_user, COUNT(*) cnt, SUM(total) val
         FROM order_placed
         WHERE DATE(order_date) = ? AND id_order_status = 14
-        GROUP BY id_user ORDER BY cnt DESC LIMIT 10
+        GROUP BY id_user ORDER BY cnt DESC LIMIT 15
     """, (target_str,))
     sellers_an = [{"id": r[0], "nombre": seller_name(r[0]),
                    "cnt": int(r[1] or 0), "val": float(r[2] or 0)} for r in an_rows]
@@ -524,19 +524,19 @@ def get_cached_data(override_date=None):
     m_err = mspa.pop("error", None)    if isinstance(mspa, dict)    else None
 
     # Enriquecer sellers de Reactor con nombres de f040 de MSPA
-    # Reactor no tiene tabla users; f040.vertr usa la misma numeración que order_placed.id_user
-    # Si no existe en f040, se muestra como "Inactivo (id)" en vez de descartarlo
+    # Solo mostrar vendedores que matchean en f040 (vertr = id_user)
+    # Los que no matchean son IDs de otro sistema, no "inactivos"
     if isinstance(reactor, dict) and isinstance(mspa, dict):
         vnames = mspa.get("vertr_names", {})
         for lst in ("sellers_ret", "sellers_an"):
+            enriched = []
             for s in reactor.get(lst, []):
                 uid = str(s.get("id", "")).strip()
                 if uid in vnames:
                     s["nombre"]   = f"{vnames[uid]} ({uid})"
                     s["inactive"] = False
-                else:
-                    s["nombre"]   = f"({uid})"
-                    s["inactive"] = True
+                    enriched.append(s)
+            reactor[lst] = enriched
 
     return {
         "timestamp":      now.strftime("%d/%m/%Y %H:%M:%S"),
@@ -1034,19 +1034,15 @@ function buildSellerTable(sellers, valClass, valLabel, valueKey, cntLabel, showP
   const pedCol=showPed?`<th style="text-align:right;color:var(--text3)">Ped.</th>`:'';
   let h=`<table class="seller-tbl"><tr><th></th><th>Vendedor</th>${pedCol}<th style="text-align:right">${valLabel}</th></tr>`;
   sellers.slice(0,5).forEach((s,i)=>{
-    const inactive=s.inactive===true;
     const nameRaw=s.nombre||'';
     const nameHtml=nameRaw.includes('(')?
       nameRaw.replace(/^(.+?)(\(.+\))(.*)$/,'<span>$1</span><span class="s-sub">$2$3</span>'):
       `<span>${nameRaw}</span>`;
-    const nameCell=inactive
-      ?`<span style="color:var(--text3);font-style:italic">Inactivo ${nameRaw}</span>`
-      :nameHtml;
     const valHtml = valueKey==='val'
       ? `<span class="${valClass}">${fmtK(s.val||s.val_valido||0)}</span>`
       : `<span class="s-pill ${valClass==='ret-val'?'pill-ret':'pill-an'}">${s.cnt} ped.</span>`;
     const pedCell=showPed?`<td class="s-val" style="color:var(--text3);font-size:11px">${s.ped||s.cnt||''}</td>`:'';
-    h+=`<tr style="${inactive?'opacity:.55':''}"><td class="s-rank ${i<3&&!inactive?'med-'+(i+1):''}">${medals[i]}</td><td class="s-name">${nameCell}</td>${pedCell}<td class="s-val">${valHtml}</td></tr>`;
+    h+=`<tr><td class="s-rank ${i<3?'med-'+(i+1):''}">${medals[i]}</td><td class="s-name">${nameHtml}</td>${pedCell}<td class="s-val">${valHtml}</td></tr>`;
   });
   return h+'</table>';
 }
