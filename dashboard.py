@@ -416,11 +416,11 @@ def fetch_mspa():
             for r in plan_rows
         ]
 
-    # Dias hábiles del mes para calcular el ritmo esperado
-    dias_hab_mes = run(cur, f"""
-        SELECT days FROM work_days
-         WHERE year=YEAR(TODAY) AND month=MONTH(TODAY)
-    """) if False else []  # work_days está en Reactor (MySQL), no en MSPA
+    # Mapa completo de nombres de vendedores desde f040
+    # Se usa también para enriquecer las tablas de Reactor (sellers_ret, sellers_an)
+    # ya que Reactor no tiene tabla users — asumimos misma numeración de vertr
+    all_names = run(cur, f"SELECT vertr, name1 FROM f040 WHERE firma={FIRMA} AND name1 IS NOT NULL")
+    vertr_names = {str(r[0]).strip(): str(r[1]).strip() for r in (all_names or []) if r[1]}
 
     plan_ventas = {
         "plan_total": plan_total,
@@ -440,6 +440,7 @@ def fetch_mspa():
         "venta":            venta,
         "sellers_fact_top": sellers_fact_top5,
         "plan_ventas":      plan_ventas,
+        "vertr_names":      vertr_names,
     }
 
 
@@ -465,7 +466,7 @@ def _get_cached(ttl, fetcher, name):
     return data
 
 
-def get_cached_data():
+def get_cached_data(override_date=None):
     with _lock:
         reactor = _get_cached(REACTOR_TTL, fetch_reactor, "reactor")
         mspa    = _get_cached(MSPA_TTL,    fetch_mspa,    "mspa")
@@ -475,6 +476,41 @@ def get_cached_data():
     now   = datetime.now()
     r_age = int((now - _cache_react_ts).total_seconds()) if _cache_react_ts else 0
     m_age = int((now - _cache_mspa_ts).total_seconds())  if _cache_mspa_ts  else 0
+
+    # "Venta del Día" sincronizada con la fecha objetivo de Reactor
+    # sbas.redat = target_date (no TODAY, que puede ser diferente al día mostrado)
+    target_date = override_date or (reactor.get("target_date") if isinstance(reactor, dict) else None)
+    venta_target = {"ords": 0, "pos": 0, "val": 0.0}
+    if target_date:
+        try:
+            y, m_n, d = target_date.split("-")
+            conn = get_mspa()
+            cur  = conn.cursor()
+            rows = run(cur, f"""
+                SELECT COUNT(DISTINCT auftrag), COUNT(*), SUM(netwert)
+                  FROM sbas WHERE firma={FIRMA}
+                  AND redat = MDY({int(m_n)},{int(d)},{int(y)})
+            """)
+            if rows:
+                venta_target = {"ords": rows[0][0] or 0, "pos": rows[0][1] or 0,
+                                "val": float(rows[0][2] or 0)}
+            conn.close()
+        except Exception as e:
+            print(f"  venta_target error: {e}")
+
+    # Inyectar venta_target en mspa (reemplaza la venta "de hoy" con la del día objetivo)
+    if isinstance(mspa, dict):
+        mspa["venta"] = venta_target
+
+    # Enriquecer sellers de Reactor con nombres de f040 de MSPA
+    # Reactor no tiene tabla users; f040.vertr usa la misma numeración que order_placed.id_user
+    if isinstance(reactor, dict) and isinstance(mspa, dict):
+        vnames = mspa.get("vertr_names", {})
+        for lst in ("sellers_ret", "sellers_an"):
+            for s in reactor.get(lst, []):
+                uid = str(s.get("id", "")).strip()
+                if uid in vnames:
+                    s["nombre"] = f"{vnames[uid]} ({uid})"
 
     return {
         "timestamp":      now.strftime("%d/%m/%Y %H:%M:%S"),
@@ -825,14 +861,20 @@ function renderChart(trend,hasWd){
     const[y,m]=t.mes.split('-');
     return ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][+m-1]+'\n'+y.slice(2);
   });
-  const barData=hasWd?trend.map(t=>t.avg_dia||t.pedidos):trend.map(t=>t.pedidos);
-  const barLabel=hasWd?'Ped/día hábil':'Pedidos';
+  const barData  = hasWd ? trend.map(t=>t.avg_dia||t.pedidos) : trend.map(t=>t.pedidos);
+  const barLabel = hasWd ? 'Ped/día hábil' : 'Pedidos';
+  // Normalizar valor por días hábiles — evita que meses cortos (dic, ago) se vean bajos
+  const lineData  = hasWd
+    ? trend.map(t => t.dias_hab ? +((t.valor/1e6)/t.dias_hab).toFixed(1) : +(t.valor/1e6).toFixed(1))
+    : trend.map(t => +(t.valor/1e6).toFixed(1));
+  const lineLabel = hasWd ? 'M$/día hábil' : 'Valor (M$)';
+
   const ctx=document.getElementById('chart').getContext('2d');
   if(chartObj)chartObj.destroy();
   chartObj=new Chart(ctx,{
     data:{labels,datasets:[
       {type:'bar',label:barLabel,data:barData,backgroundColor:'rgba(37,99,235,.7)',borderColor:'#2563eb',borderWidth:1,yAxisID:'y1',order:2},
-      {type:'line',label:'Valor (M$)',data:trend.map(t=>+(t.valor/1e6).toFixed(1)),
+      {type:'line',label:lineLabel,data:lineData,
        borderColor:'#059669',backgroundColor:'rgba(5,150,105,.07)',borderWidth:2.5,
        pointRadius:4,pointBackgroundColor:'#059669',tension:.35,yAxisID:'y2',order:1,fill:true},
     ]},
@@ -844,14 +886,17 @@ function renderChart(trend,hasWd){
         tooltip:{backgroundColor:'#fff',titleColor:'#0f172a',bodyColor:'#475569',borderColor:'#e2e8f0',borderWidth:1,
           callbacks:{
             label:ctx=>' '+ctx.dataset.label+': '+fmtN(ctx.parsed.y,1),
-            afterBody:items=>{const i=items[0].dataIndex,t=trend[i];return t.dias_hab?['  Días hábiles: '+t.dias_hab,'  Total: '+fmtN(t.pedidos,0)]:[];}
+            afterBody:items=>{
+              const i=items[0].dataIndex,t=trend[i];
+              return t.dias_hab?['  Días hábiles: '+t.dias_hab,'  Total pedidos: '+fmtN(t.pedidos,0),'  Valor total: $'+fmtN(t.valor/1e6,1)+'M']:[];
+            }
           }
         }
       },
       scales:{
         x:{ticks:{color:'#94a3b8',font:{size:9}},grid:{color:'#f1f5f9'}},
         y1:{type:'linear',position:'left',ticks:{color:'#2563eb',font:{size:9}},grid:{color:'#f1f5f9'},title:{display:true,text:barLabel,color:'#2563eb',font:{size:9}}},
-        y2:{type:'linear',position:'right',ticks:{color:'#059669',font:{size:9},callback:v=>v+'M'},grid:{drawOnChartArea:false},title:{display:true,text:'Valor M$',color:'#059669',font:{size:9}}}
+        y2:{type:'linear',position:'right',ticks:{color:'#059669',font:{size:9},callback:v=>v+'M'},grid:{drawOnChartArea:false},title:{display:true,text:lineLabel,color:'#059669',font:{size:9}}}
       }
     }
   });
@@ -960,8 +1005,8 @@ function render(data){
   const r=data.reactor||{};
   const m=data.mspa||{};
   const dp=r.target_date_display||'—';
-  document.getElementById('date-badge').textContent='Pedidos del '+dp;
-  document.getElementById('sec-reactor').textContent='Pedidos Informados · '+dp;
+  document.getElementById('date-badge').textContent=(_customDate?'📅 ':'')+'Pedidos del '+dp;
+  document.getElementById('sec-reactor').textContent='Pedidos Informados · '+dp+(_customDate?' (fecha manual)':'');
 
   // KPIs
   const c=r.comp||null;
@@ -993,7 +1038,7 @@ function render(data){
   const fact_cnt=(bs[13]?.cnt||0)+(bs[18]?.cnt||0);
   const fact_val=venta.val;
   document.getElementById('fl-inf-val').textContent=fmtK(r.valor||0);
-  document.getElementById('fl-inf-ped').textContent=fmtN(total,0)+' pedidos · 100%';
+  document.getElementById('fl-inf-ped').textContent=fmtN(total,0)+' pedidos';
 
   document.getElementById('fl-ret-val').textContent=fmtK(bs[15]?.val||0);
   document.getElementById('fl-ret-ped').textContent=fmtN(ret,0)+' pedidos';
@@ -1056,8 +1101,10 @@ function render(data){
   document.getElementById('mspa-body').innerHTML=mhtml;
 }
 
+const _customDate=new URLSearchParams(location.search).get('date')||'';
 async function load(){
-  try{const res=await fetch('/api/data');const d=await res.json();render(d);}
+  const url='/api/data'+(_customDate?'?date='+_customDate:'');
+  try{const res=await fetch(url);const d=await res.json();render(d);}
   catch(e){console.error(e);}
 }
 
@@ -1109,8 +1156,14 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        if self.path in ("/","/index.html"):   self.send_html(HTML_PAGE)
-        elif self.path.startswith("/api/data"): self.send_json(get_cached_data())
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(self.path)
+        qs     = parse_qs(parsed.query)
+        if parsed.path in ("/", "/index.html"):
+            self.send_html(HTML_PAGE)
+        elif parsed.path == "/api/data":
+            override = qs.get("date", [None])[0]
+            self.send_json(get_cached_data(override_date=override))
         else: self.send_response(404); self.end_headers()
 
 
