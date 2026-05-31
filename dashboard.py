@@ -416,11 +416,11 @@ def fetch_mspa():
             for r in plan_rows
         ]
 
-    # Dias hábiles del mes para calcular el ritmo esperado
-    dias_hab_mes = run(cur, f"""
-        SELECT days FROM work_days
-         WHERE year=YEAR(TODAY) AND month=MONTH(TODAY)
-    """) if False else []  # work_days está en Reactor (MySQL), no en MSPA
+    # Mapa completo de nombres de vendedores desde f040
+    # Se usa también para enriquecer las tablas de Reactor (sellers_ret, sellers_an)
+    # ya que Reactor no tiene tabla users — asumimos misma numeración de vertr
+    all_names = run(cur, f"SELECT vertr, name1 FROM f040 WHERE firma={FIRMA} AND name1 IS NOT NULL")
+    vertr_names = {str(r[0]).strip(): str(r[1]).strip() for r in (all_names or []) if r[1]}
 
     plan_ventas = {
         "plan_total": plan_total,
@@ -440,6 +440,7 @@ def fetch_mspa():
         "venta":            venta,
         "sellers_fact_top": sellers_fact_top5,
         "plan_ventas":      plan_ventas,
+        "vertr_names":      vertr_names,
     }
 
 
@@ -500,6 +501,16 @@ def get_cached_data(override_date=None):
     # Inyectar venta_target en mspa (reemplaza la venta "de hoy" con la del día objetivo)
     if isinstance(mspa, dict):
         mspa["venta"] = venta_target
+
+    # Enriquecer sellers de Reactor con nombres de f040 de MSPA
+    # Reactor no tiene tabla users; f040.vertr usa la misma numeración que order_placed.id_user
+    if isinstance(reactor, dict) and isinstance(mspa, dict):
+        vnames = mspa.get("vertr_names", {})
+        for lst in ("sellers_ret", "sellers_an"):
+            for s in reactor.get(lst, []):
+                uid = str(s.get("id", "")).strip()
+                if uid in vnames:
+                    s["nombre"] = f"{vnames[uid]} ({uid})"
 
     return {
         "timestamp":      now.strftime("%d/%m/%Y %H:%M:%S"),
