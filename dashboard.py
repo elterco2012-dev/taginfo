@@ -167,7 +167,7 @@ def fetch_reactor(target_date=None):
         trend.append({"mes": mes, "pedidos": peds, "valor": val,
                        "dias_hab": dias, "avg_dia": avg_pd})
 
-    # Comparison: same day-of-month, previous month
+    # Comparison: same day-of-month, previous month (+ lineas para delta avg)
     try:
         if target_dt.month == 1:
             prev_dt = target_dt.replace(year=target_dt.year - 1, month=12)
@@ -179,10 +179,24 @@ def fetch_reactor(target_date=None):
             SELECT COUNT(DISTINCT id) pedidos, COUNT(DISTINCT id_user) vendedores, SUM(total) valor
             FROM order_placed WHERE DATE(order_date) = ?
         """, (str(prev_dt),))
-        comp = {"pedidos": comp_rows[0][0] or 0,
-                "vendedores": comp_rows[0][1] or 0,
-                "valor": float(comp_rows[0][2] or 0),
-                "date": str(prev_dt)} if comp_rows else None
+        comp_lin = run(cur, """
+            SELECT COUNT(od.id) FROM order_placed op
+            JOIN order_detail od ON od.id_order_placed = op.id
+            WHERE DATE(op.order_date) = ?
+        """, (str(prev_dt),))
+        if comp_rows and comp_rows[0][0]:
+            cp = comp_rows[0]
+            c_ped  = cp[0] or 0
+            c_vend = cp[1] or 0
+            c_lin  = comp_lin[0][0] if comp_lin else 0
+            comp = {"pedidos":      c_ped,
+                    "vendedores":   c_vend,
+                    "valor":        float(cp[2] or 0),
+                    "avg_lineas":   round(c_lin / c_ped, 1) if c_ped else 0,
+                    "avg_ped_vend": round(c_ped / c_vend, 1) if c_vend else 0,
+                    "date":         str(prev_dt)}
+        else:
+            comp = None
     except Exception:
         comp = None
 
@@ -201,7 +215,9 @@ def fetch_reactor(target_date=None):
     days_in_month = calendar.monthrange(target_dt.year, target_dt.month)[1]
     curr_wd       = wd_map.get(curr_month, 0)
     last_wd       = wd_map.get(last_month, 0)
-    dias_elapsed  = round(curr_wd * target_dt.day / days_in_month) if curr_wd else target_dt.day
+    # Usar lookup exacto de work_days_log si está disponible
+    dias_elapsed  = wd_log.get(target_str,
+                        round(curr_wd * target_dt.day / days_in_month) if curr_wd else target_dt.day)
     meta = {
         "curr_month":    curr_month,
         "last_month":    last_month,
@@ -407,8 +423,10 @@ def fetch_mspa(target_date=None):
         fact_rows = [(r[0], f"Vend. {r[0]}", r[1], r[2]) for r in fact_rows_raw]
 
     sellers_fact_top5 = [
-        {"vertr": str(r[0] or '').strip(), "nombre": str(r[1] or '').strip(),
-         "ped": int(r[2] or 0), "val": float(r[3] or 0)}
+        {"vertr":  str(r[0] or '').strip(),
+         "nombre": f"{str(r[1] or '').strip()} ({str(r[0] or '').strip()})",
+         "ped":    int(r[2] or 0),
+         "val":    float(r[3] or 0)}
         for r in fact_rows[:5]
     ]
 
@@ -450,11 +468,20 @@ def fetch_mspa(target_date=None):
             for r in plan_rows
         ]
 
-    # Mapa completo de nombres de vendedores desde f040
-    # Se usa también para enriquecer las tablas de Reactor (sellers_ret, sellers_an)
-    # ya que Reactor no tiene tabla users — asumimos misma numeración de vertr
-    all_names = run(cur, f"SELECT vertr, name1 FROM f040 WHERE firma={FIRMA} AND name1 IS NOT NULL")
-    vertr_names = {str(r[0]).strip(): str(r[1]).strip() for r in (all_names or []) if r[1]}
+    # Mapa de vendedores activos: deben tener sbas en el mes objetivo o el anterior
+    # Filtra vendedores que dejaron de trabajar (sin actividad reciente)
+    if t_month > 1:
+        act_q = f"""SELECT DISTINCT vertr1 FROM sbas WHERE firma={FIRMA}
+                    AND bujahr={t_year} AND bumonat IN ({t_month},{t_month-1})"""
+    else:
+        act_q = f"""SELECT DISTINCT vertr1 FROM sbas WHERE firma={FIRMA}
+                    AND ((bujahr={t_year} AND bumonat=1)
+                      OR (bujahr={t_year-1} AND bumonat=12))"""
+    act_rows     = run(cur, act_q)
+    active_vertrs = {str(r[0]).strip() for r in (act_rows or []) if r[0]}
+    all_names    = run(cur, f"SELECT vertr, name1 FROM f040 WHERE firma={FIRMA} AND name1 IS NOT NULL")
+    vertr_names  = {str(r[0]).strip(): str(r[1]).strip()
+                    for r in (all_names or []) if r[1] and str(r[0]).strip() in active_vertrs}
 
     plan_ventas = {
         "plan_total": plan_total,
@@ -760,14 +787,16 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
         <div id="d-ped"></div>
       </div>
       <div class="kpi c-cyan">
-        <div class="kpi-lbl">Vendedores Activos</div>
+        <div class="kpi-lbl">Pedidos / Vendedor</div>
         <div class="kpi-val" id="k-vend">—</div>
         <div id="d-vend"></div>
+        <div class="kpi-sub" id="k-vend-sub" style="font-size:9px;color:var(--text3)">vs. mismo día mes anterior</div>
       </div>
       <div class="kpi c-orange">
         <div class="kpi-lbl">Promedio Líneas / Pedido</div>
         <div class="kpi-val" id="k-avg">—</div>
-        <div class="kpi-sub">líneas por pedido</div>
+        <div id="d-avg"></div>
+        <div class="kpi-sub" id="k-avg-sub" style="font-size:9px;color:var(--text3)">vs. mismo día mes anterior</div>
       </div>
       <div class="kpi c-green">
         <div class="kpi-lbl">Venta del Día</div>
@@ -1065,14 +1094,31 @@ function render(data){
 
   // KPIs
   const c=r.comp||null;
-  document.getElementById('k-ped').textContent=fmtN(r.pedidos,0);
-  document.getElementById('d-ped').innerHTML=c?deltaHtml(r.pedidos,c.pedidos):'';
-  document.getElementById('k-vend').textContent=fmtN(r.vendedores,0);
-  document.getElementById('d-vend').innerHTML=c?deltaHtml(r.vendedores,c.vendedores):'';
+  const compLbl=c?`vs. ${c.date||'mes anterior'}`:'vs. mismo día mes anterior';
 
-  // avg_lineas needs lineas/pedidos — compute from by_status or use avg_lineas if available
+  // Pedidos informados + delta explicado
+  document.getElementById('k-ped').textContent=fmtN(r.pedidos,0);
+  if(c){
+    const dEl=document.getElementById('d-ped');
+    dEl.innerHTML=deltaHtml(r.pedidos,c.pedidos)+
+      `<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`;
+  }
+
+  // Pedidos / Vendedor (reemplaza Vendedores Activos)
+  const apv=r.avg_ped_vend||0;
+  document.getElementById('k-vend').textContent=fmtN(apv,1);
+  if(c&&c.avg_ped_vend){
+    document.getElementById('d-vend').innerHTML=deltaHtml(apv,c.avg_ped_vend)+
+      `<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`;
+  }
+
+  // Promedio líneas/pedido + delta
   const bs=r.by_status||{};
   document.getElementById('k-avg').textContent=r.avg_lineas||'—';
+  if(c&&c.avg_lineas){
+    document.getElementById('d-avg').innerHTML=deltaHtml(r.avg_lineas,c.avg_lineas)+
+      `<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`;
+  }
 
   // Venta del día from MSPA
   const venta=m.venta||{ords:0,val:0};
