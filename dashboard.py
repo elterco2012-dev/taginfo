@@ -239,7 +239,7 @@ def fetch_reactor(target_date=None):
         SELECT id_user, COUNT(*) cnt, SUM(total) val
         FROM order_placed
         WHERE DATE(order_date) = ? AND id_order_status = 15
-        GROUP BY id_user ORDER BY cnt DESC LIMIT 5
+        GROUP BY id_user ORDER BY cnt DESC LIMIT 10
     """, (target_str,))
     sellers_ret = [{"id": r[0], "nombre": seller_name(r[0]),
                     "cnt": int(r[1] or 0), "val": float(r[2] or 0)} for r in ret_rows]
@@ -248,7 +248,7 @@ def fetch_reactor(target_date=None):
         SELECT id_user, COUNT(*) cnt, SUM(total) val
         FROM order_placed
         WHERE DATE(order_date) = ? AND id_order_status = 14
-        GROUP BY id_user ORDER BY cnt DESC LIMIT 5
+        GROUP BY id_user ORDER BY cnt DESC LIMIT 10
     """, (target_str,))
     sellers_an = [{"id": r[0], "nombre": seller_name(r[0]),
                    "cnt": int(r[1] or 0), "val": float(r[2] or 0)} for r in an_rows]
@@ -791,10 +791,11 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
         <span class="alert-icon" id="ai-an"></span>
       </div>
       <div class="flow-cell fl-fact">
-        <div class="flow-label">Facturado hoy <span class="tooltip-info">ⓘ<span class="tt">Pedidos de este día que pasaron a<br>estado Facturado (Reactor status 13/18).<br>La Venta del Día (KPI) suma todo lo<br>facturado en MSPA/sbas ese día,<br>sin importar cuándo se ingresó el pedido.</span></span></div>
+        <div class="flow-label">Facturado hoy <span class="tooltip-info">ⓘ<span class="tt">Pedidos de este día que pasaron a<br>estado Facturado (Reactor status 13/18).<br>La Venta del Día (KPI arriba) suma todo<br>lo facturado en MSPA/sbas ese día,<br>incluye pedidos de días anteriores.</span></span></div>
         <div class="flow-val" id="fl-fact-val">—</div>
         <div class="flow-sub" id="fl-fact-ped">—</div>
         <div class="flow-pct" id="fl-fact-pct">—%</div>
+        <div class="flow-sub" id="fl-fact-mspa" style="font-size:9px;opacity:.7;margin-top:2px"></div>
       </div>
     </div>
   </div>
@@ -1016,19 +1017,21 @@ function renderPlan(pv, diasElapsed, diasHab){
     </div>`;
 }
 
-function buildSellerTable(sellers, valClass, valLabel, valueKey, cntLabel){
+function buildSellerTable(sellers, valClass, valLabel, valueKey, cntLabel, showPed){
   if(!sellers||!sellers.length)
     return '<p style="color:var(--text3);font-size:11px;padding:8px 0">Sin movimiento hoy</p>';
-  const medals=['🥇','🥈','🥉','4°','5°'];
-  let h=`<table class="seller-tbl"><tr><th></th><th>Vendedor</th><th style="text-align:right">${valLabel}</th></tr>`;
-  sellers.forEach((s,i)=>{
+  const medals=['🥇','🥈','🥉','4°','5°','6°','7°'];
+  const pedCol=showPed?`<th style="text-align:right;color:var(--text3)">Ped.</th>`:'';
+  let h=`<table class="seller-tbl"><tr><th></th><th>Vendedor</th>${pedCol}<th style="text-align:right">${valLabel}</th></tr>`;
+  sellers.slice(0,5).forEach((s,i)=>{
     const nameHtml=s.nombre.includes('(')?
       s.nombre.replace(/^(.+?)(\(.+\))(.*)$/,'<span>$1</span><span class="s-sub">$2$3</span>'):
       `<span>${s.nombre}</span>`;
     const valHtml = valueKey==='val'
       ? `<span class="${valClass}">${fmtK(s.val||s.val_valido||0)}</span>`
-      : `<span class="s-pill ${valClass==='ret-val'?'pill-ret':'pill-an'}">${s.cnt} pedidos</span>`;
-    h+=`<tr><td class="s-rank ${i<3?'med-'+(i+1):''}">${medals[i]}</td><td class="s-name">${nameHtml}</td><td class="s-val">${valHtml}</td></tr>`;
+      : `<span class="s-pill ${valClass==='ret-val'?'pill-ret':'pill-an'}">${s.cnt} ped.</span>`;
+    const pedCell=showPed?`<td class="s-val" style="color:var(--text3);font-size:11px">${s.ped||s.cnt||''}</td>`:'';
+    h+=`<tr><td class="s-rank ${i<3?'med-'+(i+1):''}">${medals[i]}</td><td class="s-name">${nameHtml}</td>${pedCell}<td class="s-val">${valHtml}</td></tr>`;
   });
   return h+'</table>';
 }
@@ -1075,8 +1078,12 @@ function render(data){
   else if(sAn==='warn')kpiPed.classList.add('alert-warn');
 
   // Flow bar (4 cells)
+  // fact_cnt y fact_val vienen de Reactor (status 13/18 de pedidos del día)
+  // → consistente con el flujo: Informado - Retenido - Anulado → Facturado
   const fact_cnt=(bs[13]?.cnt||0)+(bs[18]?.cnt||0);
-  const fact_val=venta.val;
+  const fact_val=(bs[13]?.val||0)+(bs[18]?.val||0);
+  // Venta del día MSPA (todos los remitos del día, sin filtro de fecha de pedido)
+  const ventaMSPA=venta.val;
   document.getElementById('fl-inf-val').textContent=fmtK(r.valor||0);
   document.getElementById('fl-inf-ped').textContent=fmtN(total,0)+' pedidos';
 
@@ -1091,6 +1098,9 @@ function render(data){
   document.getElementById('fl-fact-val').textContent=fmtK(fact_val);
   document.getElementById('fl-fact-ped').textContent=fmtN(fact_cnt,0)+' pedidos';
   document.getElementById('fl-fact-pct').textContent=pct(fact_cnt,total);
+  // Referencia MSPA: total facturado en sbas ese día (incluye pedidos de días anteriores)
+  const elMspaRef=document.getElementById('fl-fact-mspa');
+  if(elMspaRef)elMspaRef.textContent=ventaMSPA>0?'MSPA total día: '+fmtK(ventaMSPA):'';
 
   // Semáforo flow
   const fcRet=document.getElementById('fc-ret'),fcAn=document.getElementById('fc-an');
@@ -1123,9 +1133,9 @@ function render(data){
 
   // Sellers
   const sf=m.sellers_fact_top||[];
-  document.getElementById('sell-fact-top').innerHTML=buildSellerTable(m.sellers_fact_top||[],'fact-val','Facturado hoy','val','pedidos');
-  document.getElementById('sell-ret').innerHTML=buildSellerTable(r.sellers_ret||[],'ret-val','Retenidos','cnt','pedidos');
-  document.getElementById('sell-an').innerHTML=buildSellerTable(r.sellers_an||[],'an-val','Anulados','cnt','pedidos');
+  document.getElementById('sell-fact-top').innerHTML=buildSellerTable(m.sellers_fact_top||[],'fact-val','Facturado','val','pedidos',true);
+  document.getElementById('sell-ret').innerHTML=buildSellerTable(r.sellers_ret||[],'ret-val','Retenidos','cnt','pedidos',false);
+  document.getElementById('sell-an').innerHTML=buildSellerTable(r.sellers_an||[],'an-val','Anulados','cnt','pedidos',false);
 
   // MSPA
   let mhtml='';
