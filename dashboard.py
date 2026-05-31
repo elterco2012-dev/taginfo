@@ -90,15 +90,19 @@ def fetch_reactor():
 
     # KPIs
     rows = run(cur, """
-        SELECT COUNT(DISTINCT id) pedidos,
-               COUNT(DISTINCT id_user) vendedores,
-               SUM(total) valor
-        FROM order_placed WHERE DATE(order_date) = ?
+        SELECT COUNT(DISTINCT op.id) pedidos,
+               COUNT(DISTINCT op.id_user) vendedores,
+               SUM(op.total) valor,
+               COUNT(od.id) lineas
+        FROM order_placed op
+        LEFT JOIN order_detail od ON od.id_order_placed = op.id
+        WHERE DATE(op.order_date) = ?
     """, (target_str,))
-    pedidos, vendedores, valor = rows[0] if rows else (0, 0, 0)
+    pedidos, vendedores, valor, lineas = rows[0] if rows else (0, 0, 0, 0)
     pedidos    = pedidos    or 0
     vendedores = vendedores or 0
     valor      = float(valor or 0)
+    lineas     = lineas     or 0
 
     # By status
     status_rows = run(cur, """
@@ -246,6 +250,8 @@ def fetch_reactor():
         "pedidos":      pedidos,
         "vendedores":   vendedores,
         "valor":        valor,
+        "lineas":       lineas,
+        "avg_lineas":   round(lineas / pedidos, 1) if pedidos else 0,
         "avg_ped_vend": round(pedidos / vendedores, 1) if vendedores else 0,
         "by_status":    by_status,
         "trend":        trend,
