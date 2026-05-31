@@ -350,46 +350,78 @@ def fetch_mspa():
           FROM sbas WHERE firma={FIRMA} AND redat=TODAY
     """)
 
-    # Sellers by actual invoiced revenue today (sbas vertr1)
-    # vertr1 = primary salesperson (Vertreter) in MSPA
+    # ── Top 5 facturación del día — sbas JOIN f040 para nombres reales ────────
+    # f040.vertr = vertr1 en sbas; f040.name1 = nombre del vendedor
     fact_rows = run(cur, f"""
-        SELECT vertr1, COUNT(DISTINCT auftrag) ped, SUM(netwert) val
-          FROM sbas WHERE firma={FIRMA} AND redat=TODAY
-         GROUP BY vertr1 ORDER BY val DESC
+        SELECT s.vertr1, f.name1, COUNT(DISTINCT s.auftrag) ped, SUM(s.netwert) val
+          FROM sbas s, f040 f
+         WHERE s.firma={FIRMA} AND f.firma=s.firma AND f.vertr=s.vertr1
+           AND s.redat=TODAY AND s.netwert > 0
+         GROUP BY s.vertr1, f.name1 ORDER BY val DESC
     """)
-
-    # Try to resolve vertreter names from various possible tables
-    vertr_names = {}
-    for tbl in ["vertr", "vtr", "vertreter", "personal", "empleados"]:
-        for col in ["nombre", "name", "vtrnam", "kurzbez", "bezeichnung", "apellido"]:
-            r = run(cur, f"SELECT vertr, {col} FROM {tbl}")
-            if r:
-                vertr_names = {str(x[0]).strip(): str(x[1]).strip() for x in r if x[1]}
-                break
-        if vertr_names:
-            break
-    # Fallback: try joining with f090 to get vertreter display
-    if not vertr_names:
-        vn = run(cur, f"""
-            SELECT DISTINCT s.vertr1, f.vertr1
-              FROM sbas s, f090 f
-             WHERE s.firma={FIRMA} AND f.firma=s.firma
-               AND s.auftrag=f.auftrag AND s.redat=TODAY
+    # Fallback sin join si no hay datos hoy (ej: facturación ya cerró)
+    if not fact_rows:
+        fact_rows_raw = run(cur, f"""
+            SELECT vertr1, COUNT(DISTINCT auftrag) ped, SUM(netwert) val
+              FROM sbas WHERE firma={FIRMA} AND redat=TODAY AND netwert > 0
+             GROUP BY vertr1 ORDER BY val DESC
         """)
-        # If f090 has same vertr1 code, no help for names — but at least confirms field
+        fact_rows = [(r[0], f"Vend. {r[0]}", r[1], r[2]) for r in fact_rows_raw]
 
-    sellers_fact = []
-    for r in fact_rows:
-        vtr = str(r[0] or '').strip()
-        nombre = vertr_names.get(vtr, f"Vend. {vtr}")
-        sellers_fact.append({
-            "vertr":  vtr,
-            "nombre": nombre,
-            "ped":    int(r[1] or 0),
-            "val":    float(r[2] or 0),
-        })
-    sellers_fact_top5 = sellers_fact[:5]
-    sellers_fact_bot5 = [s for s in reversed(sellers_fact) if s["val"] > 0][:5]
+    sellers_fact_top5 = [
+        {"vertr": str(r[0] or '').strip(), "nombre": str(r[1] or '').strip(),
+         "ped": int(r[2] or 0), "val": float(r[3] or 0)}
+        for r in fact_rows[:5]
+    ]
+
+    # ── Plan de ventas mensual — vplan JOIN f040 JOIN sbas ─────────────────
+    # vplan cols: firma, vertr, bujahr, bumonat, planums, plannutz, planumsk, aktivkd, ...
+    plan_rows = run(cur, f"""
+        SELECT v.vertr, f.name1, v.planums,
+               SUM(s.netwert) fact_acum
+          FROM vplan v, f040 f, sbas s
+         WHERE v.firma={FIRMA} AND f.firma=v.firma AND f.vertr=v.vertr
+           AND s.firma=v.firma AND s.vertr1=v.vertr
+           AND v.bujahr=YEAR(TODAY) AND v.bumonat=MONTH(TODAY)
+           AND s.bujahr=YEAR(TODAY) AND s.bumonat=MONTH(TODAY)
+         GROUP BY v.vertr, f.name1, v.planums
+         ORDER BY v.planums DESC
+    """)
+    # Fallback: totales sin desglose por vendedor si el JOIN falla
+    if not plan_rows:
+        plan_tot = run(cur, f"""
+            SELECT SUM(planums) FROM vplan
+             WHERE firma={FIRMA} AND bujahr=YEAR(TODAY) AND bumonat=MONTH(TODAY)
+        """)
+        fact_tot = run(cur, f"""
+            SELECT SUM(netwert) FROM sbas
+             WHERE firma={FIRMA} AND bujahr=YEAR(TODAY) AND bumonat=MONTH(TODAY)
+        """)
+        plan_total = float(plan_tot[0][0] or 0) if plan_tot else 0
+        fact_acum  = float(fact_tot[0][0] or 0) if fact_tot else 0
+        sellers_plan = []
+    else:
+        plan_total = sum(float(r[2] or 0) for r in plan_rows)
+        fact_acum  = sum(float(r[3] or 0) for r in plan_rows)
+        sellers_plan = [
+            {"vertr": str(r[0] or '').strip(), "nombre": str(r[1] or '').strip(),
+             "plan": float(r[2] or 0), "fact": float(r[3] or 0),
+             "pct": round(float(r[3] or 0) / float(r[2]) * 100, 1) if r[2] else 0}
+            for r in plan_rows
+        ]
+
+    # Dias hábiles del mes para calcular el ritmo esperado
+    dias_hab_mes = run(cur, f"""
+        SELECT days FROM work_days
+         WHERE year=YEAR(TODAY) AND month=MONTH(TODAY)
+    """) if False else []  # work_days está en Reactor (MySQL), no en MSPA
+
+    plan_ventas = {
+        "plan_total": plan_total,
+        "fact_acum":  fact_acum,
+        "pct_plan":   round(fact_acum / plan_total * 100, 1) if plan_total else 0,
+        "sellers":    sellers_plan,
+    }
 
     conn.close()
     return {
@@ -401,7 +433,7 @@ def fetch_mspa():
         "remitos":          remitos,
         "venta":            venta,
         "sellers_fact_top": sellers_fact_top5,
-        "sellers_fact_bot": sellers_fact_bot5,
+        "plan_ventas":      plan_ventas,
     }
 
 
@@ -576,6 +608,15 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
 .mspa-row.hi .mspa-lbl{color:var(--amber)}.mspa-row.hi .mspa-val{color:var(--amber)}
 .mspa-row.venta .mspa-lbl{color:var(--green);font-weight:700}.mspa-row.venta .mspa-val{color:var(--green);font-size:17px}
 
+/* ── Plan de ventas bar ── */
+.plan-bar-bg{background:var(--border);border-radius:8px;height:18px;position:relative;overflow:hidden;flex:1;min-width:200px}
+.plan-bar-fill{height:100%;border-radius:8px;transition:width .8s;display:flex;align-items:center;padding-left:8px;font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden}
+.plan-bar-pace{position:absolute;top:0;bottom:0;width:3px;background:var(--amber);border-radius:2px;z-index:2}
+.plan-nums{display:flex;align-items:baseline;gap:8px;flex-shrink:0}
+.plan-curr{font-size:26px;font-weight:800;color:var(--würth)}
+.plan-total{font-size:14px;color:var(--text3);font-weight:600}
+.plan-tags{display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0}
+
 /* ── Sellers 3-panel ── */
 .sellers-wrap{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
 .seller-tbl{width:100%;border-collapse:collapse;font-size:12px}
@@ -678,7 +719,15 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
     </div>
   </div>
 
-  <!-- Meta mensual -->
+  <!-- Plan de ventas -->
+  <div class="meta-card">
+    <div class="sec-lbl" style="color:var(--würth)">📊 Plan de Ventas — Facturación Acumulada del Mes vs. Plan</div>
+    <div class="meta-row" id="plan-row">
+      <span style="color:var(--text3);font-size:11px">Cargando...</span>
+    </div>
+  </div>
+
+  <!-- Meta mensual pedidos -->
   <div class="meta-card">
     <div class="sec-lbl">Ritmo Mensual — Pedidos vs. Mes Anterior</div>
     <div class="meta-row" id="meta-row">
@@ -833,6 +882,51 @@ function renderMeta(meta){
     </div>`;
 }
 
+function renderPlan(pv, diasElapsed, diasHab){
+  const el=document.getElementById('plan-row');
+  if(!pv||!pv.plan_total){
+    el.innerHTML='<span style="color:var(--text3);font-size:11px">Sin datos de plan para este mes</span>';
+    return;
+  }
+  const plan=pv.plan_total, fact=pv.fact_acum, pct=pv.pct_plan||0;
+  const fill=Math.min(pct,100);
+  // Pace: qué % del plan debería estar cubierto según días hábiles transcurridos
+  const pacePos = diasHab>0 ? Math.min((diasElapsed/diasHab)*100, 100) : 0;
+  const paceTarget = plan * (pacePos/100);
+  const onTrack = fact >= paceTarget;
+  const barColor = pct>=100?'var(--green)':onTrack?'var(--würth)':'var(--amber)';
+
+  let tagCls='tag-neutral', tagTxt='Sin referencia';
+  if(plan>0){
+    if(pct>=100){tagCls='tag-ok';tagTxt='✓ Plan cumplido';}
+    else if(onTrack){tagCls='tag-ok';tagTxt=`Al día · ${pct.toFixed(1)}% del plan`;}
+    else{
+      const falta=paceTarget-fact;
+      const pctBehind=((paceTarget-fact)/plan*100).toFixed(1);
+      tagCls=Number(pctBehind)>15?'tag-danger':'tag-warn';
+      tagTxt=`${pctBehind}% por debajo del ritmo · Falta ${fmtK(falta)} para estar al día`;
+    }
+  }
+  const wdTxt=diasHab>0?`Día hábil ${diasElapsed} de ${diasHab}`:'';
+
+  el.innerHTML=`
+    <div style="font-size:11px;color:var(--text2);white-space:nowrap">Facturado acumulado</div>
+    <div class="plan-nums">
+      <span class="plan-curr">${fmtK(fact)}</span>
+      <span class="plan-total">de ${fmtK(plan)}</span>
+    </div>
+    <div class="plan-bar-bg">
+      <div class="plan-bar-fill" style="width:${fill}%;background:${barColor}">
+        ${fill>12?pct.toFixed(1)+'%':''}
+      </div>
+      <div class="plan-bar-pace" style="left:${pacePos.toFixed(1)}%" title="Ritmo esperado: ${fmtK(paceTarget)}"></div>
+    </div>
+    <div class="plan-tags">
+      <span class="meta-tag ${tagCls}">${tagTxt}</span>
+      ${wdTxt?`<span class="meta-tag tag-neutral">${wdTxt}</span>`:''}
+    </div>`;
+}
+
 function buildSellerTable(sellers, valClass, valLabel, valueKey, cntLabel){
   if(!sellers||!sellers.length)
     return '<p style="color:var(--text3);font-size:11px;padding:8px 0">Sin movimiento hoy</p>';
@@ -928,11 +1022,17 @@ function render(data){
   }
 
   // Meta
+  // Plan de ventas (datos de MSPA + dias hábiles de Reactor)
+  const pv=m.plan_ventas||null;
+  const diasEl=r.meta?.dias_elapsed||0;
+  const diasHab=r.meta?.curr_wd||0;
+  renderPlan(pv, diasEl, diasHab);
+
   renderMeta(r.meta||null);
 
   // Sellers
   const sf=m.sellers_fact_top||[];
-  document.getElementById('sell-fact-top').innerHTML=buildSellerTable(sf,'fact-val','Facturado','val','pedidos');
+  document.getElementById('sell-fact-top').innerHTML=buildSellerTable(m.sellers_fact_top||[],'fact-val','Facturado hoy','val','pedidos');
   document.getElementById('sell-ret').innerHTML=buildSellerTable(r.sellers_ret||[],'ret-val','Retenidos','cnt','pedidos');
   document.getElementById('sell-an').innerHTML=buildSellerTable(r.sellers_an||[],'an-val','Anulados','cnt','pedidos');
 
