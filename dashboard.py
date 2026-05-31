@@ -74,19 +74,23 @@ LOGO_HTML = _load_logo()
 # ─────────────────────────────────────────────────────────────────────────────
 # REACTOR fetch
 # ─────────────────────────────────────────────────────────────────────────────
-def fetch_reactor():
+def fetch_reactor(target_date=None):
     conn = get_reactor()
     cur  = conn.cursor()
 
-    # Most recent order_date with significant activity
-    rows = run(cur, """
-        SELECT DATE(order_date) d FROM order_placed
-        GROUP BY DATE(order_date) HAVING COUNT(*) >= 50
-        ORDER BY d DESC LIMIT 1
-    """)
-    target     = rows[0][0] if rows else (date.today() - timedelta(days=1))
-    target_str = str(target)
-    target_dt  = target if isinstance(target, date) else date.fromisoformat(target_str)
+    if target_date:
+        target_str = target_date
+        target_dt  = date.fromisoformat(target_date)
+    else:
+        # Most recent order_date with significant activity
+        rows = run(cur, """
+            SELECT DATE(order_date) d FROM order_placed
+            GROUP BY DATE(order_date) HAVING COUNT(*) >= 50
+            ORDER BY d DESC LIMIT 1
+        """)
+        target     = rows[0][0] if rows else (date.today() - timedelta(days=1))
+        target_str = str(target)
+        target_dt  = target if isinstance(target, date) else date.fromisoformat(target_str)
 
     # KPIs — sin JOIN a order_detail para evitar multiplicar el total por cada línea
     rows = run(cur, """
@@ -263,6 +267,7 @@ def fetch_reactor():
         "by_status":    by_status,
         "trend":        trend,
         "has_workdays": bool(wd_map),
+        "wd_map":       wd_map,
         "comp":         comp,
         "meta":         meta,
         "sellers_ret":  sellers_ret,
@@ -273,9 +278,21 @@ def fetch_reactor():
 # ─────────────────────────────────────────────────────────────────────────────
 # MSPA fetch
 # ─────────────────────────────────────────────────────────────────────────────
-def fetch_mspa():
+def fetch_mspa(target_date=None):
     conn = get_mspa()
     cur  = conn.cursor()
+
+    # Fecha objetivo — para queries sbas y vplan
+    if target_date:
+        td      = date.fromisoformat(target_date)
+        tday    = f"MDY({td.month},{td.day},{td.year})"
+        t_year  = td.year
+        t_month = td.month
+    else:
+        tday    = "TODAY"
+        _today  = date.today()
+        t_year  = _today.year
+        t_month = _today.month
 
     def q(sql):
         rows = run(cur, sql)
@@ -360,23 +377,21 @@ def fetch_mspa():
     remitos = {"ords": ls["ords"]+re["ords"], "pos": ls["pos"]+re["pos"], "val": ls["val"]+re["val"]}
     venta = q(f"""
         SELECT COUNT(DISTINCT auftrag), COUNT(*), SUM(netwert)
-          FROM sbas WHERE firma={FIRMA} AND redat=TODAY
+          FROM sbas WHERE firma={FIRMA} AND redat={tday}
     """)
 
     # ── Top 5 facturación del día — sbas JOIN f040 para nombres reales ────────
-    # f040.vertr = vertr1 en sbas; f040.name1 = nombre del vendedor
     fact_rows = run(cur, f"""
         SELECT s.vertr1, f.name1, COUNT(DISTINCT s.auftrag) ped, SUM(s.netwert) val
           FROM sbas s, f040 f
          WHERE s.firma={FIRMA} AND f.firma=s.firma AND f.vertr=s.vertr1
-           AND s.redat=TODAY AND s.netwert > 0
+           AND s.redat={tday} AND s.netwert > 0
          GROUP BY s.vertr1, f.name1 ORDER BY val DESC
     """)
-    # Fallback sin join si no hay datos hoy (ej: facturación ya cerró)
     if not fact_rows:
         fact_rows_raw = run(cur, f"""
             SELECT vertr1, COUNT(DISTINCT auftrag) ped, SUM(netwert) val
-              FROM sbas WHERE firma={FIRMA} AND redat=TODAY AND netwert > 0
+              FROM sbas WHERE firma={FIRMA} AND redat={tday} AND netwert > 0
              GROUP BY vertr1 ORDER BY val DESC
         """)
         fact_rows = [(r[0], f"Vend. {r[0]}", r[1], r[2]) for r in fact_rows_raw]
@@ -395,8 +410,9 @@ def fetch_mspa():
           FROM vplan v, f040 f, sbas s
          WHERE v.firma={FIRMA} AND f.firma=v.firma AND f.vertr=v.vertr
            AND s.firma=v.firma AND s.vertr1=v.vertr
-           AND v.bujahr=YEAR(TODAY) AND v.bumonat=MONTH(TODAY)
-           AND s.bujahr=YEAR(TODAY) AND s.bumonat=MONTH(TODAY)
+           AND v.bujahr={t_year} AND v.bumonat={t_month}
+           AND s.bujahr={t_year} AND s.bumonat={t_month}
+           AND s.redat <= {tday}
          GROUP BY v.vertr, f.name1, v.planums
          ORDER BY v.planums DESC
     """)
@@ -404,11 +420,12 @@ def fetch_mspa():
     if not plan_rows:
         plan_tot = run(cur, f"""
             SELECT SUM(planums) FROM vplan
-             WHERE firma={FIRMA} AND bujahr=YEAR(TODAY) AND bumonat=MONTH(TODAY)
+             WHERE firma={FIRMA} AND bujahr={t_year} AND bumonat={t_month}
         """)
         fact_tot = run(cur, f"""
             SELECT SUM(netwert) FROM sbas
-             WHERE firma={FIRMA} AND bujahr=YEAR(TODAY) AND bumonat=MONTH(TODAY)
+             WHERE firma={FIRMA} AND bujahr={t_year} AND bumonat={t_month}
+             AND redat <= {tday}
         """)
         plan_total = float(plan_tot[0][0] or 0) if plan_tot else 0
         fact_acum  = float(fact_tot[0][0] or 0) if fact_tot else 0
@@ -474,40 +491,27 @@ def _get_cached(ttl, fetcher, name):
 
 
 def get_cached_data(override_date=None):
-    with _lock:
-        reactor = _get_cached(REACTOR_TTL, fetch_reactor, "reactor")
-        mspa    = _get_cached(MSPA_TTL,    fetch_mspa,    "mspa")
+    now = datetime.now()
+    if override_date:
+        # Fecha manual: fetch directo sin cache — todos los datos para esa fecha
+        try:
+            reactor = fetch_reactor(target_date=override_date)
+        except Exception as e:
+            reactor = {"error": str(e)}
+        try:
+            mspa = fetch_mspa(target_date=override_date)
+        except Exception as e:
+            mspa = {"error": str(e)}
+        r_age, m_age = 0, 0
+    else:
+        with _lock:
+            reactor = _get_cached(REACTOR_TTL, fetch_reactor, "reactor")
+            mspa    = _get_cached(MSPA_TTL,    fetch_mspa,    "mspa")
+        r_age = int((now - _cache_react_ts).total_seconds()) if _cache_react_ts else 0
+        m_age = int((now - _cache_mspa_ts).total_seconds())  if _cache_mspa_ts  else 0
 
     r_err = reactor.pop("error", None) if isinstance(reactor, dict) else None
     m_err = mspa.pop("error", None)    if isinstance(mspa, dict)    else None
-    now   = datetime.now()
-    r_age = int((now - _cache_react_ts).total_seconds()) if _cache_react_ts else 0
-    m_age = int((now - _cache_mspa_ts).total_seconds())  if _cache_mspa_ts  else 0
-
-    # "Venta del Día" sincronizada con la fecha objetivo de Reactor
-    # sbas.redat = target_date (no TODAY, que puede ser diferente al día mostrado)
-    target_date = override_date or (reactor.get("target_date") if isinstance(reactor, dict) else None)
-    venta_target = {"ords": 0, "pos": 0, "val": 0.0}
-    if target_date:
-        try:
-            y, m_n, d = target_date.split("-")
-            conn = get_mspa()
-            cur  = conn.cursor()
-            rows = run(cur, f"""
-                SELECT COUNT(DISTINCT auftrag), COUNT(*), SUM(netwert)
-                  FROM sbas WHERE firma={FIRMA}
-                  AND redat = MDY({int(m_n)},{int(d)},{int(y)})
-            """)
-            if rows:
-                venta_target = {"ords": rows[0][0] or 0, "pos": rows[0][1] or 0,
-                                "val": float(rows[0][2] or 0)}
-            conn.close()
-        except Exception as e:
-            print(f"  venta_target error: {e}")
-
-    # Inyectar venta_target en mspa (reemplaza la venta "de hoy" con la del día objetivo)
-    if isinstance(mspa, dict):
-        mspa["venta"] = venta_target
 
     # Enriquecer sellers de Reactor con nombres de f040 de MSPA
     # Reactor no tiene tabla users; f040.vertr usa la misma numeración que order_placed.id_user
@@ -718,8 +722,8 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
       <span id="date-badge-txt">Cargando...</span> 📅
       <div class="date-picker-wrap" id="date-picker" onclick="event.stopPropagation()">
         <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:6px">Seleccionar fecha</div>
-        <input type="date" id="dp-input" onkeydown="if(event.key==='Enter')gotoDate()">
-        <div class="dp-hint">Ingresá la fecha a consultar.<br>Solo días con &ge;50 pedidos tienen datos.</div>
+        <input type="date" id="dp-input" onkeydown="if(event.key==='Enter')gotoDate()" onchange="updateDpHint(this.value)">
+        <div class="dp-hint" id="dp-hint-txt">Ingresá la fecha a consultar.</div>
         <button class="dp-go" onclick="gotoDate()">Ver fecha</button>
         <button class="dp-clear" onclick="gotoDate(true)">Volver al día actual</button>
       </div>
@@ -1032,6 +1036,8 @@ function buildSellerTable(sellers, valClass, valLabel, valueKey, cntLabel){
 function render(data){
   document.getElementById('err-r').textContent=data.reactor_error?'⚠ Reactor: '+data.reactor_error:'';
   document.getElementById('err-m').textContent=data.mspa_error?'⚠ MSPA: '+data.mspa_error:'';
+  // Poblar mapa de días hábiles para el calendario
+  if(data.reactor&&data.reactor.wd_map){_wdMap=data.reactor.wd_map;}
 
   _mspaNext  = data.mspa_next  || 60;
   _reactNext = data.reactor_next || 600;
@@ -1136,6 +1142,8 @@ function render(data){
 }
 
 const _customDate=new URLSearchParams(location.search).get('date')||'';
+let _wdMap={};  // "YYYY-MM" -> días hábiles del mes
+
 async function load(){
   const url='/api/data'+(_customDate?'?date='+_customDate:'');
   try{const res=await fetch(url);const d=await res.json();render(d);}
@@ -1143,11 +1151,29 @@ async function load(){
 }
 
 function tick(){
+  if(_customDate){
+    // Fecha manual: no auto-refresh, mostrar "histórico"
+    document.getElementById('next-m').innerHTML='<span style="color:var(--text3)">histórico</span>';
+    document.getElementById('next-r').innerHTML='<span style="color:var(--text3)">histórico</span>';
+    return;
+  }
   _mspaNext  = Math.max(0,_mspaNext-1);
   _reactNext = Math.max(0,_reactNext-1);
   document.getElementById('next-m').innerHTML=nextFmt(_mspaNext);
   document.getElementById('next-r').innerHTML=nextFmt(_reactNext);
   if(_mspaNext<=0){load();_mspaNext=60;}
+}
+
+// ── Días hábiles helper ──
+// Aproxima qué día hábil es una fecha dada, usando wd_map (días háb/mes)
+function calcDiaHabil(dateStr){
+  if(!dateStr)return null;
+  const d=new Date(dateStr+'T12:00:00');
+  const mes=dateStr.slice(0,7);             // "YYYY-MM"
+  const diasHab=_wdMap[mes];
+  if(!diasHab)return null;
+  const diasMes=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+  return Math.max(1,Math.round(diasHab*d.getDate()/diasMes));
 }
 
 // Dark mode
@@ -1166,11 +1192,26 @@ function toggleDatePicker(e){
   e.stopPropagation();
   const dp=document.getElementById('date-picker');
   dp.classList.toggle('open');
-  if(dp.classList.contains('open')&&_customDate){
-    document.getElementById('dp-input').value=_customDate;
+  if(dp.classList.contains('open')){
+    const val=_customDate||new Date().toISOString().slice(0,10);
+    document.getElementById('dp-input').value=val;
+    updateDpHint(val);
   }
 }
 document.addEventListener('click',()=>document.getElementById('date-picker').classList.remove('open'));
+
+function updateDpHint(v){
+  const hint=document.getElementById('dp-hint-txt');
+  if(!v){hint.textContent='Ingresá la fecha a consultar.';return;}
+  const dh=calcDiaHabil(v);
+  const mes=v.slice(0,7);
+  const tot=_wdMap[mes];
+  if(dh&&tot){
+    hint.innerHTML=`📅 Aproximadamente <b>día hábil ${dh} de ${tot}</b> del mes.`;
+  } else {
+    hint.textContent='Ingresá la fecha a consultar.';
+  }
+}
 
 function gotoDate(clear){
   if(clear){window.location.href=window.location.pathname;return;}
