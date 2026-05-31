@@ -148,6 +148,15 @@ def fetch_reactor(target_date=None):
     """)
     wd_map = {r[0]: r[1] for r in wd_rows} if wd_rows else {}
 
+    # Exact business day per calendar date from work_days_log
+    # real_date = date, working_day = business day number within month
+    wdl_rows = run(cur, """
+        SELECT DATE_FORMAT(real_date, '%Y-%m-%d'), working_day
+        FROM work_days_log
+        WHERE real_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 13 MONTH), '%Y-%m-01')
+    """)
+    wd_log = {str(r[0]): int(r[1]) for r in (wdl_rows or []) if r[0] and r[1]}
+
     trend = []
     for r in trend_rows:
         mes    = r[0]
@@ -268,6 +277,7 @@ def fetch_reactor(target_date=None):
         "trend":        trend,
         "has_workdays": bool(wd_map),
         "wd_map":       wd_map,
+        "wd_log":       wd_log,
         "comp":         comp,
         "meta":         meta,
         "sellers_ret":  sellers_ret,
@@ -515,18 +525,18 @@ def get_cached_data(override_date=None):
 
     # Enriquecer sellers de Reactor con nombres de f040 de MSPA
     # Reactor no tiene tabla users; f040.vertr usa la misma numeración que order_placed.id_user
-    # Solo mostrar vendedores que existen en f040 (activos); ignorar IDs fantasma
+    # Si no existe en f040, se muestra como "Inactivo (id)" en vez de descartarlo
     if isinstance(reactor, dict) and isinstance(mspa, dict):
         vnames = mspa.get("vertr_names", {})
         for lst in ("sellers_ret", "sellers_an"):
-            enriched = []
             for s in reactor.get(lst, []):
                 uid = str(s.get("id", "")).strip()
                 if uid in vnames:
-                    s["nombre"] = f"{vnames[uid]} ({uid})"
-                    enriched.append(s)
-                # silently drop ghost sellers (not in f040)
-            reactor[lst] = enriched
+                    s["nombre"]   = f"{vnames[uid]} ({uid})"
+                    s["inactive"] = False
+                else:
+                    s["nombre"]   = f"({uid})"
+                    s["inactive"] = True
 
     return {
         "timestamp":      now.strftime("%d/%m/%Y %H:%M:%S"),
@@ -1024,14 +1034,19 @@ function buildSellerTable(sellers, valClass, valLabel, valueKey, cntLabel, showP
   const pedCol=showPed?`<th style="text-align:right;color:var(--text3)">Ped.</th>`:'';
   let h=`<table class="seller-tbl"><tr><th></th><th>Vendedor</th>${pedCol}<th style="text-align:right">${valLabel}</th></tr>`;
   sellers.slice(0,5).forEach((s,i)=>{
-    const nameHtml=s.nombre.includes('(')?
-      s.nombre.replace(/^(.+?)(\(.+\))(.*)$/,'<span>$1</span><span class="s-sub">$2$3</span>'):
-      `<span>${s.nombre}</span>`;
+    const inactive=s.inactive===true;
+    const nameRaw=s.nombre||'';
+    const nameHtml=nameRaw.includes('(')?
+      nameRaw.replace(/^(.+?)(\(.+\))(.*)$/,'<span>$1</span><span class="s-sub">$2$3</span>'):
+      `<span>${nameRaw}</span>`;
+    const nameCell=inactive
+      ?`<span style="color:var(--text3);font-style:italic">Inactivo ${nameRaw}</span>`
+      :nameHtml;
     const valHtml = valueKey==='val'
       ? `<span class="${valClass}">${fmtK(s.val||s.val_valido||0)}</span>`
       : `<span class="s-pill ${valClass==='ret-val'?'pill-ret':'pill-an'}">${s.cnt} ped.</span>`;
     const pedCell=showPed?`<td class="s-val" style="color:var(--text3);font-size:11px">${s.ped||s.cnt||''}</td>`:'';
-    h+=`<tr><td class="s-rank ${i<3?'med-'+(i+1):''}">${medals[i]}</td><td class="s-name">${nameHtml}</td>${pedCell}<td class="s-val">${valHtml}</td></tr>`;
+    h+=`<tr style="${inactive?'opacity:.55':''}"><td class="s-rank ${i<3&&!inactive?'med-'+(i+1):''}">${medals[i]}</td><td class="s-name">${nameCell}</td>${pedCell}<td class="s-val">${valHtml}</td></tr>`;
   });
   return h+'</table>';
 }
@@ -1039,8 +1054,9 @@ function buildSellerTable(sellers, valClass, valLabel, valueKey, cntLabel, showP
 function render(data){
   document.getElementById('err-r').textContent=data.reactor_error?'⚠ Reactor: '+data.reactor_error:'';
   document.getElementById('err-m').textContent=data.mspa_error?'⚠ MSPA: '+data.mspa_error:'';
-  // Poblar mapa de días hábiles para el calendario
+  // Poblar mapas de días hábiles para el calendario
   if(data.reactor&&data.reactor.wd_map){_wdMap=data.reactor.wd_map;}
+  if(data.reactor&&data.reactor.wd_log){_wdLog=data.reactor.wd_log;}
 
   _mspaNext  = data.mspa_next  || 60;
   _reactNext = data.reactor_next || 600;
@@ -1152,7 +1168,8 @@ function render(data){
 }
 
 const _customDate=new URLSearchParams(location.search).get('date')||'';
-let _wdMap={};  // "YYYY-MM" -> días hábiles del mes
+let _wdMap={};  // "YYYY-MM" -> total días hábiles del mes
+let _wdLog={};  // "YYYY-MM-DD" -> número exacto de día hábil
 
 async function load(){
   const url='/api/data'+(_customDate?'?date='+_customDate:'');
@@ -1175,15 +1192,21 @@ function tick(){
 }
 
 // ── Días hábiles helper ──
-// Aproxima qué día hábil es una fecha dada, usando wd_map (días háb/mes)
+// Lookup exacto desde work_days_log; fallback aproximado desde work_days
 function calcDiaHabil(dateStr){
-  if(!dateStr)return null;
+  if(!dateStr)return{dh:null,total:null,exact:false};
+  // Lookup exacto
+  if(_wdLog[dateStr]!==undefined){
+    const mes=dateStr.slice(0,7);
+    return{dh:_wdLog[dateStr],total:_wdMap[mes]||null,exact:true};
+  }
+  // Fallback aproximado
   const d=new Date(dateStr+'T12:00:00');
-  const mes=dateStr.slice(0,7);             // "YYYY-MM"
+  const mes=dateStr.slice(0,7);
   const diasHab=_wdMap[mes];
-  if(!diasHab)return null;
+  if(!diasHab)return{dh:null,total:null,exact:false};
   const diasMes=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
-  return Math.max(1,Math.round(diasHab*d.getDate()/diasMes));
+  return{dh:Math.max(1,Math.round(diasHab*d.getDate()/diasMes)),total:diasHab,exact:false};
 }
 
 // Dark mode
@@ -1212,14 +1235,13 @@ document.addEventListener('click',()=>document.getElementById('date-picker').cla
 
 function updateDpHint(v){
   const hint=document.getElementById('dp-hint-txt');
-  if(!v){hint.textContent='Ingresá la fecha a consultar.';return;}
-  const dh=calcDiaHabil(v);
-  const mes=v.slice(0,7);
-  const tot=_wdMap[mes];
-  if(dh&&tot){
-    hint.innerHTML=`📅 Aproximadamente <b>día hábil ${dh} de ${tot}</b> del mes.`;
+  if(!v){hint.textContent='Seleccioná una fecha para consultar.';return;}
+  const {dh,total,exact}=calcDiaHabil(v);
+  if(dh){
+    const lbl=exact?`<b>día hábil ${dh}${total?' de '+total:''}</b>`:`aprox. día hábil ${dh}${total?' de '+total:''}`;
+    hint.innerHTML=`📅 ${lbl} del mes.`;
   } else {
-    hint.textContent='Ingresá la fecha a consultar.';
+    hint.textContent='Fecha sin datos de días hábiles.';
   }
 }
 
