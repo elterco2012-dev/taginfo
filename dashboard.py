@@ -148,6 +148,15 @@ def fetch_reactor(target_date=None):
     """)
     wd_map = {r[0]: r[1] for r in wd_rows} if wd_rows else {}
 
+    # Exact business day per calendar date from work_days_log
+    # real_date = date, working_day = business day number within month
+    wdl_rows = run(cur, """
+        SELECT DATE_FORMAT(real_date, '%Y-%m-%d'), working_day
+        FROM work_days_log
+        WHERE real_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 13 MONTH), '%Y-%m-01')
+    """)
+    wd_log = {str(r[0]): int(r[1]) for r in (wdl_rows or []) if r[0] and r[1]}
+
     trend = []
     for r in trend_rows:
         mes    = r[0]
@@ -158,23 +167,68 @@ def fetch_reactor(target_date=None):
         trend.append({"mes": mes, "pedidos": peds, "valor": val,
                        "dias_hab": dias, "avg_dia": avg_pd})
 
-    # Comparison: same day-of-month, previous month
+    # Inverse wd_log: (year, month, wd_num) -> date_str
+    wd_inverse = {}
+    for ds, wn in wd_log.items():
+        try:
+            y2, m2, _ = ds.split('-')
+            wd_inverse[(int(y2), int(m2), wn)] = ds
+        except Exception:
+            pass
+
+    # Comparison: mismo día hábil del mes anterior (no mismo día calendario)
+    comp = None
     try:
-        if target_dt.month == 1:
-            prev_dt = target_dt.replace(year=target_dt.year - 1, month=12)
+        target_wd_num = wd_log.get(target_str)  # ej: 19
+        if target_wd_num:
+            prev_m = target_dt.month - 1 if target_dt.month > 1 else 12
+            prev_y = target_dt.year if target_dt.month > 1 else target_dt.year - 1
+            # Si el mes anterior tuvo menos días hábiles, usar el último disponible
+            max_wd_prev = max((wn for (y2, m2, wn) in wd_inverse if y2 == prev_y and m2 == prev_m),
+                              default=None)
+            eff_wd = min(target_wd_num, max_wd_prev) if max_wd_prev else None
+            prev_date_str = wd_inverse.get((prev_y, prev_m, eff_wd)) if eff_wd else None
+            if prev_date_str:
+                prev_dt = date.fromisoformat(prev_date_str)
+            else:
+                # Fallback: mismo día calendario si no hay wd_log para ese mes
+                if target_dt.month == 1:
+                    prev_dt = target_dt.replace(year=target_dt.year - 1, month=12)
+                else:
+                    last_day_prev = calendar.monthrange(target_dt.year, target_dt.month - 1)[1]
+                    prev_dt = target_dt.replace(month=target_dt.month - 1,
+                                                day=min(target_dt.day, last_day_prev))
         else:
-            last_day_prev = calendar.monthrange(target_dt.year, target_dt.month - 1)[1]
-            prev_dt = target_dt.replace(month=target_dt.month - 1,
-                                        day=min(target_dt.day, last_day_prev))
+            # target no está en wd_log (fin de semana/feriado): fallback calendario
+            if target_dt.month == 1:
+                prev_dt = target_dt.replace(year=target_dt.year - 1, month=12)
+            else:
+                last_day_prev = calendar.monthrange(target_dt.year, target_dt.month - 1)[1]
+                prev_dt = target_dt.replace(month=target_dt.month - 1,
+                                            day=min(target_dt.day, last_day_prev))
         comp_rows = run(cur, """
             SELECT COUNT(DISTINCT id) pedidos, COUNT(DISTINCT id_user) vendedores, SUM(total) valor
             FROM order_placed WHERE DATE(order_date) = ?
         """, (str(prev_dt),))
-        comp = {"pedidos": comp_rows[0][0] or 0,
-                "vendedores": comp_rows[0][1] or 0,
-                "valor": float(comp_rows[0][2] or 0),
-                "date": str(prev_dt)} if comp_rows else None
-    except Exception:
+        comp_lin = run(cur, """
+            SELECT COUNT(od.id) FROM order_placed op
+            JOIN order_detail od ON od.id_order_placed = op.id
+            WHERE DATE(op.order_date) = ?
+        """, (str(prev_dt),))
+        if comp_rows and comp_rows[0][0]:
+            cp = comp_rows[0]
+            c_ped  = cp[0] or 0
+            c_vend = cp[1] or 0
+            c_lin  = comp_lin[0][0] if comp_lin else 0
+            comp = {"pedidos":      c_ped,
+                    "vendedores":   c_vend,
+                    "valor":        float(cp[2] or 0),
+                    "avg_lineas":   round(c_lin / c_ped, 1) if c_ped else 0,
+                    "avg_ped_vend": round(c_ped / c_vend, 1) if c_vend else 0,
+                    "date":         str(prev_dt),
+                    "wd_num":       eff_wd if target_wd_num else None}
+    except Exception as e:
+        print(f"  comp error: {e}")
         comp = None
 
     # Monthly meta
@@ -192,7 +246,9 @@ def fetch_reactor(target_date=None):
     days_in_month = calendar.monthrange(target_dt.year, target_dt.month)[1]
     curr_wd       = wd_map.get(curr_month, 0)
     last_wd       = wd_map.get(last_month, 0)
-    dias_elapsed  = round(curr_wd * target_dt.day / days_in_month) if curr_wd else target_dt.day
+    # Usar lookup exacto de work_days_log si está disponible
+    dias_elapsed  = wd_log.get(target_str,
+                        round(curr_wd * target_dt.day / days_in_month) if curr_wd else target_dt.day)
     meta = {
         "curr_month":    curr_month,
         "last_month":    last_month,
@@ -239,7 +295,7 @@ def fetch_reactor(target_date=None):
         SELECT id_user, COUNT(*) cnt, SUM(total) val
         FROM order_placed
         WHERE DATE(order_date) = ? AND id_order_status = 15
-        GROUP BY id_user ORDER BY cnt DESC LIMIT 5
+        GROUP BY id_user ORDER BY cnt DESC LIMIT 15
     """, (target_str,))
     sellers_ret = [{"id": r[0], "nombre": seller_name(r[0]),
                     "cnt": int(r[1] or 0), "val": float(r[2] or 0)} for r in ret_rows]
@@ -248,7 +304,7 @@ def fetch_reactor(target_date=None):
         SELECT id_user, COUNT(*) cnt, SUM(total) val
         FROM order_placed
         WHERE DATE(order_date) = ? AND id_order_status = 14
-        GROUP BY id_user ORDER BY cnt DESC LIMIT 5
+        GROUP BY id_user ORDER BY cnt DESC LIMIT 15
     """, (target_str,))
     sellers_an = [{"id": r[0], "nombre": seller_name(r[0]),
                    "cnt": int(r[1] or 0), "val": float(r[2] or 0)} for r in an_rows]
@@ -268,6 +324,7 @@ def fetch_reactor(target_date=None):
         "trend":        trend,
         "has_workdays": bool(wd_map),
         "wd_map":       wd_map,
+        "wd_log":       wd_log,
         "comp":         comp,
         "meta":         meta,
         "sellers_ret":  sellers_ret,
@@ -397,8 +454,10 @@ def fetch_mspa(target_date=None):
         fact_rows = [(r[0], f"Vend. {r[0]}", r[1], r[2]) for r in fact_rows_raw]
 
     sellers_fact_top5 = [
-        {"vertr": str(r[0] or '').strip(), "nombre": str(r[1] or '').strip(),
-         "ped": int(r[2] or 0), "val": float(r[3] or 0)}
+        {"vertr":  str(r[0] or '').strip(),
+         "nombre": f"{str(r[1] or '').strip()} ({str(r[0] or '').strip()})",
+         "ped":    int(r[2] or 0),
+         "val":    float(r[3] or 0)}
         for r in fact_rows[:5]
     ]
 
@@ -440,11 +499,20 @@ def fetch_mspa(target_date=None):
             for r in plan_rows
         ]
 
-    # Mapa completo de nombres de vendedores desde f040
-    # Se usa también para enriquecer las tablas de Reactor (sellers_ret, sellers_an)
-    # ya que Reactor no tiene tabla users — asumimos misma numeración de vertr
-    all_names = run(cur, f"SELECT vertr, name1 FROM f040 WHERE firma={FIRMA} AND name1 IS NOT NULL")
-    vertr_names = {str(r[0]).strip(): str(r[1]).strip() for r in (all_names or []) if r[1]}
+    # Mapa de vendedores activos: deben tener sbas en el mes objetivo o el anterior
+    # Filtra vendedores que dejaron de trabajar (sin actividad reciente)
+    if t_month > 1:
+        act_q = f"""SELECT DISTINCT vertr1 FROM sbas WHERE firma={FIRMA}
+                    AND bujahr={t_year} AND bumonat IN ({t_month},{t_month-1})"""
+    else:
+        act_q = f"""SELECT DISTINCT vertr1 FROM sbas WHERE firma={FIRMA}
+                    AND ((bujahr={t_year} AND bumonat=1)
+                      OR (bujahr={t_year-1} AND bumonat=12))"""
+    act_rows     = run(cur, act_q)
+    active_vertrs = {str(r[0]).strip() for r in (act_rows or []) if r[0]}
+    all_names    = run(cur, f"SELECT vertr, name1 FROM f040 WHERE firma={FIRMA} AND name1 IS NOT NULL")
+    vertr_names  = {str(r[0]).strip(): str(r[1]).strip()
+                    for r in (all_names or []) if r[1] and str(r[0]).strip() in active_vertrs}
 
     plan_ventas = {
         "plan_total": plan_total,
@@ -514,8 +582,8 @@ def get_cached_data(override_date=None):
     m_err = mspa.pop("error", None)    if isinstance(mspa, dict)    else None
 
     # Enriquecer sellers de Reactor con nombres de f040 de MSPA
-    # Reactor no tiene tabla users; f040.vertr usa la misma numeración que order_placed.id_user
-    # Solo mostrar vendedores que existen en f040 (activos); ignorar IDs fantasma
+    # Solo mostrar vendedores que matchean en f040 (vertr = id_user)
+    # Los que no matchean son IDs de otro sistema, no "inactivos"
     if isinstance(reactor, dict) and isinstance(mspa, dict):
         vnames = mspa.get("vertr_names", {})
         for lst in ("sellers_ret", "sellers_an"):
@@ -523,9 +591,9 @@ def get_cached_data(override_date=None):
             for s in reactor.get(lst, []):
                 uid = str(s.get("id", "")).strip()
                 if uid in vnames:
-                    s["nombre"] = f"{vnames[uid]} ({uid})"
+                    s["nombre"]   = f"{vnames[uid]} ({uid})"
+                    s["inactive"] = False
                     enriched.append(s)
-                # silently drop ghost sellers (not in f040)
             reactor[lst] = enriched
 
     return {
@@ -750,17 +818,19 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
         <div id="d-ped"></div>
       </div>
       <div class="kpi c-cyan">
-        <div class="kpi-lbl">Vendedores Activos</div>
+        <div class="kpi-lbl">Pedidos / Vendedor</div>
         <div class="kpi-val" id="k-vend">—</div>
         <div id="d-vend"></div>
+        <div class="kpi-sub" id="k-vend-sub" style="font-size:9px;color:var(--text3)">vs. mismo día mes anterior</div>
       </div>
       <div class="kpi c-orange">
         <div class="kpi-lbl">Promedio Líneas / Pedido</div>
         <div class="kpi-val" id="k-avg">—</div>
-        <div class="kpi-sub">líneas por pedido</div>
+        <div id="d-avg"></div>
+        <div class="kpi-sub" id="k-avg-sub" style="font-size:9px;color:var(--text3)">vs. mismo día mes anterior</div>
       </div>
       <div class="kpi c-green">
-        <div class="kpi-lbl">Venta del Día</div>
+        <div class="kpi-lbl">Venta del Día · MSPA</div>
         <div class="kpi-val" id="k-venta">—</div>
         <div class="kpi-sub" id="k-venta-sub">&nbsp;</div>
       </div>
@@ -791,10 +861,11 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
         <span class="alert-icon" id="ai-an"></span>
       </div>
       <div class="flow-cell fl-fact">
-        <div class="flow-label">Facturado hoy <span class="tooltip-info">ⓘ<span class="tt">Pedidos de este día que pasaron a<br>estado Facturado (Reactor status 13/18).<br>La Venta del Día (KPI) suma todo lo<br>facturado en MSPA/sbas ese día,<br>sin importar cuándo se ingresó el pedido.</span></span></div>
+        <div class="flow-label">Facturado <span class="tooltip-info">ⓘ<span class="tt">Pedidos de este día que pasaron a<br>estado Facturado (Reactor status 13/18).<br>La Venta del Día (KPI arriba) suma todo<br>lo facturado en MSPA/sbas ese día,<br>incluye pedidos de días anteriores.</span></span></div>
         <div class="flow-val" id="fl-fact-val">—</div>
         <div class="flow-sub" id="fl-fact-ped">—</div>
         <div class="flow-pct" id="fl-fact-pct">—%</div>
+        <div class="flow-sub" id="fl-fact-mspa" style="font-size:9px;opacity:.7;margin-top:2px"></div>
       </div>
     </div>
   </div>
@@ -944,11 +1015,13 @@ function renderMeta(meta){
   if(!meta){document.getElementById('meta-row').innerHTML='<span style="color:var(--text3);font-size:11px">Sin datos</span>';return;}
   const curr=meta.curr_pedidos,last=meta.last_pedidos;
   const pctProg=last>0?Math.min((curr/last)*100,120):0;
-  const pacePos=meta.days_in_month>0?(meta.day_of_month/meta.days_in_month)*100:0;
-  const paceTarget=last>0?(pacePos/100)*last:0;
+  // Usar días hábiles para el pace si están disponibles
+  const pacePos=meta.curr_wd>0
+    ?(meta.dias_elapsed/meta.curr_wd)*100
+    :meta.days_in_month>0?(meta.day_of_month/meta.days_in_month)*100:0;
+  const paceTarget=last>0?(Math.min(pacePos,100)/100)*last:0;
   const onTrack=curr>=paceTarget;
   const fill=Math.min(pctProg,100);
-  const wdInfo=meta.curr_wd>0?`${meta.dias_elapsed}/${meta.curr_wd} días hábiles`:`Día ${meta.day_of_month}/${meta.days_in_month}`;
   let tagCls='tag-neutral',tagTxt='Sin referencia';
   if(last>0){
     const diff=curr-paceTarget;
@@ -961,13 +1034,12 @@ function renderMeta(meta){
     <div class="meta-bar-wrap">
       <div class="meta-bar-bg">
         <div class="meta-bar-fill" style="width:${fill}%;background:${pctProg>100?'var(--green)':onTrack?'var(--blue)':'var(--amber)'}"></div>
-        <div class="meta-bar-pace" style="left:${pacePos.toFixed(1)}%"></div>
+        <div class="meta-bar-pace" style="left:${Math.min(pacePos,100).toFixed(1)}%"></div>
       </div>
-      <div class="meta-bar-labels"><span>${wdInfo}</span><span>${pctProg.toFixed(0)}% del mes anterior</span></div>
+      <div class="meta-bar-labels"><span>${pctProg.toFixed(0)}% del mes anterior</span></div>
     </div>
     <div class="meta-tags">
       <span class="meta-tag ${tagCls}">${tagTxt}</span>
-      ${meta.curr_wd>0?`<span class="meta-tag tag-neutral">${meta.curr_wd} días háb/mes</span>`:''}
     </div>`;
 }
 
@@ -1016,19 +1088,22 @@ function renderPlan(pv, diasElapsed, diasHab){
     </div>`;
 }
 
-function buildSellerTable(sellers, valClass, valLabel, valueKey, cntLabel){
+function buildSellerTable(sellers, valClass, valLabel, valueKey, cntLabel, showPed){
   if(!sellers||!sellers.length)
     return '<p style="color:var(--text3);font-size:11px;padding:8px 0">Sin movimiento hoy</p>';
-  const medals=['🥇','🥈','🥉','4°','5°'];
-  let h=`<table class="seller-tbl"><tr><th></th><th>Vendedor</th><th style="text-align:right">${valLabel}</th></tr>`;
-  sellers.forEach((s,i)=>{
-    const nameHtml=s.nombre.includes('(')?
-      s.nombre.replace(/^(.+?)(\(.+\))(.*)$/,'<span>$1</span><span class="s-sub">$2$3</span>'):
-      `<span>${s.nombre}</span>`;
+  const medals=['🥇','🥈','🥉','4°','5°','6°','7°'];
+  const pedCol=showPed?`<th style="text-align:right;color:var(--text3)">Ped.</th>`:'';
+  let h=`<table class="seller-tbl"><tr><th></th><th>Vendedor</th>${pedCol}<th style="text-align:right">${valLabel}</th></tr>`;
+  sellers.slice(0,5).forEach((s,i)=>{
+    const nameRaw=s.nombre||'';
+    const nameHtml=nameRaw.includes('(')?
+      nameRaw.replace(/^(.+?)(\(.+\))(.*)$/,'<span>$1</span><span class="s-sub">$2$3</span>'):
+      `<span>${nameRaw}</span>`;
     const valHtml = valueKey==='val'
       ? `<span class="${valClass}">${fmtK(s.val||s.val_valido||0)}</span>`
-      : `<span class="s-pill ${valClass==='ret-val'?'pill-ret':'pill-an'}">${s.cnt} pedidos</span>`;
-    h+=`<tr><td class="s-rank ${i<3?'med-'+(i+1):''}">${medals[i]}</td><td class="s-name">${nameHtml}</td><td class="s-val">${valHtml}</td></tr>`;
+      : `<span class="s-pill ${valClass==='ret-val'?'pill-ret':'pill-an'}">${s.cnt} ped.</span>`;
+    const pedCell=showPed?`<td class="s-val" style="color:var(--text3);font-size:11px">${s.ped||s.cnt||''}</td>`:'';
+    h+=`<tr><td class="s-rank ${i<3?'med-'+(i+1):''}">${medals[i]}</td><td class="s-name">${nameHtml}</td>${pedCell}<td class="s-val">${valHtml}</td></tr>`;
   });
   return h+'</table>';
 }
@@ -1036,8 +1111,9 @@ function buildSellerTable(sellers, valClass, valLabel, valueKey, cntLabel){
 function render(data){
   document.getElementById('err-r').textContent=data.reactor_error?'⚠ Reactor: '+data.reactor_error:'';
   document.getElementById('err-m').textContent=data.mspa_error?'⚠ MSPA: '+data.mspa_error:'';
-  // Poblar mapa de días hábiles para el calendario
+  // Poblar mapas de días hábiles para el calendario
   if(data.reactor&&data.reactor.wd_map){_wdMap=data.reactor.wd_map;}
+  if(data.reactor&&data.reactor.wd_log){_wdLog=data.reactor.wd_log;}
 
   _mspaNext  = data.mspa_next  || 60;
   _reactNext = data.reactor_next || 600;
@@ -1050,14 +1126,31 @@ function render(data){
 
   // KPIs
   const c=r.comp||null;
-  document.getElementById('k-ped').textContent=fmtN(r.pedidos,0);
-  document.getElementById('d-ped').innerHTML=c?deltaHtml(r.pedidos,c.pedidos):'';
-  document.getElementById('k-vend').textContent=fmtN(r.vendedores,0);
-  document.getElementById('d-vend').innerHTML=c?deltaHtml(r.vendedores,c.vendedores):'';
+  const compLbl='vs. mismo día hábil mes anterior';
 
-  // avg_lineas needs lineas/pedidos — compute from by_status or use avg_lineas if available
+  // Pedidos informados + delta
+  document.getElementById('k-ped').textContent=fmtN(r.pedidos,0);
+  if(c){
+    const dEl=document.getElementById('d-ped');
+    dEl.innerHTML=deltaHtml(r.pedidos,c.pedidos)+
+      `<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`;
+  }
+
+  // Pedidos / Vendedor
+  const apv=r.avg_ped_vend||0;
+  document.getElementById('k-vend').textContent=fmtN(apv,1);
+  if(c&&c.avg_ped_vend){
+    document.getElementById('d-vend').innerHTML=deltaHtml(apv,c.avg_ped_vend)+
+      `<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`;
+  }
+
+  // Promedio líneas/pedido + delta
   const bs=r.by_status||{};
   document.getElementById('k-avg').textContent=r.avg_lineas||'—';
+  if(c&&c.avg_lineas){
+    document.getElementById('d-avg').innerHTML=deltaHtml(r.avg_lineas,c.avg_lineas)+
+      `<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`;
+  }
 
   // Venta del día from MSPA
   const venta=m.venta||{ords:0,val:0};
@@ -1075,8 +1168,12 @@ function render(data){
   else if(sAn==='warn')kpiPed.classList.add('alert-warn');
 
   // Flow bar (4 cells)
+  // fact_cnt y fact_val vienen de Reactor (status 13/18 de pedidos del día)
+  // → consistente con el flujo: Informado - Retenido - Anulado → Facturado
   const fact_cnt=(bs[13]?.cnt||0)+(bs[18]?.cnt||0);
-  const fact_val=venta.val;
+  const fact_val=(bs[13]?.val||0)+(bs[18]?.val||0);
+  // Venta del día MSPA (todos los remitos del día, sin filtro de fecha de pedido)
+  const ventaMSPA=venta.val;
   document.getElementById('fl-inf-val').textContent=fmtK(r.valor||0);
   document.getElementById('fl-inf-ped').textContent=fmtN(total,0)+' pedidos';
 
@@ -1091,6 +1188,9 @@ function render(data){
   document.getElementById('fl-fact-val').textContent=fmtK(fact_val);
   document.getElementById('fl-fact-ped').textContent=fmtN(fact_cnt,0)+' pedidos';
   document.getElementById('fl-fact-pct').textContent=pct(fact_cnt,total);
+  // Referencia MSPA: total facturado en sbas ese día (incluye pedidos de días anteriores)
+  const elMspaRef=document.getElementById('fl-fact-mspa');
+  if(elMspaRef)elMspaRef.textContent=ventaMSPA>0?'MSPA total día: '+fmtK(ventaMSPA):'';
 
   // Semáforo flow
   const fcRet=document.getElementById('fc-ret'),fcAn=document.getElementById('fc-an');
@@ -1123,9 +1223,9 @@ function render(data){
 
   // Sellers
   const sf=m.sellers_fact_top||[];
-  document.getElementById('sell-fact-top').innerHTML=buildSellerTable(m.sellers_fact_top||[],'fact-val','Facturado hoy','val','pedidos');
-  document.getElementById('sell-ret').innerHTML=buildSellerTable(r.sellers_ret||[],'ret-val','Retenidos','cnt','pedidos');
-  document.getElementById('sell-an').innerHTML=buildSellerTable(r.sellers_an||[],'an-val','Anulados','cnt','pedidos');
+  document.getElementById('sell-fact-top').innerHTML=buildSellerTable(m.sellers_fact_top||[],'fact-val','Facturado','val','pedidos',true);
+  document.getElementById('sell-ret').innerHTML=buildSellerTable(r.sellers_ret||[],'ret-val','Retenidos','cnt','pedidos',false);
+  document.getElementById('sell-an').innerHTML=buildSellerTable(r.sellers_an||[],'an-val','Anulados','cnt','pedidos',false);
 
   // MSPA
   let mhtml='';
@@ -1142,7 +1242,8 @@ function render(data){
 }
 
 const _customDate=new URLSearchParams(location.search).get('date')||'';
-let _wdMap={};  // "YYYY-MM" -> días hábiles del mes
+let _wdMap={};  // "YYYY-MM" -> total días hábiles del mes
+let _wdLog={};  // "YYYY-MM-DD" -> número exacto de día hábil
 
 async function load(){
   const url='/api/data'+(_customDate?'?date='+_customDate:'');
@@ -1165,15 +1266,21 @@ function tick(){
 }
 
 // ── Días hábiles helper ──
-// Aproxima qué día hábil es una fecha dada, usando wd_map (días háb/mes)
+// Lookup exacto desde work_days_log; fallback aproximado desde work_days
 function calcDiaHabil(dateStr){
-  if(!dateStr)return null;
+  if(!dateStr)return{dh:null,total:null,exact:false};
+  // Lookup exacto
+  if(_wdLog[dateStr]!==undefined){
+    const mes=dateStr.slice(0,7);
+    return{dh:_wdLog[dateStr],total:_wdMap[mes]||null,exact:true};
+  }
+  // Fallback aproximado
   const d=new Date(dateStr+'T12:00:00');
-  const mes=dateStr.slice(0,7);             // "YYYY-MM"
+  const mes=dateStr.slice(0,7);
   const diasHab=_wdMap[mes];
-  if(!diasHab)return null;
+  if(!diasHab)return{dh:null,total:null,exact:false};
   const diasMes=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
-  return Math.max(1,Math.round(diasHab*d.getDate()/diasMes));
+  return{dh:Math.max(1,Math.round(diasHab*d.getDate()/diasMes)),total:diasHab,exact:false};
 }
 
 // Dark mode
@@ -1202,14 +1309,13 @@ document.addEventListener('click',()=>document.getElementById('date-picker').cla
 
 function updateDpHint(v){
   const hint=document.getElementById('dp-hint-txt');
-  if(!v){hint.textContent='Ingresá la fecha a consultar.';return;}
-  const dh=calcDiaHabil(v);
-  const mes=v.slice(0,7);
-  const tot=_wdMap[mes];
-  if(dh&&tot){
-    hint.innerHTML=`📅 Aproximadamente <b>día hábil ${dh} de ${tot}</b> del mes.`;
+  if(!v){hint.textContent='Seleccioná una fecha para consultar.';return;}
+  const {dh,total,exact}=calcDiaHabil(v);
+  if(dh){
+    const lbl=exact?`<b>día hábil ${dh}${total?' de '+total:''}</b>`:`aprox. día hábil ${dh}${total?' de '+total:''}`;
+    hint.innerHTML=`📅 ${lbl} del mes.`;
   } else {
-    hint.textContent='Ingresá la fecha a consultar.';
+    hint.textContent='Fecha sin datos de días hábiles.';
   }
 }
 
