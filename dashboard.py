@@ -618,7 +618,6 @@ HTML_PAGE = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Würth — Operations Dashboard</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root{
   --bg:#f0f2f5; --surface:#fff; --surface2:#f8fafc;
@@ -699,7 +698,7 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
 .delta.up{background:#dcfce7;color:#15803d}.delta.down{background:#fee2e2;color:#b91c1c}.delta.flat{background:#f1f5f9;color:var(--text3)}
 
 /* ── Flow bar (4 cells) ── */
-.flow-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.flow-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:10px;overflow:hidden;height:100%}
 .flow-cell{background:var(--surface);padding:14px 16px;display:flex;flex-direction:column;gap:4px;position:relative;transition:background .3s}
 .flow-cell::after{content:'›';position:absolute;right:-8px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:18px;z-index:1;pointer-events:none}
 .flow-cell:last-child::after{display:none}
@@ -735,6 +734,7 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
 
 /* ── Bottom ── */
 .bottom{display:grid;grid-template-columns:1fr 360px;gap:14px}
+.mid-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px}
 .chart-wrap{height:240px;position:relative}
 
@@ -837,48 +837,48 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
     </div>
   </div>
 
-  <!-- Flow bar (4 cells) -->
-  <div>
-    <div class="sec-lbl">Flujo del Día — Pedidos Informados → Facturación</div>
-    <div class="flow-bar">
-      <div class="flow-cell fl-inf">
-        <div class="flow-label">Informado</div>
-        <div class="flow-val" id="fl-inf-val">—</div>
-        <div class="flow-sub" id="fl-inf-ped">—</div>
+  <!-- Fila 2: Flujo del día + Plan de ventas -->
+  <div class="mid-row">
+    <div>
+      <div class="sec-lbl">Flujo del Día — Pedidos Informados → Facturación</div>
+      <div class="flow-bar">
+        <div class="flow-cell fl-inf">
+          <div class="flow-label">Informado</div>
+          <div class="flow-val" id="fl-inf-val">—</div>
+          <div class="flow-sub" id="fl-inf-ped">—</div>
+        </div>
+        <div class="flow-cell fl-ret" id="fc-ret">
+          <div class="flow-label">Retenido</div>
+          <div class="flow-val" id="fl-ret-val">—</div>
+          <div class="flow-sub" id="fl-ret-ped">—</div>
+          <div class="flow-pct" id="fl-ret-pct">—%</div>
+          <span class="alert-icon" id="ai-ret"></span>
+        </div>
+        <div class="flow-cell fl-an" id="fc-an">
+          <div class="flow-label">Anulado</div>
+          <div class="flow-val" id="fl-an-val">—</div>
+          <div class="flow-sub" id="fl-an-ped">—</div>
+          <div class="flow-pct" id="fl-an-pct">—%</div>
+          <span class="alert-icon" id="ai-an"></span>
+        </div>
+        <div class="flow-cell fl-fact">
+          <div class="flow-label">Facturado <span class="tooltip-info">ⓘ<span class="tt">Pedidos de este día que pasaron a<br>estado Facturado (Reactor status 13/18).<br>La Venta del Día (KPI arriba) suma todo<br>lo facturado en MSPA/sbas ese día,<br>incluye pedidos de días anteriores.</span></span></div>
+          <div class="flow-val" id="fl-fact-val">—</div>
+          <div class="flow-sub" id="fl-fact-ped">—</div>
+          <div class="flow-pct" id="fl-fact-pct">—%</div>
+          <div class="flow-sub" id="fl-fact-mspa" style="font-size:9px;opacity:.7;margin-top:2px"></div>
+        </div>
       </div>
-      <div class="flow-cell fl-ret" id="fc-ret">
-        <div class="flow-label">Retenido</div>
-        <div class="flow-val" id="fl-ret-val">—</div>
-        <div class="flow-sub" id="fl-ret-ped">—</div>
-        <div class="flow-pct" id="fl-ret-pct">—%</div>
-        <span class="alert-icon" id="ai-ret"></span>
-      </div>
-      <div class="flow-cell fl-an" id="fc-an">
-        <div class="flow-label">Anulado</div>
-        <div class="flow-val" id="fl-an-val">—</div>
-        <div class="flow-sub" id="fl-an-ped">—</div>
-        <div class="flow-pct" id="fl-an-pct">—%</div>
-        <span class="alert-icon" id="ai-an"></span>
-      </div>
-      <div class="flow-cell fl-fact">
-        <div class="flow-label">Facturado <span class="tooltip-info">ⓘ<span class="tt">Pedidos de este día que pasaron a<br>estado Facturado (Reactor status 13/18).<br>La Venta del Día (KPI arriba) suma todo<br>lo facturado en MSPA/sbas ese día,<br>incluye pedidos de días anteriores.</span></span></div>
-        <div class="flow-val" id="fl-fact-val">—</div>
-        <div class="flow-sub" id="fl-fact-ped">—</div>
-        <div class="flow-pct" id="fl-fact-pct">—%</div>
-        <div class="flow-sub" id="fl-fact-mspa" style="font-size:9px;opacity:.7;margin-top:2px"></div>
+    </div>
+    <div class="meta-card" style="display:flex;flex-direction:column;justify-content:center">
+      <div class="sec-lbl" style="color:var(--würth)">📊 Plan de Ventas — Facturación Acumulada del Mes vs. Plan</div>
+      <div class="meta-row" id="plan-row">
+        <span style="color:var(--text3);font-size:11px">Cargando...</span>
       </div>
     </div>
   </div>
 
-  <!-- Plan de ventas -->
-  <div class="meta-card">
-    <div class="sec-lbl" style="color:var(--würth)">📊 Plan de Ventas — Facturación Acumulada del Mes vs. Plan</div>
-    <div class="meta-row" id="plan-row">
-      <span style="color:var(--text3);font-size:11px">Cargando...</span>
-    </div>
-  </div>
-
-  <!-- Meta mensual pedidos -->
+  <!-- Ritmo mensual (ancho completo) -->
   <div class="meta-card">
     <div class="sec-lbl">Ritmo Mensual — Pedidos vs. Mes Anterior</div>
     <div class="meta-row" id="meta-row">
@@ -886,32 +886,21 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
     </div>
   </div>
 
-  <!-- Chart + MSPA -->
-  <div class="bottom">
-    <div class="card">
-      <div class="sec-lbl" id="chart-lbl">Tendencia Mensual</div>
-      <div class="chart-wrap"><canvas id="chart"></canvas></div>
-    </div>
+  <!-- Fila 4: MSPA + Top vendedores -->
+  <div class="sellers-wrap" style="grid-template-columns:320px 1fr 1fr 1fr">
     <div class="card">
       <div class="sec-lbl">MSPA — Estado Actual <small style="font-size:9px;color:var(--text3)">(refresca cada 60s)</small></div>
       <div id="err-m" class="err"></div>
       <div id="mspa-body"></div>
     </div>
-  </div>
-
-  <!-- Sellers 3-panel -->
-  <div class="sellers-wrap">
-    <!-- Top facturación -->
     <div class="card">
       <div class="sec-lbl lbl-fact">🏆 Top 5 Facturación del Día</div>
       <div id="sell-fact-top"></div>
     </div>
-    <!-- Más retenidos -->
     <div class="card">
       <div class="sec-lbl lbl-ret">⏸ Top 5 con Más Retenidos</div>
       <div id="sell-ret"></div>
     </div>
-    <!-- Más anulados -->
     <div class="card">
       <div class="sec-lbl lbl-an">✕ Top 5 con Más Anulados</div>
       <div id="sell-an"></div>
@@ -921,7 +910,6 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
 </div>
 
 <script>
-let chartObj=null;
 let _mspaNext=60, _reactNext=600;
 
 const THR_RET_WARN=20,THR_RET_DNG=35;
@@ -965,52 +953,6 @@ function deltaHtml(curr,prev){
   return `<span class="delta ${p>0?'up':'down'}">${arrow} ${Math.abs(p).toFixed(1)}%</span>`;
 }
 
-function renderChart(trend,hasWd){
-  if(!trend||!trend.length)return;
-  const labels=trend.map(t=>{
-    const[y,m]=t.mes.split('-');
-    return ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][+m-1]+'\n'+y.slice(2);
-  });
-  const barData  = hasWd ? trend.map(t=>t.avg_dia||t.pedidos) : trend.map(t=>t.pedidos);
-  const barLabel = hasWd ? 'Ped/día hábil' : 'Pedidos';
-  // Normalizar valor por días hábiles — evita que meses cortos (dic, ago) se vean bajos
-  const lineData  = hasWd
-    ? trend.map(t => t.dias_hab ? +((t.valor/1e6)/t.dias_hab).toFixed(1) : +(t.valor/1e6).toFixed(1))
-    : trend.map(t => +(t.valor/1e6).toFixed(1));
-  const lineLabel = hasWd ? 'M$/día hábil' : 'Valor (M$)';
-
-  const ctx=document.getElementById('chart').getContext('2d');
-  if(chartObj)chartObj.destroy();
-  chartObj=new Chart(ctx,{
-    data:{labels,datasets:[
-      {type:'bar',label:barLabel,data:barData,backgroundColor:'rgba(37,99,235,.7)',borderColor:'#2563eb',borderWidth:1,yAxisID:'y1',order:2},
-      {type:'line',label:lineLabel,data:lineData,
-       borderColor:'#059669',backgroundColor:'rgba(5,150,105,.07)',borderWidth:2.5,
-       pointRadius:4,pointBackgroundColor:'#059669',tension:.35,yAxisID:'y2',order:1,fill:true},
-    ]},
-    options:{
-      responsive:true,maintainAspectRatio:false,
-      interaction:{mode:'index',intersect:false},
-      plugins:{
-        legend:{labels:{color:'#475569',font:{size:11},boxWidth:12,padding:14}},
-        tooltip:{backgroundColor:'#fff',titleColor:'#0f172a',bodyColor:'#475569',borderColor:'#e2e8f0',borderWidth:1,
-          callbacks:{
-            label:ctx=>' '+ctx.dataset.label+': '+fmtN(ctx.parsed.y,1),
-            afterBody:items=>{
-              const i=items[0].dataIndex,t=trend[i];
-              return t.dias_hab?['  Días hábiles: '+t.dias_hab,'  Total pedidos: '+fmtN(t.pedidos,0),'  Valor total: $'+fmtN(t.valor/1e6,1)+'M']:[];
-            }
-          }
-        }
-      },
-      scales:{
-        x:{ticks:{color:'#94a3b8',font:{size:9}},grid:{color:'#f1f5f9'}},
-        y1:{type:'linear',position:'left',ticks:{color:'#2563eb',font:{size:9}},grid:{color:'#f1f5f9'},title:{display:true,text:barLabel,color:'#2563eb',font:{size:9}}},
-        y2:{type:'linear',position:'right',ticks:{color:'#059669',font:{size:9},callback:v=>v+'M'},grid:{drawOnChartArea:false},title:{display:true,text:lineLabel,color:'#059669',font:{size:9}}}
-      }
-    }
-  });
-}
 
 function renderMeta(meta){
   if(!meta){document.getElementById('meta-row').innerHTML='<span style="color:var(--text3);font-size:11px">Sin datos</span>';return;}
@@ -1216,14 +1158,6 @@ function render(data){
   if(sAn==='warn'){fcAn.classList.add('pulse-warn');aiAn.textContent='⚠️';}
   else if(sAn==='danger'){fcAn.classList.add('pulse-danger');aiAn.textContent='🔴';}
   else aiAn.textContent='';
-
-  // Chart
-  if(r.trend&&r.trend.length){
-    document.getElementById('chart-lbl').textContent=r.has_workdays
-      ?'Tendencia Mensual — Promedio Pedidos por Día Hábil (12 meses)'
-      :'Tendencia Mensual — Pedidos Informados (12 meses)';
-    renderChart(r.trend,r.has_workdays);
-  }
 
   // Meta
   // Plan de ventas (datos de MSPA + dias hábiles de Reactor)
