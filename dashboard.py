@@ -703,17 +703,17 @@ body.tv-mode .plan-bar-fill{font-size:13px}
 .err{color:var(--red);font-size:11px;margin-top:4px}
 
 /* ── KPI (4 cards) ── */
-.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;min-width:0}
-.kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;position:relative;overflow:hidden;transition:border-color .3s,background .3s}
-.kpi::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:10px 10px 0 0}
-.kpi.c-blue::after{background:#93bbee}.kpi.c-cyan::after{background:#67c9e0}
-.kpi.c-orange::after{background:#f9b07a}.kpi.c-green::after{background:#6ecfa6}
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;min-width:0}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;position:relative;overflow:hidden;transition:border-color .3s,background .3s}
+.kpi::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:10px 10px 0 0;background:transparent}
 .kpi.alert-warn{border-color:var(--amber);background:var(--amber-bg)}.kpi.alert-warn::after{background:var(--amber)}
 .kpi.alert-danger{border-color:var(--red);background:var(--red-bg)}.kpi.alert-danger::after{background:var(--red)}
 .kpi-lbl{font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:500;text-transform:uppercase;letter-spacing:.5px}
-.kpi-val{font-size:32px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
-.c-blue .kpi-val{color:#3b7dd8}.c-cyan .kpi-val{color:#0e9ec4}
-.c-orange .kpi-val{color:#f07030}.c-green .kpi-val{color:#16a365}
+.kpi-val{font-size:32px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;color:var(--text)}
+/* Venta del Día = métrica héroe */
+.kpi.c-green{background:linear-gradient(135deg,var(--green-bg),var(--surface));border-color:#bbf7d0}
+.kpi.c-green .kpi-lbl{color:#16a365}
+.kpi.c-green .kpi-val{font-size:42px;color:#15803d}
 .alert-warn .kpi-val{color:var(--amber)!important}.alert-danger .kpi-val{color:var(--red)!important}
 .kpi-sub{font-size:11px;color:var(--text3);margin-top:5px}
 .delta{display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;margin-top:5px}
@@ -730,9 +730,12 @@ body.tv-mode .plan-bar-fill{font-size:13px}
 .flow-pct{font-size:12px;font-weight:600;margin-top:2px}
 .alert-icon{font-size:14px;position:absolute;top:8px;right:10px}
 .fl-inf{border-top:3px solid var(--blue)}.fl-inf .flow-label,.fl-inf .flow-pct,.fl-inf .flow-val{color:var(--blue)}
-.fl-ret{border-top:3px solid var(--amber);background:var(--amber-bg)}.fl-ret .flow-label,.fl-ret .flow-pct,.fl-ret .flow-val{color:var(--amber)}
-.fl-an{border-top:3px solid var(--red);background:var(--red-bg)}.fl-an .flow-label,.fl-an .flow-pct,.fl-an .flow-val{color:var(--red)}
-.fl-fact{border-top:3px solid var(--green);background:var(--green-bg)}.fl-fact .flow-label,.fl-fact .flow-pct,.fl-fact .flow-val{color:var(--green)}
+.fl-ret{border-top:3px solid var(--amber)}.fl-ret .flow-label,.fl-ret .flow-pct,.fl-ret .flow-val{color:var(--amber)}
+.fl-an{border-top:3px solid var(--red)}.fl-an .flow-label,.fl-an .flow-pct,.fl-an .flow-val{color:var(--red)}
+.fl-fact{border-top:3px solid var(--green)}.fl-fact .flow-label,.fl-fact .flow-pct,.fl-fact .flow-val{color:var(--green)}
+/* Fondo tintado SOLO cuando cruza umbral (alerta real) */
+.fl-ret.pulse-warn,.fl-ret.pulse-danger{background:var(--amber-bg)}
+.fl-an.pulse-warn,.fl-an.pulse-danger{background:var(--red-bg)}
 .fl-ret.pulse-warn,.fl-an.pulse-warn{animation:bgpulse 3s ease-in-out infinite;border-top-width:5px}
 .fl-ret.pulse-danger,.fl-an.pulse-danger{animation:bgpulse 1.8s ease-in-out infinite;border-top-width:5px;box-shadow:inset 0 0 0 2px currentColor}
 @keyframes bgpulse{0%,100%{opacity:1}50%{opacity:.6}}
