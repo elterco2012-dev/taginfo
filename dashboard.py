@@ -821,13 +821,13 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
         <div class="kpi-lbl">Pedidos / Vendedor</div>
         <div class="kpi-val" id="k-vend">—</div>
         <div id="d-vend"></div>
-        <div class="kpi-sub" id="k-vend-sub" style="font-size:9px;color:var(--text3)">vs. mismo día mes anterior</div>
+        <div class="kpi-sub" id="k-vend-sub"></div>
       </div>
       <div class="kpi c-orange">
         <div class="kpi-lbl">Promedio Líneas / Pedido</div>
         <div class="kpi-val" id="k-avg">—</div>
         <div id="d-avg"></div>
-        <div class="kpi-sub" id="k-avg-sub" style="font-size:9px;color:var(--text3)">vs. mismo día mes anterior</div>
+        <div class="kpi-sub" id="k-avg-sub"></div>
       </div>
       <div class="kpi c-green">
         <div class="kpi-lbl">Venta del Día · MSPA</div>
@@ -1144,24 +1144,21 @@ function render(data){
   document.getElementById('k-ped').textContent=fmtN(r.pedidos,0);
   if(c){
     const dEl=document.getElementById('d-ped');
-    dEl.innerHTML=deltaHtml(r.pedidos,c.pedidos)+
-      `<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`;
+    dEl.innerHTML=deltaHtml(r.pedidos,c.pedidos);
   }
 
   // Pedidos / Vendedor
   const apv=r.avg_ped_vend||0;
   document.getElementById('k-vend').textContent=fmtN(apv,1);
   if(c&&c.avg_ped_vend){
-    document.getElementById('d-vend').innerHTML=deltaHtml(apv,c.avg_ped_vend)+
-      `<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`;
+    document.getElementById('d-vend').innerHTML=deltaHtml(apv,c.avg_ped_vend);
   }
 
   // Promedio líneas/pedido + delta
   const bs=r.by_status||{};
   document.getElementById('k-avg').textContent=r.avg_lineas||'—';
   if(c&&c.avg_lineas){
-    document.getElementById('d-avg').innerHTML=deltaHtml(r.avg_lineas,c.avg_lineas)+
-      `<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`;
+    document.getElementById('d-avg').innerHTML=deltaHtml(r.avg_lineas,c.avg_lineas);
   }
 
   // Venta del día from MSPA
