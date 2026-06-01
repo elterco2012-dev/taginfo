@@ -630,6 +630,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
 }
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;transition:background .3s,color .3s}
+.hist-banner{display:none;background:#7c2d12;color:#fed7aa;text-align:center;padding:8px 24px;font-size:13px;font-weight:700;letter-spacing:.5px;border-bottom:2px solid #ea580c}
 
 /* ── Dark mode ── */
 body.dark{
@@ -677,7 +678,7 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
 
 /* ── Layout ── */
 .main{padding:16px 24px;display:flex;flex-direction:column;gap:14px;max-width:1600px;margin:0 auto;width:100%}
-.sec-lbl{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px}
+.sec-lbl{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:8px}
 .err{color:var(--red);font-size:11px;margin-top:4px}
 
 /* ── KPI (4 cards) ── */
@@ -688,13 +689,13 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
 .kpi.c-orange::after{background:#f9b07a}.kpi.c-green::after{background:#6ecfa6}
 .kpi.alert-warn{border-color:var(--amber);background:var(--amber-bg)}.kpi.alert-warn::after{background:var(--amber)}
 .kpi.alert-danger{border-color:var(--red);background:var(--red-bg)}.kpi.alert-danger::after{background:var(--red)}
-.kpi-lbl{font-size:10px;color:var(--text3);margin-bottom:6px;font-weight:500;text-transform:uppercase;letter-spacing:.5px}
+.kpi-lbl{font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:500;text-transform:uppercase;letter-spacing:.5px}
 .kpi-val{font-size:32px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
 .c-blue .kpi-val{color:#3b7dd8}.c-cyan .kpi-val{color:#0e9ec4}
 .c-orange .kpi-val{color:#f07030}.c-green .kpi-val{color:#16a365}
 .alert-warn .kpi-val{color:var(--amber)!important}.alert-danger .kpi-val{color:var(--red)!important}
-.kpi-sub{font-size:10px;color:var(--text3);margin-top:5px}
-.delta{display:inline-flex;align-items:center;gap:2px;font-size:10px;font-weight:700;padding:2px 6px;border-radius:20px;margin-top:5px}
+.kpi-sub{font-size:11px;color:var(--text3);margin-top:5px}
+.delta{display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;margin-top:5px}
 .delta.up{background:#dcfce7;color:#15803d}.delta.down{background:#fee2e2;color:#b91c1c}.delta.flat{background:#f1f5f9;color:var(--text3)}
 
 /* ── Flow bar (4 cells) ── */
@@ -702,18 +703,18 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
 .flow-cell{background:var(--surface);padding:14px 16px;display:flex;flex-direction:column;gap:4px;position:relative;transition:background .3s}
 .flow-cell::after{content:'›';position:absolute;right:-8px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:18px;z-index:1;pointer-events:none}
 .flow-cell:last-child::after{display:none}
-.flow-label{font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
+.flow-label{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
 .flow-val{font-size:22px;font-weight:800;line-height:1.1}
-.flow-sub{font-size:10px;color:var(--text3)}
-.flow-pct{font-size:11px;font-weight:600;margin-top:2px}
+.flow-sub{font-size:11px;color:var(--text3)}
+.flow-pct{font-size:12px;font-weight:600;margin-top:2px}
 .alert-icon{font-size:14px;position:absolute;top:8px;right:10px}
 .fl-inf{border-top:3px solid var(--blue)}.fl-inf .flow-label,.fl-inf .flow-pct,.fl-inf .flow-val{color:var(--blue)}
 .fl-ret{border-top:3px solid var(--amber);background:var(--amber-bg)}.fl-ret .flow-label,.fl-ret .flow-pct,.fl-ret .flow-val{color:var(--amber)}
 .fl-an{border-top:3px solid var(--red);background:var(--red-bg)}.fl-an .flow-label,.fl-an .flow-pct,.fl-an .flow-val{color:var(--red)}
 .fl-fact{border-top:3px solid var(--green);background:var(--green-bg)}.fl-fact .flow-label,.fl-fact .flow-pct,.fl-fact .flow-val{color:var(--green)}
-.fl-ret.pulse-warn,.fl-an.pulse-warn{animation:bgpulse 3s ease-in-out infinite}
-.fl-ret.pulse-danger,.fl-an.pulse-danger{animation:bgpulse 1.8s ease-in-out infinite}
-@keyframes bgpulse{0%,100%{opacity:1}50%{opacity:.65}}
+.fl-ret.pulse-warn,.fl-an.pulse-warn{animation:bgpulse 3s ease-in-out infinite;border-top-width:5px}
+.fl-ret.pulse-danger,.fl-an.pulse-danger{animation:bgpulse 1.8s ease-in-out infinite;border-top-width:5px;box-shadow:inset 0 0 0 2px currentColor}
+@keyframes bgpulse{0%,100%{opacity:1}50%{opacity:.6}}
 
 /* ── Meta mensual ── */
 .meta-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 20px}
@@ -743,7 +744,7 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
 .mspa-row:last-child{border-bottom:none}
 .mspa-lbl{font-size:12px;color:var(--text2);flex:1}
 .mspa-val{font-size:14px;font-weight:700;color:var(--text);text-align:right;min-width:80px;font-variant-numeric:tabular-nums}
-.mspa-sub{font-size:10px;color:var(--text3);text-align:right;margin-top:1px}
+.mspa-sub{font-size:11px;color:var(--text3);text-align:right;margin-top:1px}
 .mspa-row.hi .mspa-lbl{color:var(--amber)}.mspa-row.hi .mspa-val{color:var(--amber)}
 .mspa-row.venta .mspa-lbl{color:var(--green);font-weight:700}.mspa-row.venta .mspa-val{color:var(--green);font-size:17px}
 
@@ -760,7 +761,7 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
 .sellers-wrap{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;align-items:start}
 .sellers-wrap .card{min-height:80px}
 .seller-tbl{width:100%;border-collapse:collapse;font-size:12px}
-.seller-tbl th{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);padding:4px 8px;border-bottom:2px solid var(--border);text-align:left}
+.seller-tbl th{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);padding:4px 8px;border-bottom:2px solid var(--border);text-align:left}
 .seller-tbl td{padding:7px 8px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums}
 .seller-tbl tr:last-child td{border-bottom:none}
 .seller-tbl tr:hover td{background:var(--surface2)}
@@ -798,13 +799,14 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
       </div>
     </div>
     <div class="freshness">
-      MSPA actualiza en <b id="next-m">—</b><br>
-      Reactor actualiza en <b id="next-r">—</b>
+      Actualizado <b id="last-update">—</b><br>
+      MSPA en <b id="next-m">—</b> · Reactor en <b id="next-r">—</b>
     </div>
     <div class="live"><div class="dot"></div>LIVE</div>
     <button class="mode-btn" onclick="toggleDark()" id="mode-btn">🌙 Oscuro</button>
   </div>
 </div>
+<div class="hist-banner" id="hist-banner">⚠ MODO HISTÓRICO — Datos del <span id="hist-date"></span> · No son datos de hoy</div>
 
 <div class="main">
 
@@ -1065,6 +1067,8 @@ function buildSellerTable(sellers, valClass, valLabel, valueKey, cntLabel, showP
 }
 
 function render(data){
+  const now=new Date();
+  document.getElementById('last-update').textContent=now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   document.getElementById('err-r').textContent=data.reactor_error?'⚠ Reactor: '+data.reactor_error:'';
   document.getElementById('err-m').textContent=data.mspa_error?'⚠ MSPA: '+data.mspa_error:'';
   // Poblar mapas de días hábiles para el calendario
@@ -1079,6 +1083,13 @@ function render(data){
   const dp=r.target_date_display||'—';
   document.getElementById('date-badge-txt').textContent='Pedidos del '+dp+(_customDate?' (manual)':'');
   document.getElementById('sec-reactor').textContent='Pedidos Informados · '+dp+(_customDate?' (fecha manual)':'');
+  const histBanner=document.getElementById('hist-banner');
+  if(_customDate){
+    document.getElementById('hist-date').textContent=dp;
+    histBanner.style.display='block';
+  } else {
+    histBanner.style.display='none';
+  }
 
   // KPIs
   const c=r.comp||null;
