@@ -675,6 +675,27 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.3)}}
 .mode-btn{cursor:pointer;border:1px solid var(--border2);border-radius:6px;padding:5px 12px;font-size:11px;background:transparent;color:var(--text2);font-weight:600;transition:all .2s}
 .mode-btn:hover{background:var(--border);color:var(--text)}
+body.tv-mode{font-size:16px}
+body.tv-mode .kpi-val{font-size:44px}
+body.tv-mode .kpi-lbl{font-size:13px}
+body.tv-mode .kpi-sub{font-size:13px}
+body.tv-mode .delta{font-size:13px}
+body.tv-mode .flow-val{font-size:28px}
+body.tv-mode .flow-label{font-size:12px}
+body.tv-mode .flow-sub{font-size:12px}
+body.tv-mode .flow-pct{font-size:14px}
+body.tv-mode .flow-cell{padding:18px 16px}
+body.tv-mode .mspa-lbl{font-size:14px}
+body.tv-mode .mspa-val{font-size:17px}
+body.tv-mode .mspa-sub{font-size:12px}
+body.tv-mode .sec-lbl{font-size:12px}
+body.tv-mode .seller-tbl{font-size:14px}
+body.tv-mode .seller-tbl th{font-size:12px}
+body.tv-mode .meta-curr{font-size:28px}
+body.tv-mode .meta-last{font-size:18px}
+body.tv-mode .meta-tag{font-size:12px;padding:3px 10px}
+body.tv-mode .plan-bar-bg{height:24px}
+body.tv-mode .plan-bar-fill{font-size:13px}
 
 /* ── Layout ── */
 .main{padding:16px 24px;display:flex;flex-direction:column;gap:14px;max-width:1600px;margin:0 auto;width:100%}
@@ -804,6 +825,7 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
     </div>
     <div class="live"><div class="dot"></div>LIVE</div>
     <button class="mode-btn" onclick="toggleDark()" id="mode-btn">🌙 Oscuro</button>
+    <button class="mode-btn" onclick="toggleTV()" id="tv-btn">📺 TV</button>
   </div>
 </div>
 <div class="hist-banner" id="hist-banner">⚠ MODO HISTÓRICO — Datos del <span id="hist-date"></span> · No son datos de hoy</div>
@@ -1081,10 +1103,10 @@ function render(data){
   const r=data.reactor||{};
   const m=data.mspa||{};
   const dp=r.target_date_display||'—';
-  document.getElementById('date-badge-txt').textContent='Pedidos del '+dp+(_customDate?' (manual)':'');
-  document.getElementById('sec-reactor').textContent='Pedidos Informados · '+dp+(_customDate?' (fecha manual)':'');
+  document.getElementById('date-badge-txt').textContent='Pedidos del '+dp+(_isHistoric?' (manual)':'');
+  document.getElementById('sec-reactor').textContent='Pedidos Informados · '+dp+(_isHistoric?' (fecha manual)':'');
   const histBanner=document.getElementById('hist-banner');
-  if(_customDate){
+  if(_isHistoric){
     document.getElementById('hist-date').textContent=dp;
     histBanner.style.display='block';
   } else {
@@ -1203,6 +1225,8 @@ function render(data){
 }
 
 const _customDate=new URLSearchParams(location.search).get('date')||'';
+const _todayStr=new Date().toISOString().slice(0,10);
+const _isHistoric=_customDate && _customDate!==_todayStr;
 let _wdMap={};  // "YYYY-MM" -> total días hábiles del mes
 let _wdLog={};  // "YYYY-MM-DD" -> número exacto de día hábil
 
@@ -1213,8 +1237,7 @@ async function load(){
 }
 
 function tick(){
-  if(_customDate){
-    // Fecha manual: no auto-refresh, mostrar "histórico"
+  if(_isHistoric){
     document.getElementById('next-m').innerHTML='<span style="color:var(--text3)">histórico</span>';
     document.getElementById('next-r').innerHTML='<span style="color:var(--text3)">histórico</span>';
     return;
@@ -1249,6 +1272,15 @@ function toggleDark(){
   const dark=document.body.classList.toggle('dark');
   document.getElementById('mode-btn').textContent=dark?'☀ Claro':'🌙 Oscuro';
   localStorage.setItem('wuerth-dark',dark?'1':'0');
+}
+function toggleTV(){
+  const tv=document.body.classList.toggle('tv-mode');
+  document.getElementById('tv-btn').textContent=tv?'🖥 Normal':'📺 TV';
+  localStorage.setItem('wuerth-tv',tv?'1':'0');
+}
+if(localStorage.getItem('wuerth-tv')==='1'){
+  document.body.classList.add('tv-mode');
+  document.getElementById('tv-btn').textContent='🖥 Normal';
 }
 if(localStorage.getItem('wuerth-dark')==='1'||new URLSearchParams(location.search).get('dark')==='1'){
   document.body.classList.add('dark');
