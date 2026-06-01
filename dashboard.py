@@ -1070,6 +1070,17 @@ function renderPlan(pv, diasElapsed, diasHab){
   }
   const wdTxt=diasHab>0?`Día hábil ${diasElapsed} de ${diasHab}`:'';
 
+  // Proyección de cierre de mes al ritmo actual
+  let proyTxt='', proyTagCls='tag-neutral';
+  if(diasElapsed>0&&diasHab>0&&fact>0){
+    const proy=fact/diasElapsed*diasHab;
+    const proyPct=plan>0?(proy/plan*100):0;
+    const proyColor=proyPct>=100?'var(--green)':proyPct>=90?'var(--amber)':'var(--red)';
+    proyTagCls=proyPct>=100?'tag-ok':proyPct>=90?'tag-warn':'tag-danger';
+    proyTxt=`Al ritmo actual cierra en <b style="color:${proyColor}">${fmtK(proy)}</b>`
+      +(plan>0?` · <b style="color:${proyColor}">${proyPct.toFixed(1)}% del plan</b>`:'');
+  }
+
   el.innerHTML=`
     <div style="font-size:11px;color:var(--text2);white-space:nowrap">Facturado acumulado</div>
     <div class="plan-nums">
@@ -1085,7 +1096,8 @@ function renderPlan(pv, diasElapsed, diasHab){
     <div class="plan-tags">
       <span class="meta-tag ${tagCls}">${tagTxt}</span>
       ${wdTxt?`<span class="meta-tag tag-neutral">${wdTxt}</span>`:''}
-    </div>`;
+    </div>
+    ${proyTxt?`<div style="font-size:11px;color:var(--text2);margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">📈 ${proyTxt}</div>`:''}`;
 }
 
 function buildSellerTable(sellers, valClass, valLabel, valueKey, cntLabel, showPed){
