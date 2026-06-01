@@ -716,7 +716,7 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
 @keyframes bgpulse{0%,100%{opacity:1}50%{opacity:.65}}
 
 /* ── Meta mensual ── */
-.meta-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 20px}
+.meta-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 20px}
 .meta-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .meta-nums{display:flex;align-items:baseline;gap:6px}
 .meta-curr{font-size:22px;font-weight:800;color:var(--blue)}
@@ -734,15 +734,15 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
 
 /* ── Bottom ── */
 .bottom{display:grid;grid-template-columns:1fr 360px;gap:14px}
-.mid-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.mid-row{display:grid;grid-template-columns:2fr 3fr;gap:14px}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px}
 .chart-wrap{height:240px;position:relative}
 
 /* ── MSPA ── */
-.mspa-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border)}
+.mspa-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)}
 .mspa-row:last-child{border-bottom:none}
 .mspa-lbl{font-size:12px;color:var(--text2);flex:1}
-.mspa-val{font-size:14px;font-weight:700;color:var(--text);text-align:right;min-width:80px}
+.mspa-val{font-size:14px;font-weight:700;color:var(--text);text-align:right;min-width:80px;font-variant-numeric:tabular-nums}
 .mspa-sub{font-size:10px;color:var(--text3);text-align:right;margin-top:1px}
 .mspa-row.hi .mspa-lbl{color:var(--amber)}.mspa-row.hi .mspa-val{color:var(--amber)}
 .mspa-row.venta .mspa-lbl{color:var(--green);font-weight:700}.mspa-row.venta .mspa-val{color:var(--green);font-size:17px}
@@ -758,6 +758,7 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
 
 /* ── Sellers 3-panel ── */
 .sellers-wrap{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.sellers-wrap .card{min-height:160px}
 .seller-tbl{width:100%;border-collapse:collapse;font-size:12px}
 .seller-tbl th{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);padding:4px 8px;border-bottom:2px solid var(--border);text-align:left}
 .seller-tbl td{padding:7px 8px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums}
@@ -1045,7 +1046,7 @@ function renderPlan(pv, diasElapsed, diasHab){
 
 function buildSellerTable(sellers, valClass, valLabel, valueKey, cntLabel, showPed){
   if(!sellers||!sellers.length)
-    return '<p style="color:var(--text3);font-size:11px;padding:8px 0">Sin movimiento hoy</p>';
+    return '<p style="color:var(--text3);font-size:11px;padding:4px 0;font-style:italic">— Sin movimiento</p>';
   const medals=['🥇','🥈','🥉','4°','5°','6°','7°'];
   const pedCol=showPed?`<th style="text-align:right;color:var(--text3)">Ped.</th>`:'';
   let h=`<table class="seller-tbl"><tr><th></th><th>Vendedor</th>${pedCol}<th style="text-align:right">${valLabel}</th></tr>`;
