@@ -1144,21 +1144,24 @@ function render(data){
   document.getElementById('k-ped').textContent=fmtN(r.pedidos,0);
   if(c){
     const dEl=document.getElementById('d-ped');
-    dEl.innerHTML=deltaHtml(r.pedidos,c.pedidos);
+    dEl.innerHTML=deltaHtml(r.pedidos,c.pedidos)+
+      `<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`;
   }
 
   // Pedidos / Vendedor
   const apv=r.avg_ped_vend||0;
   document.getElementById('k-vend').textContent=fmtN(apv,1);
   if(c&&c.avg_ped_vend){
-    document.getElementById('d-vend').innerHTML=deltaHtml(apv,c.avg_ped_vend);
+    document.getElementById('d-vend').innerHTML=deltaHtml(apv,c.avg_ped_vend)+
+      `<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`;
   }
 
   // Promedio líneas/pedido + delta
   const bs=r.by_status||{};
   document.getElementById('k-avg').textContent=r.avg_lineas||'—';
   if(c&&c.avg_lineas){
-    document.getElementById('d-avg').innerHTML=deltaHtml(r.avg_lineas,c.avg_lineas);
+    document.getElementById('d-avg').innerHTML=deltaHtml(r.avg_lineas,c.avg_lineas)+
+      `<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`;
   }
 
   // Venta del día from MSPA
