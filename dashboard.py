@@ -681,7 +681,7 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
 .err{color:var(--red);font-size:11px;margin-top:4px}
 
 /* ── KPI (4 cards) ── */
-.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;min-width:0}
 .kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;position:relative;overflow:hidden;transition:border-color .3s,background .3s}
 .kpi::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:10px 10px 0 0}
 .kpi.c-blue::after{background:#93bbee}.kpi.c-cyan::after{background:#67c9e0}
@@ -757,8 +757,8 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
 .plan-tags{display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0}
 
 /* ── Sellers 3-panel ── */
-.sellers-wrap{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
-.sellers-wrap .card{min-height:160px}
+.sellers-wrap{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;align-items:start}
+.sellers-wrap .card{min-height:80px}
 .seller-tbl{width:100%;border-collapse:collapse;font-size:12px}
 .seller-tbl th{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);padding:4px 8px;border-bottom:2px solid var(--border);text-align:left}
 .seller-tbl td{padding:7px 8px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums}
@@ -888,7 +888,7 @@ body.dark .flow-cell.fl-fact{background:var(--green-bg)}
   </div>
 
   <!-- Fila 4: MSPA + Top vendedores -->
-  <div class="sellers-wrap" style="grid-template-columns:320px 1fr 1fr 1fr">
+  <div class="sellers-wrap" style="grid-template-columns:320px 1fr 1fr 1fr;align-items:start">
     <div class="card">
       <div class="sec-lbl">MSPA — Estado Actual <small style="font-size:9px;color:var(--text3)">(refresca cada 60s)</small></div>
       <div id="err-m" class="err"></div>
@@ -1110,7 +1110,9 @@ function render(data){
 
   // Venta del día from MSPA
   const venta=m.venta||{ords:0,val:0};
-  document.getElementById('k-venta').textContent=fmtK(venta.val);
+  const kVentaEl=document.getElementById('k-venta');
+  kVentaEl.textContent=fmtK(venta.val);
+  kVentaEl.style.color=venta.val>0?'':'var(--text3)';
   document.getElementById('k-venta-sub').textContent=fmtN(venta.ords,0)+' pedidos facturados';
 
   // Semáforo on pedidos card (if high anulados %)
