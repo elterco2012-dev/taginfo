@@ -309,6 +309,47 @@ def fetch_reactor(target_date=None):
     sellers_an = [{"id": r[0], "nombre": seller_name(r[0]),
                    "cnt": int(r[1] or 0), "val": float(r[2] or 0)} for r in an_rows]
 
+    # Sparklines — últimos 14 días hábiles (reusa wd_log ya consultado)
+    sparklines = {"pedidos": [], "ventas": [], "ped_vend": [], "avg_lin": []}
+    try:
+        if wd_log:
+            spark_dates = sorted(d for d in wd_log if d <= target_str)[-14:]
+            if len(spark_dates) >= 2:
+                ph = ",".join(["?"] * len(spark_dates))
+                sp_rows = run(cur, f"""
+                    SELECT DATE(order_date) fecha,
+                           COUNT(DISTINCT id) pedidos,
+                           COUNT(DISTINCT id_user) vendedores,
+                           SUM(total) valor
+                    FROM order_placed
+                    WHERE DATE(order_date) IN ({ph})
+                    GROUP BY DATE(order_date)
+                    ORDER BY fecha
+                """, tuple(spark_dates))
+                sp_lin = run(cur, f"""
+                    SELECT DATE(op.order_date) fecha,
+                           COUNT(od.id) lineas,
+                           COUNT(DISTINCT op.id) pedidos
+                    FROM order_placed op
+                    JOIN order_detail od ON od.id_order_placed = op.id
+                    WHERE DATE(op.order_date) IN ({ph})
+                    GROUP BY DATE(op.order_date)
+                    ORDER BY fecha
+                """, tuple(spark_dates))
+                lin_by_date = {str(r[0]): (r[1] or 0, r[2] or 0) for r in (sp_lin or [])}
+                for row in (sp_rows or []):
+                    fd   = str(row[0])
+                    ped  = int(row[1] or 0)
+                    vend = int(row[2] or 0)
+                    val  = float(row[3] or 0)
+                    lin, lped = lin_by_date.get(fd, (0, 0))
+                    sparklines["pedidos"].append(ped)
+                    sparklines["ventas"].append(round(val / 1e6, 3))
+                    sparklines["ped_vend"].append(round(ped / vend, 2) if vend else 0)
+                    sparklines["avg_lin"].append(round(lin / lped, 2) if lped else 0)
+    except Exception as e:
+        print(f"  sparklines error: {e}")
+
     conn.close()
 
     return {
@@ -329,6 +370,7 @@ def fetch_reactor(target_date=None):
         "meta":         meta,
         "sellers_ret":  sellers_ret,
         "sellers_an":   sellers_an,
+        "sparklines":   sparklines,
     }
 
 
@@ -927,13 +969,19 @@ body.tv .meta-curr{font-size:28px}
     <div class="hero-side">
       <div class="hero-stat" id="hero-venta-stat">
         <div class="l">Venta del Día · MSPA</div>
-        <div class="v num" id="hero-venta-val">—</div>
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:8px">
+          <div class="v num" id="hero-venta-val">—</div>
+          <div id="spark-ventas"></div>
+        </div>
         <div id="hero-venta-sub" style="font-size:10px;color:var(--text3);margin-top:4px;font-variant-numeric:tabular-nums"></div>
       </div>
       <div class="hsep"></div>
       <div class="hero-stat">
         <div class="l">Pedidos Informados</div>
-        <div class="v num" id="hero-ped-val">—</div>
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:8px">
+          <div class="v num" id="hero-ped-val">—</div>
+          <div id="spark-ped"></div>
+        </div>
         <div id="hero-ped-delta"></div>
       </div>
     </div>
@@ -948,6 +996,7 @@ body.tv .meta-curr{font-size:28px}
         <div class="kpi-lbl">Pedidos / Vendedor</div>
         <div class="kpi-top">
           <div class="kpi-val num" id="k-vend">—</div>
+          <div id="spark-vend"></div>
         </div>
         <div class="kpi-foot" id="d-vend"></div>
       </div>
@@ -955,6 +1004,7 @@ body.tv .meta-curr{font-size:28px}
         <div class="kpi-lbl">Promedio Líneas / Pedido</div>
         <div class="kpi-top">
           <div class="kpi-val num" id="k-avg">—</div>
+          <div id="spark-avg"></div>
         </div>
         <div class="kpi-foot" id="d-avg"></div>
       </div>
@@ -1115,6 +1165,27 @@ function nextFmt(secs){
 }
 
 function semaforo(v,w,d){return v>=d?'danger':v>=w?'warn':'ok'}
+
+function sparkSvg(data,w=74,h=30){
+  if(!data||data.length<2)return '';
+  const mn=Math.min(...data),mx=Math.max(...data),rng=(mx-mn)||1;
+  const pad=2,step=(w-pad*2)/(data.length-1);
+  const pts=data.map((v,i)=>[pad+i*step, h-pad-((v-mn)/rng)*(h-pad*2)]);
+  const d=pts.map(([x,y],i)=>`${i?'L':'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
+  const area=`${d} L${pts[pts.length-1][0].toFixed(1)} ${h} L${pts[0][0].toFixed(1)} ${h} Z`;
+  const up=data[data.length-1]>=data[0];
+  const c=up?'var(--green)':'var(--red)';
+  const gid='sg'+Math.abs(data.slice(0,3).reduce((a,v,i)=>a^(v*1000+i*7),0)).toString(36);
+  const [lx,ly]=pts[pts.length-1];
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+  <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="${c}" stop-opacity=".18"/><stop offset="100%" stop-color="${c}" stop-opacity="0"/>
+  </linearGradient></defs>
+  <path d="${area}" fill="url(#${gid})"/>
+  <path d="${d}" fill="none" stroke="${c}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="2.2" fill="${c}"/>
+</svg>`;
+}
 
 function deltaHtml(curr,prev,compLbl){
   if(!prev||!curr)return '';
@@ -1365,6 +1436,13 @@ function render(data){
   document.getElementById('d-vend').innerHTML=c&&c.avg_ped_vend?deltaHtml(apv,c.avg_ped_vend,compLbl):'';
   document.getElementById('k-avg').textContent=r.avg_lineas||'—';
   document.getElementById('d-avg').innerHTML=c&&c.avg_lineas?deltaHtml(r.avg_lineas,c.avg_lineas,compLbl):'';
+
+  // Sparklines
+  const sp=r.sparklines||{};
+  document.getElementById('spark-ped').innerHTML=sparkSvg(sp.pedidos);
+  document.getElementById('spark-ventas').innerHTML=sparkSvg(sp.ventas);
+  document.getElementById('spark-vend').innerHTML=sparkSvg(sp.ped_vend);
+  document.getElementById('spark-avg').innerHTML=sparkSvg(sp.avg_lin);
 
   // Flow bar
   const fact_cnt=(bs[13]?.cnt||0)+(bs[18]?.cnt||0);
