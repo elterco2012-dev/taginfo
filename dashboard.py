@@ -874,6 +874,18 @@ body.dark .tag-neutral{background:#334155}
 .s-pill{display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:700}
 .pill-ret{background:var(--amber-bg);color:var(--amber)}.pill-an{background:var(--neg-bg);color:var(--neg-fg)}
 
+/* ── SKELETON (carga inicial) ── */
+@keyframes shimmer{0%{background-position:-260px 0}100%{background-position:260px 0}}
+.main.is-loading .hero,
+.main.is-loading .kpi-grid,
+.main.is-loading .flow-bar,
+.main.is-loading .card{position:relative;overflow:hidden}
+.main.is-loading .hero::after,
+.main.is-loading .kpi-grid::after,
+.main.is-loading .flow-bar::after,
+.main.is-loading .card::after{content:'';position:absolute;inset:0;z-index:5;background:var(--surface);background-image:linear-gradient(90deg,var(--surface) 0px,var(--surface-2) 80px,var(--surface) 160px);background-size:260px 100%;animation:shimmer 1.2s infinite linear}
+.main.is-loading .alerts{display:none!important}
+
 /* ── TV MODE ── */
 body.tv{font-size:15px}
 body.tv .main{max-width:100%;gap:26px;padding:26px 40px}
@@ -1515,7 +1527,9 @@ async function load(){
   const url='/api/data'+(_customDate?'?date='+_customDate:'');
   try{const res=await fetch(url);const d=await res.json();render(d);}
   catch(e){console.error(e);}
+  finally{document.querySelector('.main').classList.remove('is-loading');}
 }
+document.querySelector('.main').classList.add('is-loading');
 
 function tick(){
   if(_isHistoric){
