@@ -1458,17 +1458,13 @@ function render(data){
   const elMspaRef=document.getElementById('fl-fact-mspa');
   if(elMspaRef)elMspaRef.textContent=venta.val>0?'MSPA total día: '+fmtK(venta.val):'';
 
-  // Semáforo flow
+  // Semáforo flow — ícono estático (la banda de alertas ya notifica activamente)
   const fcRet=document.getElementById('fc-ret'),fcAn=document.getElementById('fc-an');
   const aiRet=document.getElementById('ai-ret'),aiAn=document.getElementById('ai-an');
   fcRet.classList.remove('pulse-warn','pulse-danger');fcAn.classList.remove('pulse-warn','pulse-danger');
   const sRet=semaforo(retPct,THR_RET_WARN,THR_RET_DNG);
-  if(sRet==='warn'){fcRet.classList.add('pulse-warn');aiRet.innerHTML=ICO.trendingDown;}
-  else if(sRet==='danger'){fcRet.classList.add('pulse-danger');aiRet.innerHTML=ICO.trendingDown;}
-  else aiRet.innerHTML='';
-  if(sAn==='warn'){fcAn.classList.add('pulse-warn');aiAn.innerHTML=ICO.trendingDown;}
-  else if(sAn==='danger'){fcAn.classList.add('pulse-danger');aiAn.innerHTML=ICO.trendingDown;}
-  else aiAn.innerHTML='';
+  aiRet.innerHTML=sRet!=='ok'?ICO.trendingDown:'';
+  aiAn.innerHTML=sAn!=='ok'?ICO.trendingDown:'';
 
   // Plan de ventas → hero
   const pv=m.plan_ventas||null;
