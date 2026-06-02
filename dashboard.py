@@ -879,11 +879,18 @@ body.dark .tag-neutral{background:#334155}
 .main.is-loading .hero,
 .main.is-loading .kpi-grid,
 .main.is-loading .flow-bar,
+.main.is-loading .meta-card,
 .main.is-loading .card{position:relative;overflow:hidden}
 .main.is-loading .hero::after,
 .main.is-loading .kpi-grid::after,
 .main.is-loading .flow-bar::after,
-.main.is-loading .card::after{content:'';position:absolute;inset:0;z-index:5;background:var(--surface);background-image:linear-gradient(90deg,var(--surface) 0px,var(--surface-2) 80px,var(--surface) 160px);background-size:260px 100%;animation:shimmer 1.2s infinite linear}
+.main.is-loading .meta-card::after,
+.main.is-loading .card::after{content:'';position:absolute;inset:0;z-index:5;background:#e2e8f0;background-image:linear-gradient(90deg,#e2e8f0 0px,#f1f5f9 80px,#e2e8f0 160px);background-size:260px 100%;animation:shimmer 1.2s infinite linear}
+body.dark .main.is-loading .hero::after,
+body.dark .main.is-loading .kpi-grid::after,
+body.dark .main.is-loading .flow-bar::after,
+body.dark .main.is-loading .meta-card::after,
+body.dark .main.is-loading .card::after{background:#1e293b;background-image:linear-gradient(90deg,#1e293b 0px,#283548 80px,#1e293b 160px)}
 .main.is-loading .alerts{display:none!important}
 
 /* ── TV MODE ── */
