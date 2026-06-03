@@ -875,22 +875,14 @@ body.dark .tag-neutral{background:#334155}
 .pill-ret{background:var(--amber-bg);color:var(--amber)}.pill-an{background:var(--neg-bg);color:var(--neg-fg)}
 
 /* ── SKELETON (carga inicial) ── */
-@keyframes shimmer{0%{background-position:-260px 0}100%{background-position:260px 0}}
-.main.is-loading .hero,
-.main.is-loading .kpi-grid,
-.main.is-loading .flow-bar,
-.main.is-loading .meta-card,
-.main.is-loading .card{position:relative;overflow:hidden}
-.main.is-loading .hero::after,
-.main.is-loading .kpi-grid::after,
-.main.is-loading .flow-bar::after,
-.main.is-loading .meta-card::after,
-.main.is-loading .card::after{content:'';position:absolute;inset:0;z-index:5;background:#e2e8f0;background-image:linear-gradient(90deg,#e2e8f0 0px,#f1f5f9 80px,#e2e8f0 160px);background-size:260px 100%;animation:shimmer 1.2s infinite linear}
-body.dark .main.is-loading .hero::after,
-body.dark .main.is-loading .kpi-grid::after,
-body.dark .main.is-loading .flow-bar::after,
-body.dark .main.is-loading .meta-card::after,
-body.dark .main.is-loading .card::after{background:#1e293b;background-image:linear-gradient(90deg,#1e293b 0px,#283548 80px,#1e293b 160px)}
+@keyframes shimmer{0%{background-position:-200px 0}100%{background-position:200px 0}}
+.sk{height:12px;border-radius:4px;background:#e2e8f0;background-image:linear-gradient(90deg,#e2e8f0 0,#f1f5f9 60px,#e2e8f0 120px);background-size:200px 100%;animation:shimmer 1.2s infinite linear;flex-shrink:0}
+body.dark .sk{background:#334155;background-image:linear-gradient(90deg,#334155 0,#3e4f66 60px,#334155 120px)}
+.sk-overlay{display:none;position:absolute;inset:0;z-index:6;background:var(--surface);border-radius:inherit;overflow:hidden;padding:16px 20px;flex-direction:column;gap:10px}
+.hero .sk-overlay,.flow-bar .sk-overlay,.kpi-grid .sk-overlay{border-radius:0}
+.main.is-loading .hero,.main.is-loading .kpi-grid,.main.is-loading .flow-bar,
+.main.is-loading .meta-card,.main.is-loading .card{position:relative;overflow:hidden}
+.main.is-loading .sk-overlay{display:flex}
 .main.is-loading .alerts{display:none!important}
 
 /* ── TV MODE ── */
@@ -1004,6 +996,25 @@ body.tv .meta-curr{font-size:28px}
         <div id="hero-ped-delta"></div>
       </div>
     </div>
+    <div class="sk-overlay" style="flex-direction:row;gap:16px">
+      <div style="flex:1.6;display:flex;flex-direction:column;gap:12px">
+        <div class="sk" style="width:45%;height:9px"></div>
+        <div class="sk" style="width:75%;height:48px;border-radius:6px"></div>
+        <div class="sk" style="width:35%;height:9px"></div>
+        <div class="sk" style="width:28%;height:9px;margin-top:4px"></div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="sk" style="width:60%;height:9px"></div>
+          <div class="sk" style="width:85%;height:22px;border-radius:5px"></div>
+        </div>
+        <div class="sk" style="width:100%;height:1px;opacity:.4"></div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="sk" style="width:55%;height:9px"></div>
+          <div class="sk" style="width:85%;height:22px;border-radius:5px"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- KPI strip secundario -->
@@ -1027,6 +1038,18 @@ body.tv .meta-curr{font-size:28px}
         </div>
         <div class="kpi-foot" id="d-avg"></div>
       </div>
+    <div class="sk-overlay" style="flex-direction:row;gap:12px;padding:12px 16px">
+      <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+        <div class="sk" style="width:65%;height:9px"></div>
+        <div class="sk" style="width:50%;height:26px;border-radius:5px"></div>
+        <div class="sk" style="width:55%;height:9px"></div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+        <div class="sk" style="width:65%;height:9px"></div>
+        <div class="sk" style="width:50%;height:26px;border-radius:5px"></div>
+        <div class="sk" style="width:55%;height:9px"></div>
+      </div>
+    </div>
     </div>
   </div>
 
@@ -1059,6 +1082,28 @@ body.tv .meta-curr{font-size:28px}
         <div class="flow-sub num" id="fl-fact-ped">—</div>
         <div class="flow-sub num" id="fl-fact-mspa" style="font-size:9px;opacity:.7;margin-top:2px"></div>
       </div>
+    <div class="sk-overlay" style="flex-direction:row;gap:8px;padding:12px 16px">
+      <div style="flex:1;display:flex;flex-direction:column;gap:7px">
+        <div class="sk" style="width:55%;height:9px"></div>
+        <div class="sk" style="width:70%;height:20px;border-radius:4px"></div>
+        <div class="sk" style="width:45%;height:9px"></div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:7px">
+        <div class="sk" style="width:55%;height:9px"></div>
+        <div class="sk" style="width:70%;height:20px;border-radius:4px"></div>
+        <div class="sk" style="width:45%;height:9px"></div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:7px">
+        <div class="sk" style="width:55%;height:9px"></div>
+        <div class="sk" style="width:70%;height:20px;border-radius:4px"></div>
+        <div class="sk" style="width:45%;height:9px"></div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:7px">
+        <div class="sk" style="width:55%;height:9px"></div>
+        <div class="sk" style="width:70%;height:20px;border-radius:4px"></div>
+        <div class="sk" style="width:45%;height:9px"></div>
+      </div>
+    </div>
     </div>
   </div>
 
@@ -1067,6 +1112,16 @@ body.tv .meta-curr{font-size:28px}
     <div class="sec-lbl">Ritmo Mensual — Pedidos vs. Mes Anterior</div>
     <div class="meta-row" id="meta-row">
       <span style="color:var(--text3);font-size:11px">Cargando...</span>
+    </div>
+    <div class="sk-overlay" style="gap:12px">
+      <div class="sk" style="width:45%;height:9px"></div>
+      <div style="display:flex;gap:10px;flex:1">
+        <div class="sk" style="flex:1;border-radius:6px"></div>
+        <div class="sk" style="flex:1;border-radius:6px"></div>
+        <div class="sk" style="flex:1;border-radius:6px"></div>
+        <div class="sk" style="flex:1;border-radius:6px"></div>
+        <div class="sk" style="flex:1;border-radius:6px"></div>
+      </div>
     </div>
   </div>
 
@@ -1081,6 +1136,10 @@ body.tv .meta-curr{font-size:28px}
         <span class="stamp" id="stamp-reactor"></span>
       </div>
       <div class="chart-wrap"><canvas id="trend"></canvas></div>
+      <div class="sk-overlay" style="gap:10px">
+        <div class="sk" style="width:40%;height:9px"></div>
+        <div class="sk" style="width:100%;flex:1;border-radius:6px;min-height:80px"></div>
+      </div>
     </div>
     <div class="card">
       <div class="card-head">
@@ -1092,6 +1151,13 @@ body.tv .meta-curr{font-size:28px}
       </div>
       <div id="err-m" class="err"></div>
       <div id="mspa-body"></div>
+      <div class="sk-overlay" style="gap:8px">
+        <div class="sk" style="width:40%;height:9px"></div>
+        <div class="sk" style="width:100%;height:34px;border-radius:4px"></div>
+        <div class="sk" style="width:100%;height:34px;border-radius:4px"></div>
+        <div class="sk" style="width:100%;height:34px;border-radius:4px"></div>
+        <div class="sk" style="width:75%;height:34px;border-radius:4px"></div>
+      </div>
     </div>
   </div>
 
@@ -1107,6 +1173,14 @@ body.tv .meta-curr{font-size:28px}
           </div>
         </div>
         <div id="sell-fact-top"></div>
+        <div class="sk-overlay" style="gap:7px;padding:14px 16px">
+          <div class="sk" style="width:50%;height:9px"></div>
+          <div class="sk" style="width:100%;height:26px;border-radius:4px"></div>
+          <div class="sk" style="width:100%;height:26px;border-radius:4px"></div>
+          <div class="sk" style="width:100%;height:26px;border-radius:4px"></div>
+          <div class="sk" style="width:85%;height:26px;border-radius:4px"></div>
+          <div class="sk" style="width:70%;height:26px;border-radius:4px"></div>
+        </div>
       </div>
       <div class="card">
         <div class="card-head">
@@ -1116,6 +1190,14 @@ body.tv .meta-curr{font-size:28px}
           </div>
         </div>
         <div id="sell-ret"></div>
+        <div class="sk-overlay" style="gap:7px;padding:14px 16px">
+          <div class="sk" style="width:50%;height:9px"></div>
+          <div class="sk" style="width:100%;height:26px;border-radius:4px"></div>
+          <div class="sk" style="width:100%;height:26px;border-radius:4px"></div>
+          <div class="sk" style="width:100%;height:26px;border-radius:4px"></div>
+          <div class="sk" style="width:85%;height:26px;border-radius:4px"></div>
+          <div class="sk" style="width:70%;height:26px;border-radius:4px"></div>
+        </div>
       </div>
       <div class="card">
         <div class="card-head">
@@ -1125,6 +1207,14 @@ body.tv .meta-curr{font-size:28px}
           </div>
         </div>
         <div id="sell-an"></div>
+        <div class="sk-overlay" style="gap:7px;padding:14px 16px">
+          <div class="sk" style="width:50%;height:9px"></div>
+          <div class="sk" style="width:100%;height:26px;border-radius:4px"></div>
+          <div class="sk" style="width:100%;height:26px;border-radius:4px"></div>
+          <div class="sk" style="width:100%;height:26px;border-radius:4px"></div>
+          <div class="sk" style="width:85%;height:26px;border-radius:4px"></div>
+          <div class="sk" style="width:70%;height:26px;border-radius:4px"></div>
+        </div>
       </div>
     </div>
   </div>
