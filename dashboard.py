@@ -1021,7 +1021,7 @@ body.tv .meta-curr{font-size:28px}
   <div class="sec">
     <div class="sec-lbl" id="sec-reactor">Indicadores del día · —</div>
     <div id="err-r" class="err"></div>
-    <div class="kpi-grid" style="grid-template-columns:repeat(2,1fr)">
+    <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
       <div class="kpi">
         <div class="kpi-lbl">Pedidos / Vendedor</div>
         <div class="kpi-top">
@@ -1038,7 +1038,31 @@ body.tv .meta-curr{font-size:28px}
         </div>
         <div class="kpi-foot" id="d-avg"></div>
       </div>
+      <div class="kpi">
+        <div class="kpi-lbl">Ticket Promedio</div>
+        <div class="kpi-top">
+          <div class="kpi-val num" id="k-ticket">—</div>
+        </div>
+        <div class="kpi-foot" id="d-ticket"></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-lbl">% Facturado del Día</div>
+        <div class="kpi-top">
+          <div class="kpi-val num" id="k-factpct">—</div>
+        </div>
+        <div class="kpi-foot" id="d-factpct"></div>
+      </div>
     <div class="sk-overlay" style="flex-direction:row;gap:12px;padding:12px 16px">
+      <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+        <div class="sk" style="width:65%;height:9px"></div>
+        <div class="sk" style="width:50%;height:26px;border-radius:5px"></div>
+        <div class="sk" style="width:55%;height:9px"></div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+        <div class="sk" style="width:65%;height:9px"></div>
+        <div class="sk" style="width:50%;height:26px;border-radius:5px"></div>
+        <div class="sk" style="width:55%;height:9px"></div>
+      </div>
       <div style="flex:1;display:flex;flex-direction:column;gap:8px">
         <div class="sk" style="width:65%;height:9px"></div>
         <div class="sk" style="width:50%;height:26px;border-radius:5px"></div>
@@ -1387,29 +1411,33 @@ function renderMeta(meta){
     <div class="meta-tags"><span class="meta-tag ${tagCls}">${tagTxt}</span></div>`;
 }
 
+let _lastTrend=null;
 function renderChart(trend){
-  if(!trend||!trend.labels||!trend.labels.length)return;
+  if(!trend||!trend.length)return;
   const ctx=document.getElementById('trend');
-  if(!ctx)return;
-  const isDark=document.body.classList.contains('dark');
-  const gridColor=isDark?'rgba(255,255,255,.06)':'rgba(0,0,0,.06)';
-  const txtColor=isDark?'#94a3b8':'#64748b';
+  if(!ctx||!window.Chart)return;
+  const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const labels=trend.map(t=>{const[y,m]=t.mes.split('-');return MESES[+m-1]+' '+y.slice(2);});
+  const barData=trend.map(t=>t.dias_hab?+((t.pedidos/t.dias_hab).toFixed(1)):0);
+  const lineData=trend.map(t=>t.dias_hab?+(((t.valor/1e6)/t.dias_hab).toFixed(2)):0);
+  const dark=document.body.classList.contains('dark');
+  const gridColor=dark?'rgba(255,255,255,.06)':'rgba(0,0,0,.06)';
+  const txtColor=dark?'#94a3b8':'#64748b';
+  const barBg=dark?'rgba(148,163,184,.35)':'rgba(203,213,225,.8)';
+  const barBorder=dark?'#475569':'#cbd5e1';
   if(chartObj){chartObj.destroy();chartObj=null;}
   chartObj=new Chart(ctx,{
-    data:{
-      labels:trend.labels,
-      datasets:[
-        {type:'bar',label:'Pedidos / día hábil',data:trend.pedidos,backgroundColor:'rgba(203,213,225,.8)',borderColor:'#cbd5e1',yAxisID:'y1',borderRadius:3},
-        {type:'line',label:'M$ / día hábil',data:trend.ventas,borderColor:'#cc0000',backgroundColor:'rgba(204,0,0,.06)',tension:.35,yAxisID:'y2',fill:true,pointRadius:3,pointBackgroundColor:'#cc0000'},
-      ]
-    },
-    options:{
-      responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{position:'bottom',labels:{boxWidth:12,padding:16,color:txtColor,font:{size:11}}}},
+    data:{labels,datasets:[
+      {type:'bar',label:'Pedidos / día hábil',data:barData,backgroundColor:barBg,borderColor:barBorder,borderWidth:1,yAxisID:'y1',borderRadius:3,order:2},
+      {type:'line',label:'M$ / día hábil',data:lineData,borderColor:'#cc0000',backgroundColor:'rgba(204,0,0,.06)',borderWidth:2.5,tension:.35,yAxisID:'y2',fill:true,pointRadius:2.5,pointBackgroundColor:'#cc0000',order:1},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{position:'bottom',labels:{boxWidth:12,padding:16,color:txtColor,font:{size:11},usePointStyle:true}}},
       scales:{
         x:{grid:{display:false},ticks:{color:txtColor,font:{size:10}}},
         y1:{position:'left',title:{display:true,text:'pedidos/día',color:txtColor,font:{size:10}},ticks:{color:txtColor,font:{size:10}},grid:{color:gridColor}},
-        y2:{position:'right',title:{display:true,text:'M$/día',color:txtColor,font:{size:10}},ticks:{color:txtColor,font:{size:10},callback:v=>fmtN(v,1)},grid:{drawOnChartArea:false}},
+        y2:{position:'right',title:{display:true,text:'M$/día',color:txtColor,font:{size:10}},ticks:{color:'#cc0000',font:{size:10},callback:v=>fmtN(v,1)},grid:{drawOnChartArea:false}},
       }
     }
   });
@@ -1543,7 +1571,7 @@ function render(data){
   const apv=r.avg_ped_vend||0;
   document.getElementById('k-vend').textContent=fmtN(apv,1);
   document.getElementById('d-vend').innerHTML=c&&c.avg_ped_vend?deltaHtml(apv,c.avg_ped_vend,compLbl):'';
-  document.getElementById('k-avg').textContent=r.avg_lineas||'—';
+  document.getElementById('k-avg').textContent=fmtN(r.avg_lineas,1);
   document.getElementById('d-avg').innerHTML=c&&c.avg_lineas?deltaHtml(r.avg_lineas,c.avg_lineas,compLbl):'';
 
   // Sparklines
@@ -1556,6 +1584,12 @@ function render(data){
   // Flow bar
   const fact_cnt=(bs[13]?.cnt||0)+(bs[18]?.cnt||0);
   const fact_val=(bs[13]?.val||0)+(bs[18]?.val||0);
+  // KPIs adicionales — ticket promedio y % facturado
+  document.getElementById('k-ticket').textContent=total>0?fmtK((r.valor||0)/total):'—';
+  document.getElementById('d-ticket').textContent=total>0?fmtN(total,0)+' pedidos informados':'';
+  document.getElementById('k-factpct').textContent=total>0?fmtN((fact_cnt/total)*100,1)+'%':'—';
+  document.getElementById('d-factpct').textContent=fmtN(fact_cnt,0)+' de '+fmtN(total,0)+' ped.';
+
   document.getElementById('fl-inf-val').textContent=fmtK(r.valor||0);
   document.getElementById('fl-inf-ped').textContent=fmtN(total,0)+' pedidos';
   document.getElementById('fl-ret-val').textContent=fmtK(bs[15]?.val||0);
@@ -1565,7 +1599,7 @@ function render(data){
   document.getElementById('fl-fact-val').textContent=fmtK(fact_val);
   document.getElementById('fl-fact-ped').textContent=fmtN(fact_cnt,0)+' pedidos';
   const elMspaRef=document.getElementById('fl-fact-mspa');
-  if(elMspaRef)elMspaRef.textContent=venta.val>0?'MSPA total día: '+fmtK(venta.val):'';
+  if(elMspaRef)elMspaRef.textContent=venta.val>0?'Cierre Reactor · MSPA día: '+fmtK(venta.val):'';
 
   // Semáforo flow — ícono estático (la banda de alertas ya notifica activamente)
   const fcRet=document.getElementById('fc-ret'),fcAn=document.getElementById('fc-an');
@@ -1587,7 +1621,7 @@ function render(data){
   renderAlerts(r,m);
 
   // Gráfico tendencia
-  if(r.trend)renderChart(r.trend);
+  if(r.trend){_lastTrend=r.trend;renderChart(r.trend);}
 
   // MSPA con semáforos
   let mhtml='';
@@ -1666,12 +1700,13 @@ function toggleDark(){
     :'<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>';
   document.getElementById('mode-btn').classList.toggle('on',dark);
   localStorage.setItem('wuerth-dark',dark?'1':'0');
-  if(chartObj){const t=chartObj.data.datasets;renderChart({labels:chartObj.data.labels,pedidos:t[0].data,ventas:t[1].data});}
+  if(_lastTrend)renderChart(_lastTrend);
 }
 function toggleTV(){
   const tv=document.body.classList.toggle('tv');
   document.getElementById('tv-btn').classList.toggle('on',tv);
   localStorage.setItem('wuerth-tv',tv?'1':'0');
+  if(_lastTrend)renderChart(_lastTrend);
 }
 if(localStorage.getItem('wuerth-tv')==='1'){
   document.body.classList.add('tv');
