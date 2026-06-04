@@ -38,6 +38,8 @@ _cache_mspa     = None
 _cache_mspa_ts  = None
 _cache_reactor  = None
 _cache_react_ts = None
+_cache_today    = None
+_cache_today_ts = None
 
 
 def get_mspa():
@@ -79,18 +81,34 @@ def fetch_reactor(target_date=None):
     cur  = conn.cursor()
 
     if target_date:
-        target_str = target_date
-        target_dt  = date.fromisoformat(target_date)
+        target_str  = target_date
+        target_dt   = date.fromisoformat(target_date)
+        is_historic = True
     else:
-        # Most recent order_date with significant activity
-        rows = run(cur, """
-            SELECT DATE(order_date) d FROM order_placed
-            GROUP BY DATE(order_date) HAVING COUNT(*) >= 50
-            ORDER BY d DESC LIMIT 1
-        """)
-        target     = rows[0][0] if rows else (date.today() - timedelta(days=1))
-        target_str = str(target)
-        target_dt  = target if isinstance(target, date) else date.fromisoformat(target_str)
+        today     = date.today()
+        today_str = str(today)
+        # Prev working day from work_days_log
+        prev_rows = run(cur, """
+            SELECT DATE_FORMAT(real_date, '%Y-%m-%d')
+            FROM work_days_log WHERE real_date < ?
+            ORDER BY real_date DESC LIMIT 1
+        """, (today_str,))
+        # Is today the last working day of the month?
+        next_wd = run(cur, """
+            SELECT COUNT(*) FROM work_days_log
+            WHERE real_date > ? AND YEAR(real_date)=YEAR(?) AND MONTH(real_date)=MONTH(?)
+        """, (today_str, today_str, today_str))
+        is_last_wd = bool(next_wd and next_wd[0][0] == 0)
+        if is_last_wd:
+            target_str = today_str
+            target_dt  = today
+        elif prev_rows and prev_rows[0][0]:
+            target_str = str(prev_rows[0][0])
+            target_dt  = date.fromisoformat(target_str)
+        else:
+            target_dt  = today - timedelta(days=1)
+            target_str = str(target_dt)
+        is_historic = False
 
     # KPIs — sin JOIN a order_detail para evitar multiplicar el total por cada línea
     rows = run(cur, """
@@ -355,6 +373,7 @@ def fetch_reactor(target_date=None):
     return {
         "target_date":         target_str,
         "target_date_display": target_dt.strftime("%d/%m/%Y"),
+        "is_historic":         is_historic,
         "pedidos":      pedidos,
         "vendedores":   vendedores,
         "valor":        valor,
@@ -372,6 +391,49 @@ def fetch_reactor(target_date=None):
         "sellers_an":   sellers_an,
         "sparklines":   sparklines,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HOY SUMMARY — pedidos informados hoy (panel informativo)
+# ─────────────────────────────────────────────────────────────────────────────
+def fetch_today_summary():
+    today_str = str(date.today())
+    conn = get_reactor()
+    cur  = conn.cursor()
+    try:
+        rows = run(cur, """
+            SELECT COUNT(DISTINCT id) pedidos,
+                   COUNT(DISTINCT id_user) vendedores,
+                   SUM(total) valor
+            FROM order_placed WHERE DATE(order_date) = ?
+        """, (today_str,))
+        pedidos, vendedores, valor = rows[0] if rows else (0, 0, 0)
+        pedidos    = int(pedidos    or 0)
+        vendedores = int(vendedores or 0)
+        valor      = float(valor    or 0)
+        lineas_row = run(cur, """
+            SELECT COUNT(od.id)
+            FROM order_placed op
+            JOIN order_detail od ON od.id_order_placed = op.id
+            WHERE DATE(op.order_date) = ?
+        """, (today_str,))
+        lineas = int(lineas_row[0][0] or 0) if lineas_row else 0
+        return {
+            "date":         today_str,
+            "pedidos":      pedidos,
+            "vendedores":   vendedores,
+            "valor":        valor,
+            "lineas":       lineas,
+            "avg_lineas":   round(lineas / pedidos, 1)  if pedidos    else 0,
+            "avg_ped_vend": round(pedidos / vendedores, 1) if vendedores else 0,
+            "ticket":       round(valor / pedidos)       if pedidos    else 0,
+        }
+    except Exception as e:
+        print(f"  fetch_today_summary error: {e}")
+        return {"date": today_str, "pedidos": 0, "vendedores": 0, "valor": 0,
+                "lineas": 0, "avg_lineas": 0, "avg_ped_vend": 0, "ticket": 0}
+    finally:
+        conn.close()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -601,9 +663,11 @@ def _get_cached(ttl, fetcher, name):
 
 
 def get_cached_data(override_date=None):
+    global _cache_today, _cache_today_ts
     now = datetime.now()
+    today_summary = None
     if override_date:
-        # Fecha manual: fetch directo sin cache — todos los datos para esa fecha
+        # Fecha manual: fetch directo sin cache — datos exactos para esa fecha
         try:
             reactor = fetch_reactor(target_date=override_date)
         except Exception as e:
@@ -617,6 +681,16 @@ def get_cached_data(override_date=None):
         with _lock:
             reactor = _get_cached(REACTOR_TTL, fetch_reactor, "reactor")
             mspa    = _get_cached(MSPA_TTL,    fetch_mspa,    "mspa")
+            # Today summary se refresca con el mismo TTL que MSPA
+            if (_cache_today is None or _cache_today_ts is None
+                    or (now - _cache_today_ts).total_seconds() >= MSPA_TTL
+                    or _cache_today.get("date") != str(date.today())):
+                try:
+                    _cache_today    = fetch_today_summary()
+                    _cache_today_ts = now
+                except Exception as e:
+                    print(f"  today_summary error: {e}")
+            today_summary = _cache_today
         r_age = int((now - _cache_react_ts).total_seconds()) if _cache_react_ts else 0
         m_age = int((now - _cache_mspa_ts).total_seconds())  if _cache_mspa_ts  else 0
 
@@ -642,6 +716,7 @@ def get_cached_data(override_date=None):
         "timestamp":      now.strftime("%d/%m/%Y %H:%M:%S"),
         "reactor":        reactor or {},
         "mspa":           mspa    or {},
+        "today_summary":  today_summary,
         "reactor_error":  r_err,
         "mspa_error":     m_err,
         "reactor_age":    r_age,
@@ -803,6 +878,13 @@ body.dark .state-neutral{background:#334155;color:var(--text-3)}
 
 /* ── FLOW BAR ── */
 .flow-bar{display:flex;align-items:stretch;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);overflow:hidden}
+.hoy-bar{display:flex;align-items:stretch;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-card);overflow:hidden;margin-top:0}
+.hoy-bar.hidden{display:none}
+.hoy-cell{flex:1;padding:12px 18px;display:flex;flex-direction:column;gap:3px;min-width:0;border-left:1px solid var(--border)}
+.hoy-cell:first-child{border-left:none}
+.hoy-lbl{font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
+.hoy-val{font-size:18px;font-weight:700;line-height:1.15;color:var(--text);font-variant-numeric:tabular-nums}
+.hoy-sub{font-size:10px;color:var(--text-3);font-variant-numeric:tabular-nums}
 .flow-cell{flex:1;padding:15px 20px;display:flex;flex-direction:column;gap:5px;min-width:0;border-left:1px solid var(--border);position:relative}
 .flow-cell:first-child{border-left:none}
 .flow-dot{display:flex;align-items:center;gap:7px}
@@ -1079,7 +1161,7 @@ body.tv .meta-curr{font-size:28px}
 
   <!-- Flujo del día -->
   <div class="sec">
-    <div class="sec-lbl">Flujo del Día — Pedidos Informados → Facturación</div>
+    <div class="sec-lbl" data-flow="1">Flujo del Día — Pedidos Informados → Facturación</div>
     <div class="flow-bar">
       <div class="flow-cell">
         <div class="flow-dot"><span class="flow-tick tk-blue"></span><span class="flow-label">Informado</span></div>
@@ -1128,6 +1210,34 @@ body.tv .meta-curr{font-size:28px}
         <div class="sk" style="width:45%;height:9px"></div>
       </div>
     </div>
+    </div>
+  </div>
+
+  <!-- Pedidos de hoy — panel informativo (oculto en modo histórico) -->
+  <div class="sec" id="hoy-sec">
+    <div class="sec-lbl" id="hoy-lbl">Hoy — Pedidos informados hoy (en tiempo real)</div>
+    <div class="hoy-bar" id="hoy-bar">
+      <div class="hoy-cell">
+        <div class="hoy-lbl">Pedidos</div>
+        <div class="hoy-val num" id="hoy-pedidos">—</div>
+        <div class="hoy-sub" id="hoy-vend">—</div>
+      </div>
+      <div class="hoy-cell">
+        <div class="hoy-lbl">Monto Informado</div>
+        <div class="hoy-val num" id="hoy-valor">—</div>
+      </div>
+      <div class="hoy-cell">
+        <div class="hoy-lbl">Ticket Promedio</div>
+        <div class="hoy-val num" id="hoy-ticket">—</div>
+      </div>
+      <div class="hoy-cell">
+        <div class="hoy-lbl">Ped / Vendedor</div>
+        <div class="hoy-val num" id="hoy-pedvend">—</div>
+      </div>
+      <div class="hoy-cell">
+        <div class="hoy-lbl">Líneas / Pedido</div>
+        <div class="hoy-val num" id="hoy-lineas">—</div>
+      </div>
     </div>
   </div>
 
@@ -1504,6 +1614,20 @@ function renderAlerts(r,m){
   }
 }
 
+function renderTodaySummary(ts){
+  const sec=document.getElementById('hoy-sec');
+  if(!ts||!ts.pedidos){if(sec)sec.style.display='none';return;}
+  if(sec)sec.style.display='';
+  const dp=ts.date?ts.date.split('-').reverse().join('/'):new Date().toLocaleDateString('es-AR');
+  document.getElementById('hoy-lbl').textContent='Hoy '+dp+' — Pedidos informados hoy (en tiempo real)';
+  document.getElementById('hoy-pedidos').textContent=fmtN(ts.pedidos,0);
+  document.getElementById('hoy-vend').textContent=fmtN(ts.vendedores,0)+' vendedores activos';
+  document.getElementById('hoy-valor').textContent=fmtK(ts.valor||0);
+  document.getElementById('hoy-ticket').textContent=fmtK(ts.ticket||0);
+  document.getElementById('hoy-pedvend').textContent=fmtN(ts.avg_ped_vend,1);
+  document.getElementById('hoy-lineas').textContent=fmtN(ts.avg_lineas,1);
+}
+
 function render(data){
   const now=new Date();
   const nowStr=now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -1534,13 +1658,17 @@ function render(data){
   const m=data.mspa||{};
   const dp=r.target_date_display||'—';
   document.getElementById('date-badge-txt').textContent='Pedidos del '+dp+(_isHistoric?' (manual)':'');
-  document.getElementById('sec-reactor').textContent='Indicadores del día · '+dp+(_isHistoric?' (fecha manual)':'');
+  document.getElementById('sec-reactor').textContent='Indicadores del día · '+dp+(_isHistoric?' (fecha manual)':' (día anterior)');
+  const flowLblEl=document.querySelector('.sec-lbl[data-flow]');
+  if(flowLblEl)flowLblEl.textContent='Flujo del Día '+dp+' — Pedidos Informados → Facturación';
   const histBanner=document.getElementById('hist-banner');
   if(_isHistoric){
     document.getElementById('hist-date').textContent=dp;
     histBanner.style.display='block';
+    const s=document.getElementById('hoy-sec');if(s)s.style.display='none';
   } else {
     histBanner.style.display='none';
+    renderTodaySummary(data.today_summary||null);
   }
 
   const c=r.comp||null;
