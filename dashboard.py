@@ -290,33 +290,25 @@ def fetch_reactor(target_date=None):
         "days_in_month": days_in_month,
     }
 
-    # Sellers with most RETENIDOS today (status 15)
-    # Try to get user names from users table
+    # Sellers: keyed by username (= número de vendedor), name + surname concatenados
     user_names = {}
-    supervisor_map = {}
-    for name_col in ["name", "username", "full_name", "nombre", "first_name",
-                     "apellido", "display_name", "lastname", "email"]:
-        nr = run(cur, f"SELECT id, {name_col} FROM users LIMIT 1")
-        if nr:
-            all_u = run(cur, f"SELECT id, {name_col} FROM users")
-            user_names = {r[0]: str(r[1]) for r in (all_u or []) if r[1]}
-            break
-    # Try to find supervisor field
-    for sup_col in ["supervisor_id", "manager_id", "reports_to", "jefe_id", "parent_id"]:
-        sr = run(cur, f"SELECT id, {sup_col} FROM users LIMIT 1")
-        if sr:
-            sup_rows = run(cur, f"SELECT id, {sup_col} FROM users")
-            supervisor_map = {r[0]: r[1] for r in (sup_rows or []) if r[1]}
-            break
+    rows_u = run(cur, "SELECT username, name, surname FROM `user`")
+    if rows_u:
+        for r in rows_u:
+            uname = str(r[0]).strip() if r[0] else None
+            name  = str(r[1]).strip() if r[1] else ""
+            surn  = str(r[2]).strip() if r[2] else ""
+            full  = (name + " " + surn).strip()
+            if uname and full:
+                user_names[uname] = full
+        print(f"  user names loaded: {len(user_names)} rows")
 
     def seller_name(uid):
-        n = user_names.get(uid, "")
-        code = f"({uid})"
-        sup_id = supervisor_map.get(uid)
-        sup_n  = user_names.get(sup_id, "") if sup_id else ""
+        key = str(uid).strip()
+        n   = user_names.get(key, "")
         if n:
-            return f"{n} {code}" + (f" — {sup_n}" if sup_n else "")
-        return f"Vend. {uid}"
+            return f"{n} ({key})"
+        return f"Vend. {key}"
 
     ret_rows = run(cur, """
         SELECT id_user, COUNT(*) cnt, SUM(total) val
