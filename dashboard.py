@@ -333,7 +333,8 @@ def fetch_reactor(target_date=None):
     sellers_an = [seller_dict(r[0], r[1], r[2]) for r in an_rows]
 
     # Sparklines — últimos 14 días hábiles (reusa wd_log ya consultado)
-    sparklines = {"pedidos": [], "ventas": [], "ped_vend": [], "avg_lin": []}
+    sparklines = {"pedidos": [], "ventas": [], "ped_vend": [], "avg_lin": [],
+                  "ticket": [], "fact_pct": []}
     try:
         if wd_log:
             spark_dates = sorted(d for d in wd_log if d <= target_str)[-14:]
@@ -359,17 +360,29 @@ def fetch_reactor(target_date=None):
                     GROUP BY DATE(op.order_date)
                     ORDER BY fecha
                 """, tuple(spark_dates))
-                lin_by_date = {str(r[0]): (r[1] or 0, r[2] or 0) for r in (sp_lin or [])}
+                # Facturados (status 13/18) por fecha — para % facturado
+                sp_fact = run(cur, f"""
+                    SELECT DATE(order_date) fecha, COUNT(DISTINCT id) facturados
+                    FROM order_placed
+                    WHERE DATE(order_date) IN ({ph}) AND id_order_status IN (13, 18)
+                    GROUP BY DATE(order_date)
+                    ORDER BY fecha
+                """, tuple(spark_dates))
+                lin_by_date  = {str(r[0]): (r[1] or 0, r[2] or 0) for r in (sp_lin or [])}
+                fact_by_date = {str(r[0]): int(r[1] or 0) for r in (sp_fact or [])}
                 for row in (sp_rows or []):
                     fd   = str(row[0])
                     ped  = int(row[1] or 0)
                     vend = int(row[2] or 0)
                     val  = float(row[3] or 0)
                     lin, lped = lin_by_date.get(fd, (0, 0))
+                    fact = fact_by_date.get(fd, 0)
                     sparklines["pedidos"].append(ped)
                     sparklines["ventas"].append(round(val / 1e6, 3))
                     sparklines["ped_vend"].append(round(ped / vend, 2) if vend else 0)
                     sparklines["avg_lin"].append(round(lin / lped, 2) if lped else 0)
+                    sparklines["ticket"].append(round(val / ped) if ped else 0)
+                    sparklines["fact_pct"].append(round(fact / ped * 100, 1) if ped else 0)
     except Exception as e:
         print(f"  sparklines error: {e}")
 
@@ -1103,7 +1116,10 @@ body.tv .meta-curr{font-size:28px}
 
   <!-- KPI strip secundario -->
   <div class="sec">
-    <div class="sec-lbl" id="sec-reactor">Indicadores del día · —</div>
+    <div class="sec-lbl" style="display:flex;align-items:center;gap:6px">
+      <span id="sec-reactor">Indicadores del día · —</span>
+      <span class="tooltip-info">ⓘ<span class="tt" style="white-space:normal;width:230px;text-align:left">La <b>flecha y el %</b> comparan contra el<br>mismo día hábil del mes anterior.<br>El <b>mini-gráfico</b> muestra la tendencia<br>de los últimos 14 días hábiles.<br>Pueden ir en sentidos distintos.</span></span>
+    </div>
     <div id="err-r" class="err"></div>
     <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
       <div class="kpi">
@@ -1126,6 +1142,7 @@ body.tv .meta-curr{font-size:28px}
         <div class="kpi-lbl">Ticket Promedio</div>
         <div class="kpi-top">
           <div class="kpi-val num" id="k-ticket">—</div>
+          <div id="spark-ticket"></div>
         </div>
         <div class="kpi-foot" id="d-ticket"></div>
       </div>
@@ -1133,6 +1150,7 @@ body.tv .meta-curr{font-size:28px}
         <div class="kpi-lbl">% Facturado del Día</div>
         <div class="kpi-top">
           <div class="kpi-val num" id="k-factpct">—</div>
+          <div id="spark-factpct"></div>
         </div>
         <div class="kpi-foot" id="d-factpct"></div>
       </div>
@@ -1729,6 +1747,8 @@ function render(data){
   document.getElementById('spark-ventas').innerHTML=sparkSvg(sp.ventas);
   document.getElementById('spark-vend').innerHTML=sparkSvg(sp.ped_vend);
   document.getElementById('spark-avg').innerHTML=sparkSvg(sp.avg_lin);
+  document.getElementById('spark-ticket').innerHTML=sparkSvg(sp.ticket);
+  document.getElementById('spark-factpct').innerHTML=sparkSvg(sp.fact_pct);
 
   // Flow bar
   const fact_cnt=(bs[13]?.cnt||0)+(bs[18]?.cnt||0);
