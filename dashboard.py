@@ -895,6 +895,8 @@ body.dark .state-neutral{background:#334155;color:var(--text-3)}
 .flow-bar{display:flex;align-items:stretch;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);overflow:hidden}
 .hoy-bar{display:flex;align-items:stretch;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-card);overflow:hidden;margin-top:0}
 .hoy-bar.hidden{display:none}
+.live-badge{display:inline-flex;align-items:center;gap:5px;margin-left:8px;font-size:9px;font-weight:800;letter-spacing:.6px;color:var(--green);background:var(--green-bg);padding:2px 7px;border-radius:20px;vertical-align:middle}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:ring 2.4s ease-out infinite;flex-shrink:0}
 .hoy-cell{flex:1;padding:12px 18px;display:flex;flex-direction:column;gap:3px;min-width:0;border-left:1px solid var(--border)}
 .hoy-cell:first-child{border-left:none}
 .hoy-lbl{font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
@@ -1437,13 +1439,12 @@ function sparkSvg(data,w=74,h=30){
   const pts=data.map((v,i)=>[pad+i*step, h-pad-((v-mn)/rng)*(h-pad*2)]);
   const d=pts.map(([x,y],i)=>`${i?'L':'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
   const area=`${d} L${pts[pts.length-1][0].toFixed(1)} ${h} L${pts[0][0].toFixed(1)} ${h} Z`;
-  const up=data[data.length-1]>=data[0];
-  const c=up?'var(--green)':'var(--red)';
+  const c='var(--text-3)';
   const gid='sg'+Math.abs(data.slice(0,3).reduce((a,v,i)=>a^(v*1000+i*7),0)).toString(36);
   const [lx,ly]=pts[pts.length-1];
-  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" opacity=".7">
   <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0%" stop-color="${c}" stop-opacity=".18"/><stop offset="100%" stop-color="${c}" stop-opacity="0"/>
+    <stop offset="0%" stop-color="${c}" stop-opacity=".15"/><stop offset="100%" stop-color="${c}" stop-opacity="0"/>
   </linearGradient></defs>
   <path d="${area}" fill="url(#${gid})"/>
   <path d="${d}" fill="none" stroke="${c}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1454,9 +1455,11 @@ function sparkSvg(data,w=74,h=30){
 function deltaHtml(curr,prev,compLbl){
   if(!prev||!curr)return '';
   const p=(curr-prev)/prev*100;
+  const lbl=compLbl?`<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`:'';
+  if(Math.abs(p)<0.05)
+    return `<span class="delta flat">— sin cambio</span>${lbl}`;
   const ico=p>0?ICO.arrowUp:ICO.arrowDown;
   const cls=p>0?'up':'down';
-  const lbl=compLbl?`<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`:'';
   return `<span class="delta ${cls}">${ico} ${fmtN(Math.abs(p),1)}%</span>${lbl}`;
 }
 
@@ -1580,6 +1583,11 @@ function renderChart(trend){
             const t=trend[i];
             if(t&&t.is_partial)return items[0].label.replace(' *','')+' (parcial — '+t.dias_hab+' días hábiles transcurridos de '+t.dias_tot+')';
             return items[0].label;
+          },
+          label(ctx){
+            const v=ctx.parsed.y;
+            const txt=Number(v).toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1});
+            return ctx.dataset.label+': '+txt;
           }
         }}
       },
@@ -1658,7 +1666,9 @@ function renderTodaySummary(ts){
   if(!ts||!ts.pedidos){if(sec)sec.style.display='none';return;}
   if(sec)sec.style.display='';
   const dp=ts.date?ts.date.split('-').reverse().join('/'):new Date().toLocaleDateString('es-AR');
-  document.getElementById('hoy-lbl').textContent='Hoy '+dp+' — Pedidos informados hoy (en tiempo real)';
+  document.getElementById('hoy-lbl').innerHTML=
+    'Hoy '+dp+' — Pedidos informados'+
+    '<span class="live-badge"><span class="live-dot"></span>EN VIVO</span>';
   document.getElementById('hoy-pedidos').textContent=fmtN(ts.pedidos,0);
   document.getElementById('hoy-vend').textContent=fmtN(ts.vendedores,0)+' vendedores activos';
   document.getElementById('hoy-valor').textContent=fmtK(ts.valor||0);
