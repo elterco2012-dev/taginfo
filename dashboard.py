@@ -175,15 +175,24 @@ def fetch_reactor(target_date=None):
     """)
     wd_log = {str(r[0]): int(r[1]) for r in (wdl_rows or []) if r[0] and r[1]}
 
+    # Días hábiles transcurridos en el mes del target (para el mes en curso)
+    cur_mes = target_dt.strftime("%Y-%m")
+    elapsed_wd = sum(1 for d in wd_log if d.startswith(cur_mes) and d <= target_str)
+
     trend = []
     for r in trend_rows:
-        mes    = r[0]
-        peds   = r[1] or 0
-        val    = float(r[2] or 0)
-        dias   = wd_map.get(mes, 0)
-        avg_pd = round(peds / dias, 1) if dias else None
+        mes       = r[0]
+        peds      = r[1] or 0
+        val       = float(r[2] or 0)
+        dias_tot  = wd_map.get(mes, 0)
+        is_cur    = (mes == cur_mes)
+        # Mes en curso: dividir por días hábiles transcurridos (no el total del mes)
+        dias_div  = elapsed_wd if is_cur and elapsed_wd > 0 else dias_tot
+        avg_pd    = round(peds / dias_div, 1) if dias_div else None
         trend.append({"mes": mes, "pedidos": peds, "valor": val,
-                       "dias_hab": dias, "avg_dia": avg_pd})
+                      "dias_hab": dias_div, "dias_tot": dias_tot,
+                      "elapsed": elapsed_wd if is_cur else dias_tot,
+                      "is_partial": is_cur, "avg_dia": avg_pd})
 
     # Inverse wd_log: (year, month, wd_num) -> date_str
     wd_inverse = {}
@@ -703,14 +712,10 @@ def get_cached_data(override_date=None):
     if isinstance(reactor, dict) and isinstance(mspa, dict):
         vnames = mspa.get("vertr_names", {})
         for lst in ("sellers_ret", "sellers_an"):
-            enriched = []
             for s in reactor.get(lst, []):
                 uid = str(s.get("id", "")).strip()
                 if uid in vnames:
-                    s["nombre"]   = f"{vnames[uid]} ({uid})"
-                    s["inactive"] = False
-                    enriched.append(s)
-            reactor[lst] = enriched
+                    s["nombre"] = f"{vnames[uid]} ({uid})"
 
     return {
         "timestamp":      now.strftime("%d/%m/%Y %H:%M:%S"),
@@ -1270,6 +1275,7 @@ body.tv .meta-curr{font-size:28px}
         <span class="stamp" id="stamp-reactor"></span>
       </div>
       <div class="chart-wrap"><canvas id="trend"></canvas></div>
+      <div id="chart-partial-note" style="font-size:10px;color:var(--text-3);padding:4px 4px 0;font-style:italic"></div>
       <div class="sk-overlay" style="gap:10px">
         <div class="sk" style="width:40%;height:9px"></div>
         <div class="sk" style="width:100%;flex:1;border-radius:6px;min-height:80px"></div>
@@ -1527,14 +1533,22 @@ function renderChart(trend){
   const ctx=document.getElementById('trend');
   if(!ctx||!window.Chart)return;
   const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  const labels=trend.map(t=>{const[y,m]=t.mes.split('-');return MESES[+m-1]+' '+y.slice(2);});
+  const labels=trend.map(t=>{
+    const[y,m]=t.mes.split('-');
+    const base=MESES[+m-1]+' '+y.slice(2);
+    return t.is_partial?base+' *':base;
+  });
   const barData=trend.map(t=>t.dias_hab?+((t.pedidos/t.dias_hab).toFixed(1)):0);
   const lineData=trend.map(t=>t.dias_hab?+(((t.valor/1e6)/t.dias_hab).toFixed(2)):0);
   const dark=document.body.classList.contains('dark');
   const gridColor=dark?'rgba(255,255,255,.06)':'rgba(0,0,0,.06)';
   const txtColor=dark?'#94a3b8':'#64748b';
-  const barBg=dark?'rgba(148,163,184,.35)':'rgba(203,213,225,.8)';
-  const barBorder=dark?'#475569':'#cbd5e1';
+  const barBg=trend.map(t=>t.is_partial
+    ?(dark?'rgba(148,163,184,.18)':'rgba(203,213,225,.45)')
+    :(dark?'rgba(148,163,184,.35)':'rgba(203,213,225,.8)'));
+  const barBorder=trend.map(t=>t.is_partial
+    ?(dark?'#334155':'#e2e8f0')
+    :(dark?'#475569':'#cbd5e1'));
   if(chartObj){chartObj.destroy();chartObj=null;}
   chartObj=new Chart(ctx,{
     data:{labels,datasets:[
@@ -1543,7 +1557,17 @@ function renderChart(trend){
     ]},
     options:{responsive:true,maintainAspectRatio:false,
       interaction:{mode:'index',intersect:false},
-      plugins:{legend:{position:'bottom',labels:{boxWidth:12,padding:16,color:txtColor,font:{size:11},usePointStyle:true}}},
+      plugins:{
+        legend:{position:'bottom',labels:{boxWidth:12,padding:16,color:txtColor,font:{size:11},usePointStyle:true}},
+        tooltip:{callbacks:{
+          title(items){
+            const i=items[0].dataIndex;
+            const t=trend[i];
+            if(t&&t.is_partial)return items[0].label.replace(' *','')+' (parcial — '+t.dias_hab+' días hábiles transcurridos de '+t.dias_tot+')';
+            return items[0].label;
+          }
+        }}
+      },
       scales:{
         x:{grid:{display:false},ticks:{color:txtColor,font:{size:10}}},
         y1:{position:'left',title:{display:true,text:'pedidos/día',color:txtColor,font:{size:10}},ticks:{color:txtColor,font:{size:10}},grid:{color:gridColor}},
@@ -1749,7 +1773,14 @@ function render(data){
   renderAlerts(r,m);
 
   // Gráfico tendencia
-  if(r.trend){_lastTrend=r.trend;renderChart(r.trend);}
+  if(r.trend){
+    _lastTrend=r.trend;
+    renderChart(r.trend);
+    const partial=r.trend.find(t=>t.is_partial);
+    const noteEl=document.getElementById('chart-partial-note');
+    if(noteEl&&partial)noteEl.textContent='* Mes en curso — promedio sobre '+partial.dias_hab+' días hábiles transcurridos de '+partial.dias_tot+' del mes.';
+    else if(noteEl)noteEl.textContent='';
+  }
 
   // MSPA con semáforos
   let mhtml='';
