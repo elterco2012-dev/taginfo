@@ -290,25 +290,25 @@ def fetch_reactor(target_date=None):
         "days_in_month": days_in_month,
     }
 
-    # Sellers: keyed by username (= número de vendedor), name + surname concatenados
-    user_names = {}
-    rows_u = run(cur, "SELECT username, name, surname FROM `user`")
+    # Sellers: id_user en order_placed = user.id (interno)
+    # username = número de vendedor, name+surname = nombre completo
+    user_names = {}   # user.id -> {"nombre": ..., "code": username}
+    rows_u = run(cur, "SELECT id, username, name, surname FROM `user`")
     if rows_u:
         for r in rows_u:
-            uname = str(r[0]).strip() if r[0] else None
-            name  = str(r[1]).strip() if r[1] else ""
-            surn  = str(r[2]).strip() if r[2] else ""
-            full  = (name + " " + surn).strip()
-            if uname and full:
-                user_names[uname] = full
+            uid  = r[0]
+            code = str(r[1]).strip() if r[1] else str(uid)
+            name = str(r[2]).strip() if r[2] else ""
+            surn = str(r[3]).strip() if r[3] else ""
+            full = (name + " " + surn).strip()
+            user_names[uid] = {"nombre": full, "code": code}
         print(f"  user names loaded: {len(user_names)} rows")
 
     def seller_name(uid):
-        key = str(uid).strip()
-        n   = user_names.get(key, "")
-        if n:
-            return f"{n} ({key})"
-        return f"Vend. {key}"
+        u = user_names.get(uid)
+        if u and u["nombre"]:
+            return f"{u['nombre']} ({u['code']})"
+        return f"Vend. {uid}"
 
     ret_rows = run(cur, """
         SELECT id_user, COUNT(*) cnt, SUM(total) val
@@ -316,8 +316,13 @@ def fetch_reactor(target_date=None):
         WHERE DATE(order_date) = ? AND id_order_status = 15
         GROUP BY id_user ORDER BY cnt DESC LIMIT 15
     """, (target_str,))
-    sellers_ret = [{"id": r[0], "nombre": seller_name(r[0]),
-                    "cnt": int(r[1] or 0), "val": float(r[2] or 0)} for r in ret_rows]
+    def seller_dict(uid, cnt, val):
+        u = user_names.get(uid, {})
+        return {"id": uid, "code": u.get("code", str(uid)),
+                "nombre": seller_name(uid),
+                "cnt": int(cnt or 0), "val": float(val or 0)}
+
+    sellers_ret = [seller_dict(r[0], r[1], r[2]) for r in ret_rows]
 
     an_rows = run(cur, """
         SELECT id_user, COUNT(*) cnt, SUM(total) val
@@ -325,8 +330,7 @@ def fetch_reactor(target_date=None):
         WHERE DATE(order_date) = ? AND id_order_status = 14
         GROUP BY id_user ORDER BY cnt DESC LIMIT 15
     """, (target_str,))
-    sellers_an = [{"id": r[0], "nombre": seller_name(r[0]),
-                   "cnt": int(r[1] or 0), "val": float(r[2] or 0)} for r in an_rows]
+    sellers_an = [seller_dict(r[0], r[1], r[2]) for r in an_rows]
 
     # Sparklines — últimos 14 días hábiles (reusa wd_log ya consultado)
     sparklines = {"pedidos": [], "ventas": [], "ped_vend": [], "avg_lin": []}
@@ -705,9 +709,10 @@ def get_cached_data(override_date=None):
         vnames = mspa.get("vertr_names", {})
         for lst in ("sellers_ret", "sellers_an"):
             for s in reactor.get(lst, []):
-                uid = str(s.get("id", "")).strip()
-                if uid in vnames:
-                    s["nombre"] = f"{vnames[uid]} ({uid})"
+                # code = user.username = número de vendedor = clave en f040
+                code = str(s.get("code", s.get("id", ""))).strip()
+                if code in vnames:
+                    s["nombre"] = f"{vnames[code]} ({code})"
 
     return {
         "timestamp":      now.strftime("%d/%m/%Y %H:%M:%S"),
