@@ -291,22 +291,29 @@ def fetch_reactor(target_date=None):
     }
 
     # Sellers with most RETENIDOS today (status 15)
-    # Try to get user names from users table
+    # Try to get user names from user table (reactor uses singular 'user')
     user_names = {}
     supervisor_map = {}
-    for name_col in ["name", "username", "full_name", "nombre", "first_name",
-                     "apellido", "display_name", "lastname", "email"]:
-        nr = run(cur, f"SELECT id, {name_col} FROM users LIMIT 1")
-        if nr:
-            all_u = run(cur, f"SELECT id, {name_col} FROM users")
-            user_names = {r[0]: str(r[1]) for r in (all_u or []) if r[1]}
+    for tbl in ["user", "users", "employee"]:
+        for name_col in ["full_name", "name", "nombre", "username", "first_name",
+                         "apellido", "display_name", "lastname", "email"]:
+            nr = run(cur, f"SELECT id, {name_col} FROM `{tbl}` LIMIT 1")
+            if nr:
+                all_u = run(cur, f"SELECT id, {name_col} FROM `{tbl}`")
+                user_names = {r[0]: str(r[1]) for r in (all_u or []) if r[1]}
+                print(f"  user names loaded from `{tbl}`.{name_col}: {len(user_names)} rows")
+                break
+        if user_names:
             break
     # Try to find supervisor field
-    for sup_col in ["supervisor_id", "manager_id", "reports_to", "jefe_id", "parent_id"]:
-        sr = run(cur, f"SELECT id, {sup_col} FROM users LIMIT 1")
-        if sr:
-            sup_rows = run(cur, f"SELECT id, {sup_col} FROM users")
-            supervisor_map = {r[0]: r[1] for r in (sup_rows or []) if r[1]}
+    for tbl in ["user", "users", "employee"]:
+        for sup_col in ["supervisor_id", "manager_id", "reports_to", "jefe_id", "parent_id"]:
+            sr = run(cur, f"SELECT id, {sup_col} FROM `{tbl}` LIMIT 1")
+            if sr:
+                sup_rows = run(cur, f"SELECT id, {sup_col} FROM `{tbl}`")
+                supervisor_map = {r[0]: r[1] for r in (sup_rows or []) if r[1]}
+                break
+        if supervisor_map:
             break
 
     def seller_name(uid):
