@@ -1411,13 +1411,19 @@ const MSPA_DEF=[
   {k:'venta',      l:'Venta del Día',                  cls:'venta', ico:'banknote'},
 ];
 
-function fmtN(n,d=0){return Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:d,maximumFractionDigits:d})}
+// Formateador propio: siempre punto=miles, coma=decimal (independiente del browser/OS)
+function fmtN(n,d=0){
+  const s=Number(n||0).toFixed(d);
+  const[int,dec]=s.split('.');
+  const intFmt=int.replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+  return dec!==undefined?intFmt+','+dec:intFmt;
+}
 function fmtK(n){
   n=Number(n)||0;
-  const fmt1=v=>v.toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1});
+  const fmt1=v=>{const s=v.toFixed(1);const[i,d]=s.split('.');return i.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+d;};
   if(n>=1e9)return '$'+fmt1(n/1e9)+'B';
   if(n>=1e6)return '$'+fmt1(n/1e6)+'M';
-  if(n>=1e3)return '$'+Math.round(n/1e3).toLocaleString('es-AR')+'K';
+  if(n>=1e3)return '$'+Math.round(n/1e3).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.')+'K';
   return '$'+fmtN(n,0);
 }
 function pct(a,b){return b?fmtN((a/b)*100,1)+'%':'—'}
@@ -1593,7 +1599,7 @@ function renderChart(trend){
       },
       scales:{
         x:{grid:{display:false},ticks:{color:txtColor,font:{size:10}}},
-        y1:{position:'left',title:{display:true,text:'pedidos/día',color:txtColor,font:{size:10}},ticks:{color:txtColor,font:{size:10}},grid:{color:gridColor}},
+        y1:{position:'left',title:{display:true,text:'pedidos/día',color:txtColor,font:{size:10}},ticks:{color:txtColor,font:{size:10},callback:v=>fmtN(v,0)},grid:{color:gridColor}},
         y2:{position:'right',title:{display:true,text:'M$/día',color:txtColor,font:{size:10}},ticks:{color:'#cc0000',font:{size:10},callback:v=>fmtN(v,1)},grid:{drawOnChartArea:false}},
       }
     }
