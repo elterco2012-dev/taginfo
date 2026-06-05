@@ -290,25 +290,25 @@ def fetch_reactor(target_date=None):
         "days_in_month": days_in_month,
     }
 
-    # Sellers: keyed by username (= número de vendedor), name + surname concatenados
-    user_names = {}
-    rows_u = run(cur, "SELECT username, name, surname FROM `user`")
+    # Sellers: id_user en order_placed = user.id (interno)
+    # username = número de vendedor, name+surname = nombre completo
+    user_names = {}   # user.id -> {"nombre": ..., "code": username}
+    rows_u = run(cur, "SELECT id, username, name, surname FROM `user`")
     if rows_u:
         for r in rows_u:
-            uname = str(r[0]).strip() if r[0] else None
-            name  = str(r[1]).strip() if r[1] else ""
-            surn  = str(r[2]).strip() if r[2] else ""
-            full  = (name + " " + surn).strip()
-            if uname and full:
-                user_names[uname] = full
+            uid  = r[0]
+            code = str(r[1]).strip() if r[1] else str(uid)
+            name = str(r[2]).strip() if r[2] else ""
+            surn = str(r[3]).strip() if r[3] else ""
+            full = (name + " " + surn).strip()
+            user_names[uid] = {"nombre": full, "code": code}
         print(f"  user names loaded: {len(user_names)} rows")
 
     def seller_name(uid):
-        key = str(uid).strip()
-        n   = user_names.get(key, "")
-        if n:
-            return f"{n} ({key})"
-        return f"Vend. {key}"
+        u = user_names.get(uid)
+        if u and u["nombre"]:
+            return f"{u['nombre']} ({u['code']})"
+        return f"Vend. {uid}"
 
     ret_rows = run(cur, """
         SELECT id_user, COUNT(*) cnt, SUM(total) val
@@ -316,8 +316,13 @@ def fetch_reactor(target_date=None):
         WHERE DATE(order_date) = ? AND id_order_status = 15
         GROUP BY id_user ORDER BY cnt DESC LIMIT 15
     """, (target_str,))
-    sellers_ret = [{"id": r[0], "nombre": seller_name(r[0]),
-                    "cnt": int(r[1] or 0), "val": float(r[2] or 0)} for r in ret_rows]
+    def seller_dict(uid, cnt, val):
+        u = user_names.get(uid, {})
+        return {"id": uid, "code": u.get("code", str(uid)),
+                "nombre": seller_name(uid),
+                "cnt": int(cnt or 0), "val": float(val or 0)}
+
+    sellers_ret = [seller_dict(r[0], r[1], r[2]) for r in ret_rows]
 
     an_rows = run(cur, """
         SELECT id_user, COUNT(*) cnt, SUM(total) val
@@ -325,11 +330,11 @@ def fetch_reactor(target_date=None):
         WHERE DATE(order_date) = ? AND id_order_status = 14
         GROUP BY id_user ORDER BY cnt DESC LIMIT 15
     """, (target_str,))
-    sellers_an = [{"id": r[0], "nombre": seller_name(r[0]),
-                   "cnt": int(r[1] or 0), "val": float(r[2] or 0)} for r in an_rows]
+    sellers_an = [seller_dict(r[0], r[1], r[2]) for r in an_rows]
 
     # Sparklines — últimos 14 días hábiles (reusa wd_log ya consultado)
-    sparklines = {"pedidos": [], "ventas": [], "ped_vend": [], "avg_lin": []}
+    sparklines = {"pedidos": [], "ventas": [], "ped_vend": [], "avg_lin": [],
+                  "ticket": [], "fact_pct": []}
     try:
         if wd_log:
             spark_dates = sorted(d for d in wd_log if d <= target_str)[-14:]
@@ -355,17 +360,29 @@ def fetch_reactor(target_date=None):
                     GROUP BY DATE(op.order_date)
                     ORDER BY fecha
                 """, tuple(spark_dates))
-                lin_by_date = {str(r[0]): (r[1] or 0, r[2] or 0) for r in (sp_lin or [])}
+                # Facturados (status 13/18) por fecha — para % facturado
+                sp_fact = run(cur, f"""
+                    SELECT DATE(order_date) fecha, COUNT(DISTINCT id) facturados
+                    FROM order_placed
+                    WHERE DATE(order_date) IN ({ph}) AND id_order_status IN (13, 18)
+                    GROUP BY DATE(order_date)
+                    ORDER BY fecha
+                """, tuple(spark_dates))
+                lin_by_date  = {str(r[0]): (r[1] or 0, r[2] or 0) for r in (sp_lin or [])}
+                fact_by_date = {str(r[0]): int(r[1] or 0) for r in (sp_fact or [])}
                 for row in (sp_rows or []):
                     fd   = str(row[0])
                     ped  = int(row[1] or 0)
                     vend = int(row[2] or 0)
                     val  = float(row[3] or 0)
                     lin, lped = lin_by_date.get(fd, (0, 0))
+                    fact = fact_by_date.get(fd, 0)
                     sparklines["pedidos"].append(ped)
                     sparklines["ventas"].append(round(val / 1e6, 3))
                     sparklines["ped_vend"].append(round(ped / vend, 2) if vend else 0)
                     sparklines["avg_lin"].append(round(lin / lped, 2) if lped else 0)
+                    sparklines["ticket"].append(round(val / ped) if ped else 0)
+                    sparklines["fact_pct"].append(round(fact / ped * 100, 1) if ped else 0)
     except Exception as e:
         print(f"  sparklines error: {e}")
 
@@ -705,9 +722,10 @@ def get_cached_data(override_date=None):
         vnames = mspa.get("vertr_names", {})
         for lst in ("sellers_ret", "sellers_an"):
             for s in reactor.get(lst, []):
-                uid = str(s.get("id", "")).strip()
-                if uid in vnames:
-                    s["nombre"] = f"{vnames[uid]} ({uid})"
+                # code = user.username = número de vendedor = clave en f040
+                code = str(s.get("code", s.get("id", ""))).strip()
+                if code in vnames:
+                    s["nombre"] = f"{vnames[code]} ({code})"
 
     return {
         "timestamp":      now.strftime("%d/%m/%Y %H:%M:%S"),
@@ -877,6 +895,8 @@ body.dark .state-neutral{background:#334155;color:var(--text-3)}
 .flow-bar{display:flex;align-items:stretch;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);overflow:hidden}
 .hoy-bar{display:flex;align-items:stretch;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-card);overflow:hidden;margin-top:0}
 .hoy-bar.hidden{display:none}
+.live-badge{display:inline-flex;align-items:center;gap:5px;margin-left:8px;font-size:9px;font-weight:800;letter-spacing:.6px;color:var(--green);background:var(--green-bg);padding:2px 7px;border-radius:20px;vertical-align:middle}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:ring 2.4s ease-out infinite;flex-shrink:0}
 .hoy-cell{flex:1;padding:12px 18px;display:flex;flex-direction:column;gap:3px;min-width:0;border-left:1px solid var(--border)}
 .hoy-cell:first-child{border-left:none}
 .hoy-lbl{font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
@@ -1098,7 +1118,10 @@ body.tv .meta-curr{font-size:28px}
 
   <!-- KPI strip secundario -->
   <div class="sec">
-    <div class="sec-lbl" id="sec-reactor">Indicadores del día · —</div>
+    <div class="sec-lbl" style="display:flex;align-items:center;gap:6px">
+      <span id="sec-reactor">Indicadores del día · —</span>
+      <span class="tooltip-info">ⓘ<span class="tt" style="white-space:normal;width:230px;text-align:left">La <b>flecha y el %</b> comparan contra el<br>mismo día hábil del mes anterior.<br>El <b>mini-gráfico</b> muestra la tendencia<br>de los últimos 14 días hábiles.<br>Pueden ir en sentidos distintos.</span></span>
+    </div>
     <div id="err-r" class="err"></div>
     <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
       <div class="kpi">
@@ -1121,6 +1144,7 @@ body.tv .meta-curr{font-size:28px}
         <div class="kpi-lbl">Ticket Promedio</div>
         <div class="kpi-top">
           <div class="kpi-val num" id="k-ticket">—</div>
+          <div id="spark-ticket"></div>
         </div>
         <div class="kpi-foot" id="d-ticket"></div>
       </div>
@@ -1128,6 +1152,7 @@ body.tv .meta-curr{font-size:28px}
         <div class="kpi-lbl">% Facturado del Día</div>
         <div class="kpi-top">
           <div class="kpi-val num" id="k-factpct">—</div>
+          <div id="spark-factpct"></div>
         </div>
         <div class="kpi-foot" id="d-factpct"></div>
       </div>
@@ -1386,13 +1411,19 @@ const MSPA_DEF=[
   {k:'venta',      l:'Venta del Día',                  cls:'venta', ico:'banknote'},
 ];
 
-function fmtN(n,d=0){return Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:d,maximumFractionDigits:d})}
+// Formateador propio: siempre punto=miles, coma=decimal (independiente del browser/OS)
+function fmtN(n,d=0){
+  const s=Number(n||0).toFixed(d);
+  const[int,dec]=s.split('.');
+  const intFmt=int.replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+  return dec!==undefined?intFmt+','+dec:intFmt;
+}
 function fmtK(n){
   n=Number(n)||0;
-  const fmt1=v=>v.toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1});
+  const fmt1=v=>{const s=v.toFixed(1);const[i,d]=s.split('.');return i.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+d;};
   if(n>=1e9)return '$'+fmt1(n/1e9)+'B';
   if(n>=1e6)return '$'+fmt1(n/1e6)+'M';
-  if(n>=1e3)return '$'+Math.round(n/1e3).toLocaleString('es-AR')+'K';
+  if(n>=1e3)return '$'+Math.round(n/1e3).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.')+'K';
   return '$'+fmtN(n,0);
 }
 function pct(a,b){return b?fmtN((a/b)*100,1)+'%':'—'}
@@ -1414,13 +1445,12 @@ function sparkSvg(data,w=74,h=30){
   const pts=data.map((v,i)=>[pad+i*step, h-pad-((v-mn)/rng)*(h-pad*2)]);
   const d=pts.map(([x,y],i)=>`${i?'L':'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
   const area=`${d} L${pts[pts.length-1][0].toFixed(1)} ${h} L${pts[0][0].toFixed(1)} ${h} Z`;
-  const up=data[data.length-1]>=data[0];
-  const c=up?'var(--green)':'var(--red)';
+  const c='var(--text-3)';
   const gid='sg'+Math.abs(data.slice(0,3).reduce((a,v,i)=>a^(v*1000+i*7),0)).toString(36);
   const [lx,ly]=pts[pts.length-1];
-  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" opacity=".7">
   <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0%" stop-color="${c}" stop-opacity=".18"/><stop offset="100%" stop-color="${c}" stop-opacity="0"/>
+    <stop offset="0%" stop-color="${c}" stop-opacity=".15"/><stop offset="100%" stop-color="${c}" stop-opacity="0"/>
   </linearGradient></defs>
   <path d="${area}" fill="url(#${gid})"/>
   <path d="${d}" fill="none" stroke="${c}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1431,9 +1461,11 @@ function sparkSvg(data,w=74,h=30){
 function deltaHtml(curr,prev,compLbl){
   if(!prev||!curr)return '';
   const p=(curr-prev)/prev*100;
+  const lbl=compLbl?`<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`:'';
+  if(Math.abs(p)<0.05)
+    return `<span class="delta flat">— sin cambio</span>${lbl}`;
   const ico=p>0?ICO.arrowUp:ICO.arrowDown;
   const cls=p>0?'up':'down';
-  const lbl=compLbl?`<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`:'';
   return `<span class="delta ${cls}">${ico} ${fmtN(Math.abs(p),1)}%</span>${lbl}`;
 }
 
@@ -1557,12 +1589,17 @@ function renderChart(trend){
             const t=trend[i];
             if(t&&t.is_partial)return items[0].label.replace(' *','')+' (parcial — '+t.dias_hab+' días hábiles transcurridos de '+t.dias_tot+')';
             return items[0].label;
+          },
+          label(ctx){
+            const v=ctx.parsed.y;
+            const txt=Number(v).toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1});
+            return ctx.dataset.label+': '+txt;
           }
         }}
       },
       scales:{
         x:{grid:{display:false},ticks:{color:txtColor,font:{size:10}}},
-        y1:{position:'left',title:{display:true,text:'pedidos/día',color:txtColor,font:{size:10}},ticks:{color:txtColor,font:{size:10}},grid:{color:gridColor}},
+        y1:{position:'left',title:{display:true,text:'pedidos/día',color:txtColor,font:{size:10}},ticks:{color:txtColor,font:{size:10},callback:v=>fmtN(v,0)},grid:{color:gridColor}},
         y2:{position:'right',title:{display:true,text:'M$/día',color:txtColor,font:{size:10}},ticks:{color:'#cc0000',font:{size:10},callback:v=>fmtN(v,1)},grid:{drawOnChartArea:false}},
       }
     }
@@ -1635,7 +1672,9 @@ function renderTodaySummary(ts){
   if(!ts||!ts.pedidos){if(sec)sec.style.display='none';return;}
   if(sec)sec.style.display='';
   const dp=ts.date?ts.date.split('-').reverse().join('/'):new Date().toLocaleDateString('es-AR');
-  document.getElementById('hoy-lbl').textContent='Hoy '+dp+' — Pedidos informados hoy (en tiempo real)';
+  document.getElementById('hoy-lbl').innerHTML=
+    'Hoy '+dp+' — Pedidos informados'+
+    '<span class="live-badge"><span class="live-dot"></span>EN VIVO</span>';
   document.getElementById('hoy-pedidos').textContent=fmtN(ts.pedidos,0);
   document.getElementById('hoy-vend').textContent=fmtN(ts.vendedores,0)+' vendedores activos';
   document.getElementById('hoy-valor').textContent=fmtK(ts.valor||0);
@@ -1724,6 +1763,8 @@ function render(data){
   document.getElementById('spark-ventas').innerHTML=sparkSvg(sp.ventas);
   document.getElementById('spark-vend').innerHTML=sparkSvg(sp.ped_vend);
   document.getElementById('spark-avg').innerHTML=sparkSvg(sp.avg_lin);
+  document.getElementById('spark-ticket').innerHTML=sparkSvg(sp.ticket);
+  document.getElementById('spark-factpct').innerHTML=sparkSvg(sp.fact_pct);
 
   // Flow bar
   const fact_cnt=(bs[13]?.cnt||0)+(bs[18]?.cnt||0);
