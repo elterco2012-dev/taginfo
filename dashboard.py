@@ -1937,7 +1937,11 @@ function updateDpHint(v){
 function gotoDate(clear){
   if(clear){window.location.href=window.location.pathname;return;}
   const v=document.getElementById('dp-input').value;
-  if(v)window.location.href=window.location.pathname+'?date='+v;
+  if(!v)return;
+  // Si eligen el día de hoy, ir a la URL limpia (modo operativo en vivo, no histórico)
+  const today=new Date().toISOString().slice(0,10);
+  if(v===today){window.location.href=window.location.pathname;return;}
+  window.location.href=window.location.pathname+'?date='+v;
 }
 
 load();
