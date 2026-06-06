@@ -1677,7 +1677,9 @@ function renderAlerts(r,m){
 
 function renderTodaySummary(ts){
   const sec=document.getElementById('hoy-sec');
-  if(!ts||!ts.pedidos){if(sec)sec.style.display='none';return;}
+  // Mostrar siempre en modo en vivo, aunque hoy tenga 0 pedidos (ej: sábado/domingo).
+  // Solo ocultar si la consulta falló por completo (ts == null).
+  if(!ts){if(sec)sec.style.display='none';return;}
   if(sec)sec.style.display='';
   const dp=ts.date?ts.date.split('-').reverse().join('/'):new Date().toLocaleDateString('es-AR');
   document.getElementById('hoy-lbl').innerHTML=
