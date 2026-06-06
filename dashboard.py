@@ -382,7 +382,10 @@ def fetch_reactor(target_date=None):
                     sparklines["ped_vend"].append(round(ped / vend, 2) if vend else 0)
                     sparklines["avg_lin"].append(round(lin / lped, 2) if lped else 0)
                     sparklines["ticket"].append(round(val / ped) if ped else 0)
-                    sparklines["fact_pct"].append(round(fact / ped * 100, 1) if ped else 0)
+                    # % Facturado: solo días con facturación real (fact > 0).
+                    # Los días muy recientes aún no maduraron y darían 0% artificial.
+                    if ped and fact > 0:
+                        sparklines["fact_pct"].append(round(fact / ped * 100, 1))
     except Exception as e:
         print(f"  sparklines error: {e}")
 
