@@ -382,7 +382,10 @@ def fetch_reactor(target_date=None):
                     sparklines["ped_vend"].append(round(ped / vend, 2) if vend else 0)
                     sparklines["avg_lin"].append(round(lin / lped, 2) if lped else 0)
                     sparklines["ticket"].append(round(val / ped) if ped else 0)
-                    sparklines["fact_pct"].append(round(fact / ped * 100, 1) if ped else 0)
+                    # % Facturado: solo días con facturación real (fact > 0).
+                    # Los días muy recientes aún no maduraron y darían 0% artificial.
+                    if ped and fact > 0:
+                        sparklines["fact_pct"].append(round(fact / ped * 100, 1))
     except Exception as e:
         print(f"  sparklines error: {e}")
 
@@ -415,16 +418,30 @@ def fetch_reactor(target_date=None):
 # HOY SUMMARY — pedidos informados hoy (panel informativo)
 # ─────────────────────────────────────────────────────────────────────────────
 def fetch_today_summary():
-    today_str = str(date.today())
+    today    = date.today()
+    today_str = str(today)
     conn = get_reactor()
     cur  = conn.cursor()
     try:
+        # Día hábil de referencia = último día hábil <= hoy (work_days_log).
+        # En día hábil: es hoy mismo (live). Fin de semana/feriado: el último hábil
+        # (ej: sábado/domingo muestran el viernes) hasta que avance el día hábil.
+        ref_str   = today_str
+        is_today  = True
+        wd_ref = run(cur, """
+            SELECT DATE_FORMAT(real_date, '%Y-%m-%d')
+            FROM work_days_log WHERE real_date <= ?
+            ORDER BY real_date DESC LIMIT 1
+        """, (today_str,))
+        if wd_ref and wd_ref[0][0]:
+            ref_str  = str(wd_ref[0][0])
+            is_today = (ref_str == today_str)
         rows = run(cur, """
             SELECT COUNT(DISTINCT id) pedidos,
                    COUNT(DISTINCT id_user) vendedores,
                    SUM(total) valor
             FROM order_placed WHERE DATE(order_date) = ?
-        """, (today_str,))
+        """, (ref_str,))
         pedidos, vendedores, valor = rows[0] if rows else (0, 0, 0)
         pedidos    = int(pedidos    or 0)
         vendedores = int(vendedores or 0)
@@ -434,10 +451,11 @@ def fetch_today_summary():
             FROM order_placed op
             JOIN order_detail od ON od.id_order_placed = op.id
             WHERE DATE(op.order_date) = ?
-        """, (today_str,))
+        """, (ref_str,))
         lineas = int(lineas_row[0][0] or 0) if lineas_row else 0
         return {
-            "date":         today_str,
+            "date":         ref_str,
+            "is_today":     is_today,
             "pedidos":      pedidos,
             "vendedores":   vendedores,
             "valor":        valor,
@@ -448,8 +466,8 @@ def fetch_today_summary():
         }
     except Exception as e:
         print(f"  fetch_today_summary error: {e}")
-        return {"date": today_str, "pedidos": 0, "vendedores": 0, "valor": 0,
-                "lineas": 0, "avg_lineas": 0, "avg_ped_vend": 0, "ticket": 0}
+        return {"date": today_str, "is_today": True, "pedidos": 0, "vendedores": 0,
+                "valor": 0, "lineas": 0, "avg_lineas": 0, "avg_ped_vend": 0, "ticket": 0}
     finally:
         conn.close()
 
@@ -700,9 +718,13 @@ def get_cached_data(override_date=None):
             reactor = _get_cached(REACTOR_TTL, fetch_reactor, "reactor")
             mspa    = _get_cached(MSPA_TTL,    fetch_mspa,    "mspa")
             # Today summary se refresca con el mismo TTL que MSPA
+            # Refresca por TTL o si la captura es de un día calendario anterior
+            # (rollover de medianoche). No comparar contra date.today() directo:
+            # el "date" del summary es el último día hábil, que en fin de semana
+            # difiere de hoy y forzaría refetch en cada request.
             if (_cache_today is None or _cache_today_ts is None
                     or (now - _cache_today_ts).total_seconds() >= MSPA_TTL
-                    or _cache_today.get("date") != str(date.today())):
+                    or _cache_today_ts.date() != now.date()):
                 try:
                     _cache_today    = fetch_today_summary()
                     _cache_today_ts = now
@@ -1674,12 +1696,17 @@ function renderAlerts(r,m){
 
 function renderTodaySummary(ts){
   const sec=document.getElementById('hoy-sec');
-  if(!ts||!ts.pedidos){if(sec)sec.style.display='none';return;}
+  // Mostrar siempre en modo en vivo, aunque hoy tenga 0 pedidos (ej: sábado/domingo).
+  // Solo ocultar si la consulta falló por completo (ts == null).
+  if(!ts){if(sec)sec.style.display='none';return;}
   if(sec)sec.style.display='';
   const dp=ts.date?ts.date.split('-').reverse().join('/'):new Date().toLocaleDateString('es-AR');
+  // is_today: día hábil en curso (live). Si false: fin de semana/feriado mostrando
+  // el último día hábil cerrado (no pulsar "EN VIVO").
+  const live=ts.is_today!==false;
   document.getElementById('hoy-lbl').innerHTML=
-    'Hoy '+dp+' — Pedidos informados'+
-    '<span class="live-badge"><span class="live-dot"></span>EN VIVO</span>';
+    (live?'Hoy '+dp:'Último día hábil '+dp)+' — Pedidos informados'+
+    (live?'<span class="live-badge"><span class="live-dot"></span>EN VIVO</span>':'');
   document.getElementById('hoy-pedidos').textContent=fmtN(ts.pedidos,0);
   document.getElementById('hoy-vend').textContent=fmtN(ts.vendedores,0)+' vendedores activos';
   document.getElementById('hoy-valor').textContent=fmtK(ts.valor||0);
