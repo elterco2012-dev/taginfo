@@ -847,6 +847,9 @@ body.dark .date-pop input{color-scheme:dark}
 
 /* ── HERO ── */
 .hero{display:grid;grid-template-columns:1.5fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r-card);overflow:hidden}
+.hero.flash{animation:heroFlash 1.4s ease-out}
+@keyframes heroFlash{0%{box-shadow:0 0 0 0 rgba(245,158,11,.45)}30%{box-shadow:0 0 0 4px rgba(245,158,11,.35)}100%{box-shadow:0 0 0 0 rgba(245,158,11,0)}}
+.a-act{cursor:pointer}
 .hero-main{background:var(--surface);padding:22px 26px}
 .hero-side{background:var(--surface);padding:22px 26px;display:flex;flex-direction:column;justify-content:center;gap:18px}
 .hero-eyebrow{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-3);margin-bottom:14px;white-space:nowrap}
@@ -883,6 +886,7 @@ body.dark .state-neutral{background:#334155;color:var(--text-3)}
 .kpi-val{font-size:25px;font-weight:700;line-height:1;color:var(--text);font-variant-numeric:tabular-nums}
 .spark{width:74px;height:30px;flex-shrink:0;opacity:.9}
 .kpi-foot{display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap}
+.spark-avg{font-size:9px;color:var(--text-3);font-variant-numeric:tabular-nums;text-align:right;margin-top:2px;letter-spacing:.2px;cursor:help}
 .delta{display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
 .delta .ico{width:13px;height:13px}
 .delta.up{color:var(--pos-fg)}.delta.down{color:var(--neg-fg)}.delta.flat{color:var(--text-3)}
@@ -1052,7 +1056,7 @@ body.tv .meta-curr{font-size:28px}
   <div id="alerts-band" style="display:none"></div>
 
   <!-- HERO: Plan de Ventas + Venta del Día + Pedidos -->
-  <div class="hero">
+  <div class="hero" id="hero-card">
     <div class="hero-main">
       <div class="hero-eyebrow">
         <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
@@ -1141,7 +1145,7 @@ body.tv .meta-curr{font-size:28px}
         <div class="kpi-foot" id="d-avg"></div>
       </div>
       <div class="kpi">
-        <div class="kpi-lbl">Ticket Promedio</div>
+        <div class="kpi-lbl">Pedido Promedio</div>
         <div class="kpi-top">
           <div class="kpi-val num" id="k-ticket">—</div>
           <div id="spark-ticket"></div>
@@ -1249,7 +1253,7 @@ body.tv .meta-curr{font-size:28px}
         <div class="hoy-val num" id="hoy-valor">—</div>
       </div>
       <div class="hoy-cell">
-        <div class="hoy-lbl">Ticket Promedio</div>
+        <div class="hoy-lbl">Pedido Promedio</div>
         <div class="hoy-val num" id="hoy-ticket">—</div>
       </div>
       <div class="hoy-cell">
@@ -1449,6 +1453,7 @@ function sparkSvg(data,w=74,h=30){
   const gid='sg'+Math.abs(data.slice(0,3).reduce((a,v,i)=>a^(v*1000+i*7),0)).toString(36);
   const [lx,ly]=pts[pts.length-1];
   return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" opacity=".7">
+  <title>Tendencia últimos 14 días hábiles</title>
   <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0%" stop-color="${c}" stop-opacity=".15"/><stop offset="100%" stop-color="${c}" stop-opacity="0"/>
   </linearGradient></defs>
@@ -1653,7 +1658,7 @@ function renderAlerts(r,m){
     const pctVal=pv.pct_plan||0;
     if(pacePos>0&&pctVal<pacePos){
       const gap=pacePos-pctVal;
-      alerts.push(`<div class="alert warn">${ICO.trendingDown}<span>Plan de ventas <b>${fmtN(gap,1)} pts por debajo del ritmo</b> (${fmtN(pctVal,1)}% vs ${fmtN(pacePos,1)}% esperado)</span><a class="a-act" href="#">Ver plan →</a></div>`);
+      alerts.push(`<div class="alert warn">${ICO.trendingDown}<span>Plan de ventas <b>${fmtN(gap,1)} pts por debajo del ritmo</b> (${fmtN(pctVal,1)}% vs ${fmtN(pacePos,1)}% esperado)</span><a class="a-act" href="#" onclick="scrollToPlan(event)">Ver plan →</a></div>`);
     }
   }
 
@@ -1757,14 +1762,23 @@ function render(data){
   document.getElementById('k-avg').textContent=fmtN(r.avg_lineas,1);
   document.getElementById('d-avg').innerHTML=c&&c.avg_lineas?deltaHtml(r.avg_lineas,c.avg_lineas,compLbl):'';
 
-  // Sparklines
+  // Sparklines + promedio 14 días hábiles debajo
   const sp=r.sparklines||{};
-  document.getElementById('spark-ped').innerHTML=sparkSvg(sp.pedidos);
-  document.getElementById('spark-ventas').innerHTML=sparkSvg(sp.ventas);
-  document.getElementById('spark-vend').innerHTML=sparkSvg(sp.ped_vend);
-  document.getElementById('spark-avg').innerHTML=sparkSvg(sp.avg_lin);
-  document.getElementById('spark-ticket').innerHTML=sparkSvg(sp.ticket);
-  document.getElementById('spark-factpct').innerHTML=sparkSvg(sp.fact_pct);
+  const avg14=(arr,fmt)=>{
+    if(!arr||arr.length<2)return '';
+    const m=arr.reduce((a,b)=>a+(Number(b)||0),0)/arr.length;
+    return `<div class="spark-avg" title="Promedio de los últimos ${arr.length} días hábiles">prom 14d: ${fmt(m)}</div>`;
+  };
+  const renderSpark=(id,arr,fmt)=>{
+    const el=document.getElementById(id);
+    if(el)el.innerHTML=sparkSvg(arr)+avg14(arr,fmt);
+  };
+  renderSpark('spark-ped',    sp.pedidos, v=>fmtN(v,0));
+  renderSpark('spark-ventas', sp.ventas,  v=>fmtK(v));
+  renderSpark('spark-vend',   sp.ped_vend,v=>fmtN(v,1));
+  renderSpark('spark-avg',    sp.avg_lin, v=>fmtN(v,1));
+  renderSpark('spark-ticket', sp.ticket,  v=>fmtK(v));
+  renderSpark('spark-factpct',sp.fact_pct,v=>fmtN(v,1)+'%');
 
   // Flow bar
   const fact_cnt=(bs[13]?.cnt||0)+(bs[18]?.cnt||0);
@@ -1829,7 +1843,7 @@ function render(data){
     }
     mhtml+=`<div class="mspa-row ${row.cls}">
       <span class="mspa-l">${sem}<span class="mspa-lbl">${row.l}</span></span>
-      <span class="mspa-val">${fmtK(d.val)}<span class="mspa-sub-txt">${fmtN(d.ords)} ord · ${fmtN(d.pos)} pos</span></span>
+      <span class="mspa-val">${fmtK(d.val)}<span class="mspa-sub-txt">${fmtN(d.ords)} ped · ${fmtN(d.pos)} líneas</span></span>
     </div>`;
   });
   document.getElementById('mspa-body').innerHTML=mhtml;
@@ -1937,7 +1951,22 @@ function updateDpHint(v){
 function gotoDate(clear){
   if(clear){window.location.href=window.location.pathname;return;}
   const v=document.getElementById('dp-input').value;
-  if(v)window.location.href=window.location.pathname+'?date='+v;
+  if(!v)return;
+  // Si eligen el día de hoy, ir a la URL limpia (modo operativo en vivo, no histórico)
+  const today=new Date().toISOString().slice(0,10);
+  if(v===today){window.location.href=window.location.pathname;return;}
+  window.location.href=window.location.pathname+'?date='+v;
+}
+
+function scrollToPlan(e){
+  if(e)e.preventDefault();
+  const el=document.getElementById('hero-card');
+  if(!el)return;
+  el.scrollIntoView({behavior:'smooth',block:'center'});
+  el.classList.remove('flash');
+  void el.offsetWidth;
+  el.classList.add('flash');
+  setTimeout(()=>el.classList.remove('flash'),1400);
 }
 
 load();
