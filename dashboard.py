@@ -1418,7 +1418,8 @@ function sparkSvg(data,w=74,h=30){
   const c=up?'var(--green)':'var(--red)';
   const gid='sg'+Math.abs(data.slice(0,3).reduce((a,v,i)=>a^(v*1000+i*7),0)).toString(36);
   const [lx,ly]=pts[pts.length-1];
-  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" title="Tendencia últimos 14 días hábiles">
+  <title>Tendencia últimos 14 días hábiles</title>
   <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0%" stop-color="${c}" stop-opacity=".18"/><stop offset="100%" stop-color="${c}" stop-opacity="0"/>
   </linearGradient></defs>
