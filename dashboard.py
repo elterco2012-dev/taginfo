@@ -1801,7 +1801,7 @@ function render(data){
     if(el)el.innerHTML=sparkSvg(arr)+avg14(arr,fmt);
   };
   renderSpark('spark-ped',    sp.pedidos, v=>fmtN(v,0));
-  renderSpark('spark-ventas', sp.ventas,  v=>fmtK(v));
+  renderSpark('spark-ventas', sp.ventas,  v=>fmtK(v*1e6));
   renderSpark('spark-vend',   sp.ped_vend,v=>fmtN(v,1));
   renderSpark('spark-avg',    sp.avg_lin, v=>fmtN(v,1));
   renderSpark('spark-ticket', sp.ticket,  v=>fmtK(v));
