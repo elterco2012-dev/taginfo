@@ -1843,7 +1843,7 @@ function render(data){
     }
     mhtml+=`<div class="mspa-row ${row.cls}">
       <span class="mspa-l">${sem}<span class="mspa-lbl">${row.l}</span></span>
-      <span class="mspa-val">${fmtK(d.val)}<span class="mspa-sub-txt">${fmtN(d.ords)} ord · ${fmtN(d.pos)} pos</span></span>
+      <span class="mspa-val">${fmtK(d.val)}<span class="mspa-sub-txt">${fmtN(d.ords)} ped · ${fmtN(d.pos)} líneas</span></span>
     </div>`;
   });
   document.getElementById('mspa-body').innerHTML=mhtml;
