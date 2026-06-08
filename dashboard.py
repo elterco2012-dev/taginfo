@@ -42,7 +42,7 @@ REACTOR_TTL = 600
 # ── Autenticación ─────────────────────────────────────────────────────────────
 DASH_USER     = os.environ.get("DASH_USER", "wurth")
 DASH_PASS     = os.environ.get("DASH_PASS", "Dashboard2026!")
-SESSION_TTL   = 8 * 3600   # 8 horas en segundos
+SESSION_TTL   = 12 * 3600  # 12 horas en segundos
 _sessions: dict = {}        # token -> datetime de creación
 _sess_lock = threading.Lock()
 
