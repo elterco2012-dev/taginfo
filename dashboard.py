@@ -2007,6 +2007,7 @@ setInterval(tick,1000);
 # ─────────────────────────────────────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args): pass
+    def address_string(self): return self.client_address[0]  # evita DNS inverso por cliente
 
     def send_json(self, data):
         body=json.dumps(data,ensure_ascii=False,cls=_Enc).encode()
