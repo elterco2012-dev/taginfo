@@ -15,6 +15,10 @@ import os
 import calendar
 from datetime import date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
+
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
 
 
 class _Enc(json.JSONEncoder):
@@ -703,15 +707,18 @@ def get_cached_data(override_date=None):
     now = datetime.now()
     today_summary = None
     if override_date:
-        # Fecha manual: fetch directo sin cache — datos exactos para esa fecha
-        try:
-            reactor = fetch_reactor(target_date=override_date)
-        except Exception as e:
-            reactor = {"error": str(e)}
-        try:
-            mspa = fetch_mspa(target_date=override_date)
-        except Exception as e:
-            mspa = {"error": str(e)}
+        # Fecha manual: fetch en paralelo para reducir tiempo de espera
+        results = {}
+        def _fetch_r():
+            try: results["reactor"] = fetch_reactor(target_date=override_date)
+            except Exception as e: results["reactor"] = {"error": str(e)}
+        def _fetch_m():
+            try: results["mspa"] = fetch_mspa(target_date=override_date)
+            except Exception as e: results["mspa"] = {"error": str(e)}
+        tr = threading.Thread(target=_fetch_r); tr.start()
+        tm = threading.Thread(target=_fetch_m); tm.start()
+        tr.join(); tm.join()
+        reactor, mspa = results["reactor"], results["mspa"]
         r_age, m_age = 0, 0
     else:
         with _lock:
@@ -2043,7 +2050,17 @@ def main():
     print(f"MSPA TTL: {MSPA_TTL}s  |  Reactor TTL: {REACTOR_TTL}s")
     print(f"SOLO LECTURA  |  http://localhost:{PORT}  |  Oscuro: ?dark=1")
     print("Ctrl+C para detener\n")
-    server=HTTPServer(("0.0.0.0",PORT),Handler)
+    # Pre-calentar caché en background para que la primera visita sea rápida
+    def _warm():
+        print("  Precalentando caché...")
+        try:
+            _get_cached(REACTOR_TTL, fetch_reactor, "reactor")
+            _get_cached(MSPA_TTL,    fetch_mspa,    "mspa")
+            print("  Caché listo.")
+        except Exception as e:
+            print(f"  Precalentamiento error: {e}")
+    threading.Thread(target=_warm, daemon=True).start()
+    server=ThreadingHTTPServer(("0.0.0.0",PORT),Handler)
     try: server.serve_forever()
     except KeyboardInterrupt: print("\nDetenido.")
 
