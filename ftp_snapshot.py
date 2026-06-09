@@ -262,26 +262,28 @@ def _ftp_upload(json_bytes: bytes, html_bytes: bytes):
 
 def _snapshot_loop(get_data_fn):
     html_bytes = _VIEWER_HTML.encode("utf-8")
-    print(f"  [FTP] Snapshot job activo — host={FTP_HOST} path={FTP_PATH} intervalo={FTP_INTERVAL}s")
+    print(f"  [FTP] Job activo — host={FTP_HOST} path={FTP_PATH} cada {FTP_INTERVAL}s", flush=True)
     while True:
         try:
             data       = get_data_fn()
             json_bytes = _build_snapshot_json(data, FTP_INTERVAL)
             _ftp_upload(json_bytes, html_bytes)
-            print(f"  [FTP] Snapshot subido OK — {datetime.now().strftime('%H:%M:%S')} ({len(json_bytes)} bytes)")
+            print(f"  [FTP] OK — {datetime.now().strftime('%H:%M:%S')} ({len(json_bytes)}b)", flush=True)
         except Exception as e:
-            print(f"  [FTP] Error al subir snapshot: {e}")
+            print(f"  [FTP] Error: {e}", flush=True)
         time.sleep(FTP_INTERVAL)
 
 
 def start_snapshot_job(get_data_fn):
-    """Inicia el job de FTP snapshot en un thread daemon.
+    """Inicia el FTP snapshot job en un thread daemon.
     Solo se activa si FTP_ENABLED=1 y FTP_HOST está configurado.
     """
+    print(f"  [FTP] FTP_ENABLED={FTP_ENABLED} FTP_HOST={FTP_HOST!r}", flush=True)
     if not FTP_ENABLED:
+        print("  [FTP] Desactivado. Setear FTP_ENABLED=1 para activar.", flush=True)
         return
     if not FTP_HOST or not FTP_USER or not FTP_PASS:
-        print("  [FTP] FTP_ENABLED=1 pero faltan FTP_HOST / FTP_USER / FTP_PASS. Job no iniciado.")
+        print("  [FTP] Faltan FTP_HOST / FTP_USER / FTP_PASS. Job no iniciado.", flush=True)
         return
     t = threading.Thread(target=_snapshot_loop, args=(get_data_fn,), daemon=True)
     t.start()
