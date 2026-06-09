@@ -2,8 +2,24 @@
 Würth Dashboard — FTP Snapshot Job
 """
 
-import ftplib, io, json, os, threading, time
+import ftplib, io, json, os, struct, threading, time, zlib
 from datetime import datetime
+
+
+def _make_png(size: int, r: int, g: int, b: int) -> bytes:
+    """Genera un PNG sólido de 'size x size' píxeles sin librerías externas."""
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff)
+    raw = (b'\x00' + bytes([r, g, b]) * size) * size
+    return (b'\x89PNG\r\n\x1a\n'
+            + chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0))
+            + chunk(b'IDAT', zlib.compress(raw, 6))
+            + chunk(b'IEND', b''))
+
+
+# Ícono rojo Würth (#cc0000) — requerido para el prompt de instalación PWA
+_ICON_192 = _make_png(192, 0xcc, 0x00, 0x00)
+_ICON_512 = _make_png(512, 0xcc, 0x00, 0x00)
 
 FTP_HOST     = os.environ.get("FTP_HOST",     "")
 FTP_USER     = os.environ.get("FTP_USER",     "")
@@ -32,7 +48,10 @@ _MANIFEST_DICT = {
   "name":"Würth Resumen Operativo","short_name":"Würth Ops",
   "start_url":"./","display":"standalone",
   "background_color":"#f1f5f9","theme_color":"#cc0000",
-  "icons":[{"src":"https://www.wurth.com.ar/favicon.ico","sizes":"any","type":"image/x-icon"}]
+  "icons":[
+    {"src":"icon-192.png","sizes":"192x192","type":"image/png"},
+    {"src":"icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ]
 }
 
 _VIEWER_HTML = """<!DOCTYPE html>
@@ -314,6 +333,8 @@ def _ftp_upload(json_bytes, html_bytes, sw_bytes, manifest_bytes):
     ftp.storbinary("STOR index.html",    io.BytesIO(html_bytes))
     ftp.storbinary("STOR sw.js",         io.BytesIO(sw_bytes))
     ftp.storbinary("STOR manifest.json", io.BytesIO(manifest_bytes))
+    ftp.storbinary("STOR icon-192.png",  io.BytesIO(_ICON_192))
+    ftp.storbinary("STOR icon-512.png",  io.BytesIO(_ICON_512))
     ftp.quit()
 
 
