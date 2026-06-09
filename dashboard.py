@@ -13,8 +13,15 @@ import threading
 import base64
 import os
 import calendar
+import hashlib
+import secrets
 from datetime import date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
+from ftp_snapshot import start_snapshot_job
+
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
 
 
 class _Enc(json.JSONEncoder):
@@ -32,6 +39,123 @@ FIRMA       = 1
 PORT        = 8765
 MSPA_TTL    = 60
 REACTOR_TTL = 600
+
+# ── Autenticación ─────────────────────────────────────────────────────────────
+DASH_USER     = os.environ.get("DASH_USER", "wurth")
+DASH_PASS     = os.environ.get("DASH_PASS", "Dashboard2026!")
+SESSION_TTL   = 12 * 3600  # 12 horas en segundos
+_sessions: dict = {}        # token -> datetime de creación
+_sess_lock = threading.Lock()
+
+# Protección brute-force: max 5 intentos fallidos por IP, bloqueo 15 minutos
+MAX_FAILED    = 5
+LOCKOUT_SECS  = 15 * 60
+_failed: dict = {}   # ip -> {"count": int, "since": datetime, "locked_at": datetime|None}
+_fail_lock    = threading.Lock()
+
+def _check_lockout(ip):
+    """Retorna (bloqueado, segundos_restantes)."""
+    with _fail_lock:
+        e = _failed.get(ip)
+        if not e:
+            return False, 0
+        if e.get("locked_at"):
+            elapsed = (datetime.now() - e["locked_at"]).total_seconds()
+            if elapsed < LOCKOUT_SECS:
+                return True, int(LOCKOUT_SECS - elapsed)
+            # Bloqueo expiró — limpiar
+            _failed.pop(ip, None)
+        return False, 0
+
+def _register_fail(ip):
+    with _fail_lock:
+        e = _failed.setdefault(ip, {"count": 0, "since": datetime.now(), "locked_at": None})
+        e["count"] += 1
+        if e["count"] >= MAX_FAILED:
+            e["locked_at"] = datetime.now()
+            print(f"  [AUTH] IP {ip} bloqueada por {LOCKOUT_SECS//60} min tras {e['count']} intentos fallidos")
+
+def _register_ok(ip):
+    with _fail_lock:
+        _failed.pop(ip, None)
+
+def _new_session():
+    token = secrets.token_hex(32)
+    with _sess_lock:
+        _sessions[token] = datetime.now()
+    return token
+
+def _valid_session(token):
+    if not token:
+        return False
+    with _sess_lock:
+        ts = _sessions.get(token)
+        if not ts:
+            return False
+        if (datetime.now() - ts).total_seconds() > SESSION_TTL:
+            _sessions.pop(token, None)
+            return False
+        return True
+
+def _get_cookie(headers, name):
+    cookie_hdr = headers.get("Cookie", "")
+    for part in cookie_hdr.split(";"):
+        k, _, v = part.strip().partition("=")
+        if k.strip() == name:
+            return v.strip()
+    return None
+
+LOGIN_HTML = """<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Operations Dashboard · Login</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',sans-serif;background:#f1f5f9;display:flex;align-items:center;
+     justify-content:center;min-height:100vh}
+.card{background:#fff;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,.1);
+      padding:40px;width:340px}
+.logo{display:flex;align-items:center;gap:10px;margin-bottom:28px}
+.logo-mark{width:32px;height:32px;background:#cc0000;border-radius:6px}
+.logo-txt{font-size:14px;font-weight:700;color:#1e293b}
+.logo-sub{font-size:11px;color:#64748b;margin-top:1px}
+h2{font-size:20px;font-weight:700;color:#1e293b;margin-bottom:6px}
+p{font-size:13px;color:#64748b;margin-bottom:24px}
+label{display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:5px}
+input{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:7px;
+      font-size:14px;outline:none;transition:border .15s}
+input:focus{border-color:#cc0000;box-shadow:0 0 0 3px rgba(204,0,0,.1)}
+.field{margin-bottom:16px}
+.err{color:#dc2626;font-size:12px;margin-bottom:14px;display:none}
+.err.show{display:block}
+button{width:100%;padding:11px;background:#cc0000;color:#fff;border:none;
+       border-radius:7px;font-size:14px;font-weight:600;cursor:pointer;
+       transition:background .15s}
+button:hover{background:#b91c1c}
+</style></head>
+<body>
+<div class="card">
+  <div class="logo">
+    <div class="logo-mark"></div>
+    <div><div class="logo-txt">Operations Dashboard</div>
+         <div class="logo-sub">Reactor · MSPA · Tiempo Real</div></div>
+  </div>
+  <h2>Iniciar sesión</h2>
+  <p>Ingresá tus credenciales para continuar</p>
+  <form method="POST" action="/login">
+    <div class="field"><label>Usuario</label>
+      <input name="u" type="text" autocomplete="username" autofocus></div>
+    <div class="field"><label>Contraseña</label>
+      <input name="p" type="password" autocomplete="current-password"></div>
+    <div class="err" id="err">@@ERR@@</div>
+    <button type="submit">Ingresar</button>
+  </form>
+</div>
+<script>
+if(document.getElementById('err').textContent.trim())
+  document.getElementById('err').classList.add('show');
+</script>
+</body></html>"""
 
 _lock           = threading.Lock()
 _cache_mspa     = None
@@ -703,15 +827,18 @@ def get_cached_data(override_date=None):
     now = datetime.now()
     today_summary = None
     if override_date:
-        # Fecha manual: fetch directo sin cache — datos exactos para esa fecha
-        try:
-            reactor = fetch_reactor(target_date=override_date)
-        except Exception as e:
-            reactor = {"error": str(e)}
-        try:
-            mspa = fetch_mspa(target_date=override_date)
-        except Exception as e:
-            mspa = {"error": str(e)}
+        # Fecha manual: fetch en paralelo para reducir tiempo de espera
+        results = {}
+        def _fetch_r():
+            try: results["reactor"] = fetch_reactor(target_date=override_date)
+            except Exception as e: results["reactor"] = {"error": str(e)}
+        def _fetch_m():
+            try: results["mspa"] = fetch_mspa(target_date=override_date)
+            except Exception as e: results["mspa"] = {"error": str(e)}
+        tr = threading.Thread(target=_fetch_r); tr.start()
+        tm = threading.Thread(target=_fetch_m); tm.start()
+        tr.join(); tm.join()
+        reactor, mspa = results["reactor"], results["mspa"]
         r_age, m_age = 0, 0
     else:
         with _lock:
@@ -2007,7 +2134,7 @@ setInterval(tick,1000);
 # ─────────────────────────────────────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args): pass
-    def address_string(self): return self.client_address[0]  # evita DNS inverso por cliente
+    def address_string(self): return self.client_address[0]
 
     def send_json(self, data):
         body=json.dumps(data,ensure_ascii=False,cls=_Enc).encode()
@@ -2017,24 +2144,86 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def send_html(self, html):
+    def send_html(self, html, status=200, extra_headers=None):
         body=html.encode()
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type","text/html; charset=utf-8")
         self.send_header("Content-Length",len(body))
+        for k,v in (extra_headers or []):
+            self.send_header(k,v)
         self.end_headers()
         self.wfile.write(body)
+
+    def redirect(self, location, extra_headers=None):
+        self.send_response(302)
+        self.send_header("Location", location)
+        for k,v in (extra_headers or []):
+            self.send_header(k,v)
+        self.end_headers()
+
+    def _authenticated(self):
+        token = _get_cookie(self.headers, "dash_session")
+        return _valid_session(token)
 
     def do_GET(self):
         from urllib.parse import urlparse, parse_qs
         parsed = urlparse(self.path)
         qs     = parse_qs(parsed.query)
+        if parsed.path == "/login":
+            self.send_html(LOGIN_HTML.replace("@@ERR@@",""))
+            return
+        if parsed.path == "/logout":
+            token = _get_cookie(self.headers, "dash_session")
+            if token:
+                with _sess_lock: _sessions.pop(token, None)
+            self.redirect("/login", [("Set-Cookie","dash_session=; Max-Age=0; Path=/")])
+            return
+        if not self._authenticated():
+            self.redirect("/login")
+            return
         if parsed.path in ("/", "/index.html"):
             self.send_html(HTML_PAGE)
         elif parsed.path == "/api/data":
             override = qs.get("date", [None])[0]
             self.send_json(get_cached_data(override_date=override))
-        else: self.send_response(404); self.end_headers()
+        else:
+            self.send_response(404); self.end_headers()
+
+    def do_POST(self):
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(self.path)
+        if parsed.path == "/login":
+            ip = self.client_address[0]
+            # Verificar bloqueo por intentos fallidos
+            locked, secs_left = _check_lockout(ip)
+            if locked:
+                mins = secs_left // 60
+                self.send_html(
+                    LOGIN_HTML.replace("@@ERR@@", f"Demasiados intentos fallidos. Esperá {mins} minuto{'s' if mins!=1 else ''}."),
+                    status=429
+                )
+                return
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length).decode()
+            params = parse_qs(body)
+            u = params.get("u", [""])[0].strip()
+            p = params.get("p", [""])[0]
+            if u == DASH_USER and p == DASH_PASS:
+                _register_ok(ip)
+                token  = _new_session()
+                cookie = f"dash_session={token}; Max-Age={SESSION_TTL}; Path=/; HttpOnly"
+                self.redirect("/", [("Set-Cookie", cookie)])
+            else:
+                _register_fail(ip)
+                locked2, secs2 = _check_lockout(ip)
+                if locked2:
+                    mins = secs2 // 60
+                    msg = f"Demasiados intentos fallidos. Esperá {mins} minuto{'s' if mins!=1 else ''}."
+                else:
+                    msg = "Usuario o contraseña incorrectos"
+                self.send_html(LOGIN_HTML.replace("@@ERR@@", msg), status=401)
+        else:
+            self.send_response(404); self.end_headers()
 
 
 def main():
@@ -2043,7 +2232,18 @@ def main():
     print(f"MSPA TTL: {MSPA_TTL}s  |  Reactor TTL: {REACTOR_TTL}s")
     print(f"SOLO LECTURA  |  http://localhost:{PORT}  |  Oscuro: ?dark=1")
     print("Ctrl+C para detener\n")
-    server=HTTPServer(("0.0.0.0",PORT),Handler)
+    # Pre-calentar caché en background para que la primera visita sea rápida
+    def _warm():
+        print("  Precalentando caché...")
+        try:
+            _get_cached(REACTOR_TTL, fetch_reactor, "reactor")
+            _get_cached(MSPA_TTL,    fetch_mspa,    "mspa")
+            print("  Caché listo.")
+        except Exception as e:
+            print(f"  Precalentamiento error: {e}")
+    threading.Thread(target=_warm, daemon=True).start()
+    start_snapshot_job(get_cached_data)
+    server=ThreadingHTTPServer(("0.0.0.0",PORT),Handler)
     try: server.serve_forever()
     except KeyboardInterrupt: print("\nDetenido.")
 
