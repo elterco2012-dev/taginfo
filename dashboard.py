@@ -18,6 +18,7 @@ import secrets
 from datetime import date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
+from ftp_snapshot import start_snapshot_job
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
@@ -2241,6 +2242,7 @@ def main():
         except Exception as e:
             print(f"  Precalentamiento error: {e}")
     threading.Thread(target=_warm, daemon=True).start()
+    start_snapshot_job(get_cached_data)
     server=ThreadingHTTPServer(("0.0.0.0",PORT),Handler)
     try: server.serve_forever()
     except KeyboardInterrupt: print("\nDetenido.")
