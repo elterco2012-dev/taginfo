@@ -44,6 +44,58 @@ self.addEventListener('fetch',e=>{
 });
 """
 
+FTP_AUTH_USER = os.environ.get("FTP_AUTH_USER", "wurth")
+FTP_AUTH_PASS = os.environ.get("FTP_AUTH_PASS", "")
+
+
+def _build_auth_php(auth_user: str, auth_pass: str) -> bytes:
+    # Hash de la contraseña con password_hash de PHP (bcrypt)
+    # Como no podemos llamar PHP desde Python, usamos SHA-256 con prefijo fijo.
+    # El PHP verifica con hash_equals para evitar timing attacks.
+    import hashlib
+    pass_hash = hashlib.sha256(auth_pass.encode()).hexdigest() if auth_pass else ""
+    php = f'''<?php
+// Würth Snapshot — HTTP Basic Auth
+// Credenciales: FTP_AUTH_USER / FTP_AUTH_PASS en el servidor dashboard
+define('AUTH_USER', {json.dumps(auth_user)});
+define('AUTH_HASH', {json.dumps(pass_hash)});  // sha256 de la contraseña
+
+function check_auth() {{
+    $u = $_SERVER['PHP_AUTH_USER'] ?? '';
+    $p = $_SERVER['PHP_AUTH_PW']   ?? '';
+    $ph = hash('sha256', $p);
+    return hash_equals(AUTH_USER, $u) && (AUTH_HASH === '' || hash_equals(AUTH_HASH, $ph));
+}}
+
+if (!check_auth()) {{
+    header('WWW-Authenticate: Basic realm="Würth Operativo"');
+    header('HTTP/1.0 401 Unauthorized');
+    echo '<h2 style="font-family:sans-serif;margin:40px;color:#cc0000">Acceso no autorizado</h2>';
+    exit;
+}}
+
+// Autenticado — servir el archivo solicitado
+$file = basename($_GET['f'] ?? 'index.html');
+$allowed = ['index.html','snapshot.json','manifest.json','sw.js','icon-192.png','icon-512.png'];
+if (!in_array($file, $allowed, true)) {{
+    http_response_code(404); exit;
+}}
+$path = __DIR__ . '/' . $file;
+if (!file_exists($path)) {{ http_response_code(404); exit; }}
+$mime = [
+    'html' => 'text/html; charset=utf-8',
+    'json' => 'application/json; charset=utf-8',
+    'js'   => 'application/javascript',
+    'png'  => 'image/png',
+];
+$ext  = pathinfo($file, PATHINFO_EXTENSION);
+header('Content-Type: ' . ($mime[$ext] ?? 'application/octet-stream'));
+header('Cache-Control: no-store');
+readfile($path);
+'''
+    return php.encode("utf-8")
+
+
 _MANIFEST_DICT = {
   "name":"Würth Resumen Operativo","short_name":"Würth Ops",
   "start_url":"./","display":"standalone",
@@ -319,7 +371,7 @@ def _build_snapshot_json(data: dict, interval_secs: int) -> bytes:
     return json.dumps(snapshot, ensure_ascii=False, default=str).encode("utf-8")
 
 
-def _ftp_upload(json_bytes, html_bytes, sw_bytes, manifest_bytes):
+def _ftp_upload(json_bytes, html_bytes, sw_bytes, manifest_bytes, auth_php_bytes):
     ftp = ftplib.FTP()
     ftp.connect(FTP_HOST, 21, timeout=20)
     ftp.login(FTP_USER, FTP_PASS)
@@ -335,6 +387,9 @@ def _ftp_upload(json_bytes, html_bytes, sw_bytes, manifest_bytes):
     ftp.storbinary("STOR manifest.json", io.BytesIO(manifest_bytes))
     ftp.storbinary("STOR icon-192.png",  io.BytesIO(_ICON_192))
     ftp.storbinary("STOR icon-512.png",  io.BytesIO(_ICON_512))
+    # auth.php solo se sube si hay contraseña configurada
+    if auth_php_bytes:
+        ftp.storbinary("STOR auth.php", io.BytesIO(auth_php_bytes))
     ftp.quit()
 
 
@@ -347,7 +402,8 @@ def _snapshot_loop(get_data_fn):
             html_bytes = _VIEWER_HTML.encode("utf-8")
             sw_bytes   = _SW_JS.encode("utf-8")
             man_bytes  = json.dumps(_MANIFEST_DICT, ensure_ascii=False).encode("utf-8")
-            _ftp_upload(json_bytes, html_bytes, sw_bytes, man_bytes)
+            auth_bytes = _build_auth_php(FTP_AUTH_USER, FTP_AUTH_PASS) if FTP_AUTH_PASS else None
+            _ftp_upload(json_bytes, html_bytes, sw_bytes, man_bytes, auth_bytes)
             print(f"  [FTP] OK — {datetime.now().strftime('%H:%M:%S')} ({len(json_bytes)}b)", flush=True)
         except Exception as e:
             print(f"  [FTP] Error: {e}", flush=True)
