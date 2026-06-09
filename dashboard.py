@@ -46,6 +46,38 @@ SESSION_TTL   = 12 * 3600  # 12 horas en segundos
 _sessions: dict = {}        # token -> datetime de creación
 _sess_lock = threading.Lock()
 
+# Protección brute-force: max 5 intentos fallidos por IP, bloqueo 15 minutos
+MAX_FAILED    = 5
+LOCKOUT_SECS  = 15 * 60
+_failed: dict = {}   # ip -> {"count": int, "since": datetime, "locked_at": datetime|None}
+_fail_lock    = threading.Lock()
+
+def _check_lockout(ip):
+    """Retorna (bloqueado, segundos_restantes)."""
+    with _fail_lock:
+        e = _failed.get(ip)
+        if not e:
+            return False, 0
+        if e.get("locked_at"):
+            elapsed = (datetime.now() - e["locked_at"]).total_seconds()
+            if elapsed < LOCKOUT_SECS:
+                return True, int(LOCKOUT_SECS - elapsed)
+            # Bloqueo expiró — limpiar
+            _failed.pop(ip, None)
+        return False, 0
+
+def _register_fail(ip):
+    with _fail_lock:
+        e = _failed.setdefault(ip, {"count": 0, "since": datetime.now(), "locked_at": None})
+        e["count"] += 1
+        if e["count"] >= MAX_FAILED:
+            e["locked_at"] = datetime.now()
+            print(f"  [AUTH] IP {ip} bloqueada por {LOCKOUT_SECS//60} min tras {e['count']} intentos fallidos")
+
+def _register_ok(ip):
+    with _fail_lock:
+        _failed.pop(ip, None)
+
 def _new_session():
     token = secrets.token_hex(32)
     with _sess_lock:
@@ -2160,20 +2192,35 @@ class Handler(BaseHTTPRequestHandler):
         from urllib.parse import urlparse, parse_qs
         parsed = urlparse(self.path)
         if parsed.path == "/login":
+            ip = self.client_address[0]
+            # Verificar bloqueo por intentos fallidos
+            locked, secs_left = _check_lockout(ip)
+            if locked:
+                mins = secs_left // 60
+                self.send_html(
+                    LOGIN_HTML.replace("@@ERR@@", f"Demasiados intentos fallidos. Esperá {mins} minuto{'s' if mins!=1 else ''}."),
+                    status=429
+                )
+                return
             length = int(self.headers.get("Content-Length", 0))
             body   = self.rfile.read(length).decode()
             params = parse_qs(body)
             u = params.get("u", [""])[0].strip()
             p = params.get("p", [""])[0]
             if u == DASH_USER and p == DASH_PASS:
+                _register_ok(ip)
                 token  = _new_session()
                 cookie = f"dash_session={token}; Max-Age={SESSION_TTL}; Path=/; HttpOnly"
                 self.redirect("/", [("Set-Cookie", cookie)])
             else:
-                self.send_html(
-                    LOGIN_HTML.replace("@@ERR@@","Usuario o contraseña incorrectos"),
-                    status=401
-                )
+                _register_fail(ip)
+                locked2, secs2 = _check_lockout(ip)
+                if locked2:
+                    mins = secs2 // 60
+                    msg = f"Demasiados intentos fallidos. Esperá {mins} minuto{'s' if mins!=1 else ''}."
+                else:
+                    msg = "Usuario o contraseña incorrectos"
+                self.send_html(LOGIN_HTML.replace("@@ERR@@", msg), status=401)
         else:
             self.send_response(404); self.end_headers()
 
