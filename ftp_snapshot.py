@@ -523,7 +523,7 @@ _MANIFEST = json.dumps({
     ]
 }, ensure_ascii=False, indent=2)
 
-_SW_JS = r"""const CACHE='wurth-v2';
+_SW_JS = r"""const CACHE='wurth-v3';
 const ASSETS=['./','./manifest.json','./icon-192.png'];
 self.addEventListener('install',e=>e.waitUntil(
   caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())
