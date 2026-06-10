@@ -4,6 +4,7 @@ Corre como daemon thread iniciado por dashboard.py.
 SOLO LECTURA: nunca modifica la base de datos.
 """
 import os, json, time, ftplib, threading, hashlib, hmac, datetime, zlib, struct, io
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FuturesTimeout
 
 # ── Configuración por variables de entorno ──────────────────────────────────
 FTP_HOST     = os.environ.get("FTP_HOST", "")
@@ -658,12 +659,21 @@ def _ensure_dir(ftp, path):
             except Exception:
                 pass
 
+_DATA_TIMEOUT = 90  # segundos máximos esperando datos de la BD
+
 def _snapshot_loop(get_data_fn, interval):
     """Main loop: build snapshot and upload every `interval` seconds."""
     print(f"[FTP] Job activo — host={FTP_HOST}  cada {interval}s", flush=True)
+    _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ftp-data")
     while True:
         try:
-            data = get_data_fn()
+            fut = _pool.submit(get_data_fn)
+            try:
+                data = fut.result(timeout=_DATA_TIMEOUT)
+            except _FuturesTimeout:
+                print(f"[FTP] Timeout obteniendo datos ({_DATA_TIMEOUT}s) — siguiente ciclo en {interval}s", flush=True)
+                time.sleep(interval)
+                continue
             snap = _build_snapshot_json(data, interval)
             snap_json = json.dumps(snap, ensure_ascii=False, default=str)
 
