@@ -1000,10 +1000,8 @@ body.tv .meta-curr{font-size:28px}
 /* ── RESPONSIVE ── */
 @media(max-width:1080px){.hero{grid-template-columns:1fr}.bottom{grid-template-columns:1fr}.sellers-wrap{grid-template-columns:1fr}.kpi-grid{grid-template-columns:repeat(2,1fr)}}
 /* ── KIOSK ── */
-.slide-wrap{display:contents}
+body.kiosk{overflow:hidden}
 body.kiosk .main{padding-bottom:74px}
-body.kiosk .slide-wrap{display:none;flex-direction:column;gap:26px}
-body.kiosk .slide-wrap.active{display:flex}
 .kiosk-bar{display:none;position:fixed;bottom:0;left:0;right:0;height:52px;background:var(--card);border-top:1px solid var(--border);z-index:200;padding:0 18px;align-items:center;grid-template-columns:1fr auto 1fr}
 body.kiosk .kiosk-bar{display:grid}
 .kiosk-lbl{font-size:11px;color:var(--text3);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
@@ -1061,9 +1059,6 @@ body.kiosk .kiosk-bar{display:grid}
 <div class="hist-banner" id="hist-banner">⚠ MODO HISTÓRICO — Datos del <span id="hist-date"></span> · No son datos de hoy</div>
 
 <div class="main">
-
-  <!-- Slide 1: alertas, hero, KPIs, flujo, hoy -->
-  <div class="slide-wrap active" id="slide-1">
 
   <!-- Banda de alertas por excepción -->
   <div id="alerts-band" style="display:none"></div>
@@ -1275,13 +1270,8 @@ body.kiosk .kiosk-bar{display:grid}
     </div>
   </div>
 
-  </div><!-- /slide-1 -->
-
-  <!-- Slide 2: ritmo, gráfico, MSPA, ranking -->
-  <div class="slide-wrap" id="slide-2">
-
-  <!-- Ritmo mensual -->
-  <div class="meta-card">
+  <!-- Ritmo mensual — ancla para kiosk página 2 -->
+  <div class="meta-card" id="kiosk-p2">
     <div class="sec-lbl">Ritmo Mensual — Pedidos vs. Mes Anterior</div>
     <div class="meta-row" id="meta-row">
       <span style="color:var(--text3);font-size:11px">Cargando...</span>
@@ -1333,8 +1323,6 @@ body.kiosk .kiosk-bar{display:grid}
         <div class="sk" style="width:75%;height:34px;border-radius:4px"></div>
       </div>
     </div>
-  </div><!-- /slide-2 -->
-
   <!-- Ranking vendedores — oculto por pedido de Daniel -->
   <div class="sec" style="display:none">
     <div class="sec-lbl">Ranking de vendedores</div>
@@ -1969,25 +1957,26 @@ function gotoDate(clear){
 load();
 setInterval(tick,1000);
 
-// ── KIOSK ──
-const KIOSK_PAGES=['slide-1','slide-2'];
+// ── KIOSK (scroll-based, no rompe layout) ──
+const KIOSK_ANCHORS=[null,'kiosk-p2']; // null = top, id = scroll target
 const KIOSK_INTERVAL=20000;
 let _kioskPage=0, _kioskTimer=null, _kioskPaused=false, _kioskTick=0;
 
 function kioskGoTo(idx){
   _kioskPage=idx;
   _kioskTick=0;
-  KIOSK_PAGES.forEach((id,i)=>{
-    const el=document.getElementById(id);
-    if(el){el.classList.toggle('active',i===idx);}
-  });
+  const anchor=KIOSK_ANCHORS[idx];
+  if(anchor){
+    const el=document.getElementById(anchor);
+    if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
+  } else {
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
   document.querySelectorAll('.kiosk-dot').forEach((d,i)=>d.classList.toggle('active',i===idx));
-  document.getElementById('kiosk-lbl').textContent=`Página ${idx+1} de ${KIOSK_PAGES.length}`;
+  document.getElementById('kiosk-lbl').textContent=`Página ${idx+1} de ${KIOSK_ANCHORS.length}`;
   document.getElementById('kiosk-prog-fill').style.width='0%';
 }
-function kioskAdvance(){
-  kioskGoTo((_kioskPage+1)%KIOSK_PAGES.length);
-}
+function kioskAdvance(){kioskGoTo((_kioskPage+1)%KIOSK_ANCHORS.length);}
 function kioskTick(){
   if(_kioskPaused)return;
   _kioskTick+=200;
@@ -2007,7 +1996,10 @@ function kioskStart(){
   _kioskPage=0; _kioskTick=0; _kioskPaused=false;
   document.body.classList.add('kiosk','tv');
   document.getElementById('kiosk-btn').classList.add('on');
-  kioskGoTo(0);
+  window.scrollTo({top:0});
+  document.querySelectorAll('.kiosk-dot').forEach((d,i)=>d.classList.toggle('active',i===0));
+  document.getElementById('kiosk-lbl').textContent=`Página 1 de ${KIOSK_ANCHORS.length}`;
+  document.getElementById('kiosk-prog-fill').style.width='0%';
   if(_kioskTimer)clearInterval(_kioskTimer);
   _kioskTimer=setInterval(kioskTick,200);
   if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{});
@@ -2017,10 +2009,6 @@ function kioskStop(){
   if(_kioskTimer){clearInterval(_kioskTimer);_kioskTimer=null;}
   document.body.classList.remove('kiosk','tv');
   document.getElementById('kiosk-btn').classList.remove('on');
-  KIOSK_PAGES.forEach((id,i)=>{
-    const el=document.getElementById(id);
-    if(el)el.classList.toggle('active',i===0);
-  });
   if(document.exitFullscreen&&document.fullscreenElement)document.exitFullscreen().catch(()=>{});
   if(_lastTrend)renderChart(_lastTrend);
 }
