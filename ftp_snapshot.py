@@ -659,7 +659,7 @@ def _ensure_dir(ftp, path):
             except Exception:
                 pass
 
-_DATA_TIMEOUT = 90  # segundos máximos para obtener datos de la BD
+_DATA_TIMEOUT = 90  # segundos máximos esperando datos de la BD
 
 def _snapshot_loop(get_data_fn, interval):
     """Main loop: build snapshot and upload every `interval` seconds."""
@@ -667,12 +667,11 @@ def _snapshot_loop(get_data_fn, interval):
     _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ftp-data")
     while True:
         try:
-            # Obtener datos con timeout para evitar que una consulta colgada bloquee el loop
             fut = _pool.submit(get_data_fn)
             try:
                 data = fut.result(timeout=_DATA_TIMEOUT)
             except _FuturesTimeout:
-                print(f"[FTP] Timeout obteniendo datos ({_DATA_TIMEOUT}s) — reintentando en {interval}s", flush=True)
+                print(f"[FTP] Timeout obteniendo datos ({_DATA_TIMEOUT}s) — siguiente ciclo en {interval}s", flush=True)
                 time.sleep(interval)
                 continue
             snap = _build_snapshot_json(data, interval)
