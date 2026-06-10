@@ -2076,6 +2076,11 @@ def main():
     print(f"MSPA TTL: {MSPA_TTL}s  |  Reactor TTL: {REACTOR_TTL}s")
     print(f"SOLO LECTURA  |  http://localhost:{PORT}  |  Oscuro: ?dark=1")
     print("Ctrl+C para detener\n")
+    try:
+        from ftp_snapshot import start_snapshot_job
+        start_snapshot_job(get_cached_data)
+    except Exception as e:
+        print(f"[FTP] No se pudo iniciar el job: {e}")
     server=HTTPServer(("0.0.0.0",PORT),Handler)
     try: server.serve_forever()
     except KeyboardInterrupt: print("\nDetenido.")
