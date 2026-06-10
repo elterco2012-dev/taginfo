@@ -498,10 +498,18 @@ header('Cache-Control: no-store');
 readfile($file);
 """
 
-_HTACCESS = """<Files "snapshot.json">
-    Order deny,allow
-    Deny from all
+_HTACCESS = """# Permitir lectura de snapshot.json (lo consume el viewer index.html)
+<Files "snapshot.json">
+    Require all granted
+    Order allow,deny
+    Allow from all
 </Files>
+# No cachear el snapshot para que el celular siempre vea datos frescos
+<IfModule mod_headers.c>
+    <Files "snapshot.json">
+        Header set Cache-Control "no-store, no-cache, must-revalidate"
+    </Files>
+</IfModule>
 """
 
 _MANIFEST = json.dumps({
@@ -689,10 +697,12 @@ def _snapshot_loop(get_data_fn, interval):
                 viewer = _VIEWER_HTML.replace("__INTERVAL__", str(interval))
                 _ftp_upload_text(ftp, "index.html", viewer)
 
-                # PHP proxy + htaccess (only if auth configured)
+                # .htaccess SIEMPRE — pisa cualquier versión vieja que bloquee snapshot.json
+                _ftp_upload_text(ftp, ".htaccess", _HTACCESS)
+
+                # PHP proxy solo si hay auth configurada
                 if FTP_AUTH_PASS:
                     _ftp_upload_text(ftp, "index.php", _INDEX_PHP)
-                    _ftp_upload_text(ftp, ".htaccess", _HTACCESS)
 
                 # manifest + sw
                 _ftp_upload_text(ftp, "manifest.json", _MANIFEST)
