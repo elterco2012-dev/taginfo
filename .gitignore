@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 *.pyo
+
+# Credenciales locales del servidor — NUNCA subir a git
+ftp_credenciales.bat
