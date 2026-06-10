@@ -2232,18 +2232,13 @@ def main():
     print(f"MSPA TTL: {MSPA_TTL}s  |  Reactor TTL: {REACTOR_TTL}s")
     print(f"SOLO LECTURA  |  http://localhost:{PORT}  |  Oscuro: ?dark=1")
     print("Ctrl+C para detener\n")
-    # Pre-calentar caché en background para que la primera visita sea rápida
-    def _warm():
-        print("  Precalentando caché...")
-        try:
-            _get_cached(REACTOR_TTL, fetch_reactor, "reactor")
-            _get_cached(MSPA_TTL,    fetch_mspa,    "mspa")
-            print("  Caché listo.")
-        except Exception as e:
-            print(f"  Precalentamiento error: {e}")
-    threading.Thread(target=_warm, daemon=True).start()
-    start_snapshot_job(get_cached_data)
-    server=ThreadingHTTPServer(("0.0.0.0",PORT),Handler)
+    try:
+        from ftp_snapshot import start_snapshot_job
+        start_snapshot_job(get_cached_data)
+    except Exception as e:
+        print(f"  [FTP] No se pudo iniciar el job: {e}", flush=True)
+    from http.server import ThreadingHTTPServer
+    server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     try: server.serve_forever()
     except KeyboardInterrupt: print("\nDetenido.")
 

@@ -1,424 +1,724 @@
 """
-Würth Dashboard — FTP Snapshot Job
+ftp_snapshot.py — Sube un snapshot JSON + viewer HTML al servidor FTP.
+Corre como daemon thread iniciado por dashboard.py.
+SOLO LECTURA: nunca modifica la base de datos.
+"""
+import os, json, time, ftplib, threading, hashlib, hmac, datetime, zlib, struct, io
+
+# ── Configuración por variables de entorno ──────────────────────────────────
+FTP_HOST     = os.environ.get("FTP_HOST", "")
+FTP_USER     = os.environ.get("FTP_USER", "")
+FTP_PASS     = os.environ.get("FTP_PASS", "")
+FTP_PATH     = os.environ.get("FTP_PATH", "/")
+FTP_INTERVAL = int(os.environ.get("FTP_INTERVAL", "300"))
+FTP_ENABLED  = os.environ.get("FTP_ENABLED", "0") == "1"
+FTP_AUTH_USER = os.environ.get("FTP_AUTH_USER", "wurth")
+FTP_AUTH_PASS = os.environ.get("FTP_AUTH_PASS", "")
+
+# ── HTML del viewer móvil (PWA Fortune-500) ─────────────────────────────────
+_VIEWER_HTML = r"""<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#c8102e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ventas">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Ventas Würth</title>
+<style>
+:root{
+  --red:#c8102e;--dark:#111;--card:#1a1a1a;--border:#2a2a2a;
+  --text:#f0f0f0;--muted:#888;--green:#22c55e;--amber:#f59e0b;
+  --blue:#3b82f6;--spark:#c8102e;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#0d0d0d;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;overscroll-behavior:none}
+body{display:flex;flex-direction:column;max-width:430px;margin:0 auto;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+
+/* Header */
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 8px;gap:8px}
+.hdr-left{display:flex;flex-direction:column;gap:2px}
+.greeting{font-size:13px;color:var(--muted);font-weight:400}
+.hdr-title{font-size:20px;font-weight:700;letter-spacing:-.3px}
+.logo{width:36px;height:36px;background:var(--red);border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#fff;letter-spacing:-.5px;flex-shrink:0}
+
+/* Refresh btn */
+.refresh-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:20px;padding:6px 14px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .2s}
+.refresh-btn:active{transform:scale(.96)}
+.refresh-btn.spinning svg{animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Timestamp */
+.ts-bar{padding:2px 20px 10px;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.ts-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0}
+.ts-dot.stale{background:var(--amber)}
+.ts-dot.old{background:#666}
+
+/* Quota hero */
+.quota-hero{margin:4px 16px 12px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px 18px}
+.quota-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+.quota-label{font-size:12px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.5px}
+.quota-pct{font-size:36px;font-weight:800;letter-spacing:-1px;line-height:1}
+.quota-pct span{font-size:16px;font-weight:500;color:var(--muted)}
+.quota-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.quota-bar-wrap{height:8px;background:#222;border-radius:4px;overflow:hidden}
+.quota-bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#c8102e,#ff4d6d);transition:width 1.2s cubic-bezier(.4,0,.2,1)}
+.quota-bar-fill.done{background:linear-gradient(90deg,#16a34a,#22c55e)}
+
+/* Sparkline */
+.spark-row{display:flex;gap:10px;margin:4px 16px 12px}
+.spark-card{flex:1;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;min-width:0}
+.spark-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.spark-val{font-size:19px;font-weight:700;letter-spacing:-.4px;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.spark-svg{width:100%;height:32px;display:block}
+
+/* KPI grid */
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px 10px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px}
+.kpi-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.kpi-val{font-size:22px;font-weight:700;letter-spacing:-.5px;line-height:1.1}
+.kpi-val.mono{font-variant-numeric:tabular-nums}
+.kpi-sub{font-size:11px;color:var(--muted);margin-top:4px}
+
+/* Delta badge */
+.delta{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:20px;margin-left:6px;vertical-align:middle}
+.delta.up{background:rgba(34,197,94,.15);color:#22c55e}
+.delta.down{background:rgba(239,68,68,.15);color:#ef4444}
+.delta.neutral{background:rgba(156,163,175,.1);color:#9ca3af}
+
+/* Toast */
+.toast{position:fixed;bottom:calc(env(safe-area-inset-bottom)+24px);left:50%;transform:translateX(-50%) translateY(20px);background:#333;color:#fff;padding:10px 20px;border-radius:24px;font-size:13px;opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap;z-index:999}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* Celebration overlay */
+.celeb{position:fixed;inset:0;z-index:9999;pointer-events:none;display:none}
+.celeb.active{display:block}
+.celeb-msg{position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);text-align:center;animation:popIn .5s cubic-bezier(.34,1.56,.64,1) forwards}
+.celeb-emoji{font-size:72px;display:block;margin-bottom:8px}
+.celeb-text{font-size:22px;font-weight:800;color:#ffd700;text-shadow:0 2px 20px rgba(0,0,0,.8)}
+.celeb-sub{font-size:14px;color:#fff;opacity:.8;margin-top:4px}
+@keyframes popIn{from{opacity:0;transform:translate(-50%,-60%) scale(.5)}to{opacity:1;transform:translate(-50%,-60%) scale(1)}}
+.confetti-piece{position:absolute;width:8px;height:8px;border-radius:2px;animation:fall linear forwards}
+@keyframes fall{0%{transform:translateY(-20px) rotate(0deg);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}
+
+/* Pull-to-refresh indicator */
+.ptr-indicator{text-align:center;padding:8px;font-size:12px;color:var(--muted);height:0;overflow:hidden;transition:height .2s}
+.ptr-indicator.visible{height:32px}
+
+/* Scrollable content */
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:24px}
+</style>
+</head>
+<body>
+<div class="ptr-indicator" id="ptr">↓ Actualizando…</div>
+
+<div class="hdr">
+  <div class="hdr-left">
+    <span class="greeting" id="greeting"></span>
+    <span class="hdr-title">Ventas Würth</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <button class="refresh-btn" id="refreshBtn" onclick="doRefresh()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+      Actualizar
+    </button>
+    <div class="logo">W</div>
+  </div>
+</div>
+
+<div class="ts-bar">
+  <div class="ts-dot" id="tsDot"></div>
+  <span id="tsText">Cargando…</span>
+</div>
+
+<div class="scroll" id="scrollArea">
+  <!-- Quota hero -->
+  <div class="quota-hero" id="quotaHero" style="display:none">
+    <div class="quota-top">
+      <div>
+        <div class="quota-label">Plan del mes</div>
+        <div class="quota-sub" id="quotaSub"></div>
+      </div>
+      <div style="text-align:right">
+        <div class="quota-pct"><span id="quotaPct">0</span><span>%</span></div>
+      </div>
+    </div>
+    <div class="quota-bar-wrap"><div class="quota-bar-fill" id="quotaBar" style="width:0%"></div></div>
+  </div>
+
+  <!-- Sparklines row -->
+  <div class="spark-row" id="sparkRow" style="display:none">
+    <div class="spark-card">
+      <div class="spark-label">Pedidos / día</div>
+      <div class="spark-val" id="sparkPedVal">—</div>
+      <svg class="spark-svg" id="sparkPed" viewBox="0 0 100 32" preserveAspectRatio="none"></svg>
+    </div>
+    <div class="spark-card">
+      <div class="spark-label">Ventas / día</div>
+      <div class="spark-val" id="sparkVenVal">—</div>
+      <svg class="spark-svg" id="sparkVen" viewBox="0 0 100 32" preserveAspectRatio="none"></svg>
+    </div>
+  </div>
+
+  <!-- KPI grid -->
+  <div class="kpi-grid" id="kpiGrid" style="display:none">
+    <div class="kpi">
+      <div class="kpi-label">Venta hoy</div>
+      <div class="kpi-val mono" id="kVenta">—</div>
+      <div class="kpi-sub" id="kVentaDelta"></div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Pedidos hoy</div>
+      <div class="kpi-val" id="kPedidos">—</div>
+      <div class="kpi-sub" id="kPedidosDelta"></div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Vendedores</div>
+      <div class="kpi-val" id="kVendedores">—</div>
+      <div class="kpi-sub" id="kVendedoresDelta"></div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Líns / pedido</div>
+      <div class="kpi-val" id="kLineas">—</div>
+      <div class="kpi-sub"></div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Backorders</div>
+      <div class="kpi-val" id="kBack">—</div>
+      <div class="kpi-sub"></div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Remitos</div>
+      <div class="kpi-val" id="kRemitos">—</div>
+      <div class="kpi-sub"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Celebration overlay -->
+<div class="celeb" id="celeb">
+  <div class="celeb-msg">
+    <span class="celeb-emoji">🏆</span>
+    <div class="celeb-text">¡Meta alcanzada!</div>
+    <div class="celeb-sub">El equipo superó el plan del mes</div>
+  </div>
+  <canvas id="confettiCanvas" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
+</div>
+
+<script>
+const INTERVAL = __INTERVAL__;
+let _data = null;
+let _prevData = null;
+let _refreshTimer = null;
+
+// ── Greeting ──────────────────────────────────────────────────────────────
+function setGreeting(){
+  const h = new Date().getHours();
+  const g = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
+  document.getElementById('greeting').textContent = g + ', Daniel';
+}
+setGreeting();
+
+// ── Format helpers ────────────────────────────────────────────────────────
+function fmtARS(v){
+  if(v===null||v===undefined) return '—';
+  return '$' + Number(v).toLocaleString('es-AR',{maximumFractionDigits:0});
+}
+function fmtNum(v){
+  if(v===null||v===undefined) return '—';
+  return Number(v).toLocaleString('es-AR');
+}
+function deltaHtml(cur, prev, isMoney){
+  if(prev===null||prev===undefined||cur===null||cur===undefined) return '';
+  const diff = cur - prev;
+  if(diff===0) return '';
+  const sign = diff>0?'▲':'▼';
+  const cls = diff>0?'up':'down';
+  const val = isMoney ? fmtARS(Math.abs(diff)) : fmtNum(Math.abs(diff));
+  return `<span class="delta ${cls}">${sign} ${val} vs ayer</span>`;
+}
+
+// ── Count-up animation ────────────────────────────────────────────────────
+function countUp(el, target, duration, fmt){
+  const start = performance.now();
+  const from = 0;
+  function step(now){
+    const p = Math.min((now-start)/duration, 1);
+    const ease = 1-Math.pow(1-p,3);
+    const cur = from + (target-from)*ease;
+    el.textContent = fmt(cur);
+    if(p<1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// ── Sparkline SVG ─────────────────────────────────────────────────────────
+function drawSpark(svgEl, values){
+  if(!values||values.length<2){svgEl.innerHTML='';return;}
+  const mn=Math.min(...values), mx=Math.max(...values);
+  const range=mx-mn||1;
+  const w=100, h=32, pad=2;
+  const pts=values.map((v,i)=>{
+    const x=pad+(w-2*pad)*i/(values.length-1);
+    const y=pad+(h-2*pad)*(1-(v-mn)/range);
+    return `${x},${y}`;
+  });
+  const last=pts[pts.length-1].split(',');
+  svgEl.innerHTML=
+    `<polyline points="${pts.join(' ')}" fill="none" stroke="var(--spark)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>` +
+    `<circle cx="${last[0]}" cy="${last[1]}" r="2.5" fill="var(--spark)"/>`;
+}
+
+// ── Relative time ─────────────────────────────────────────────────────────
+function relTime(ts){
+  if(!ts) return '';
+  const d=new Date(ts), now=new Date();
+  const diff=Math.round((now-d)/1000);
+  if(diff<5) return 'ahora mismo';
+  if(diff<60) return `hace ${diff}s`;
+  const m=Math.round(diff/60);
+  if(m<60) return `hace ${m} min`;
+  const hr=Math.round(m/60);
+  return `hace ${hr}h`;
+}
+
+// ── Freshness dot ─────────────────────────────────────────────────────────
+function freshnessClass(ts){
+  if(!ts) return 'old';
+  const age=(Date.now()-new Date(ts).getTime())/1000;
+  if(age < INTERVAL*1.5) return '';
+  if(age < INTERVAL*3) return 'stale';
+  return 'old';
+}
+
+// ── Celebration ───────────────────────────────────────────────────────────
+function maybeCelebrate(pct){
+  if(pct<100) return;
+  const key='celeb_'+new Date().toDateString();
+  if(localStorage.getItem(key)) return;
+  localStorage.setItem(key,'1');
+  const overlay=document.getElementById('celeb');
+  overlay.classList.add('active');
+  launchConfetti();
+  setTimeout(()=>overlay.classList.remove('active'), 4000);
+}
+function launchConfetti(){
+  const canvas=document.getElementById('confettiCanvas');
+  const ctx=canvas.getContext('2d');
+  canvas.width=window.innerWidth; canvas.height=window.innerHeight;
+  const colors=['#ffd700','#ff4d6d','#22c55e','#3b82f6','#f59e0b','#c8102e'];
+  const pieces=Array.from({length:80},()=>({
+    x:Math.random()*canvas.width, y:-10,
+    r:Math.random()*4+3,
+    c:colors[Math.floor(Math.random()*colors.length)],
+    sp:Math.random()*4+2,
+    ang:Math.random()*360,
+    rot:Math.random()*6-3
+  }));
+  let frame=0;
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    pieces.forEach(p=>{
+      p.y+=p.sp; p.ang+=p.rot;
+      ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.ang*Math.PI/180);
+      ctx.fillStyle=p.c;ctx.fillRect(-p.r,-p.r,p.r*2,p.r*2);
+      ctx.restore();
+    });
+    frame++;
+    if(frame<120) requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+// ── Render ────────────────────────────────────────────────────────────────
+function render(d, prev){
+  if(!d) return;
+
+  // Timestamp
+  const dot=document.getElementById('tsDot');
+  const tsText=document.getElementById('tsText');
+  dot.className='ts-dot '+freshnessClass(d.ts);
+  tsText.textContent=(d.ts?relTime(d.ts):'—') + (d.comp_date?' · '+d.comp_date:'');
+
+  // Quota hero
+  const pct=parseFloat(d.plan_pct)||0;
+  const hero=document.getElementById('quotaHero');
+  hero.style.display='';
+  document.getElementById('quotaSub').textContent=
+    (d.plan_fact?fmtARS(d.plan_fact):'')+' / '+(d.plan_total?fmtARS(d.plan_total):'');
+  const bar=document.getElementById('quotaBar');
+  const pctEl=document.getElementById('quotaPct');
+  bar.className='quota-bar-fill'+(pct>=100?' done':'');
+  // Animate bar + count-up
+  requestAnimationFrame(()=>{
+    bar.style.width=Math.min(pct,100)+'%';
+  });
+  countUp(pctEl, pct, 1200, v=>v.toFixed(1));
+  maybeCelebrate(pct);
+
+  // Sparklines
+  const sparkRow=document.getElementById('sparkRow');
+  if(d.spark_pedidos||d.spark_ventas){
+    sparkRow.style.display='';
+    drawSpark(document.getElementById('sparkPed'), d.spark_pedidos);
+    drawSpark(document.getElementById('sparkVen'), d.spark_ventas);
+    // Last values
+    const lp=(d.spark_pedidos||[]).slice(-1)[0];
+    const lv=(d.spark_ventas||[]).slice(-1)[0];
+    const spv=document.getElementById('sparkPedVal');
+    const svv=document.getElementById('sparkVenVal');
+    if(lp!=null) countUp(spv,lp,900,v=>Math.round(v).toLocaleString('es-AR'));
+    if(lv!=null) countUp(svv,lv,900,v=>fmtARS(v));
+  } else {
+    sparkRow.style.display='none';
+  }
+
+  // KPI grid
+  document.getElementById('kpiGrid').style.display='';
+  // Venta hoy
+  const vEl=document.getElementById('kVenta');
+  if(d.venta_dia!=null) countUp(vEl,d.venta_dia,1000,fmtARS);
+  else vEl.textContent='—';
+  document.getElementById('kVentaDelta').innerHTML=
+    prev?deltaHtml(d.venta_dia,prev.venta_dia,true):'';
+  // Pedidos
+  const pEl=document.getElementById('kPedidos');
+  if(d.pedidos!=null) countUp(pEl,d.pedidos,800,v=>Math.round(v).toString());
+  else pEl.textContent='—';
+  document.getElementById('kPedidosDelta').innerHTML=
+    prev?deltaHtml(d.pedidos,prev.pedidos,false):'';
+  // Vendedores
+  const vdEl=document.getElementById('kVendedores');
+  if(d.vendedores!=null) countUp(vdEl,d.vendedores,700,v=>Math.round(v).toString());
+  else vdEl.textContent='—';
+  document.getElementById('kVendedoresDelta').innerHTML=
+    prev?deltaHtml(d.vendedores,prev.vendedores,false):'';
+  // Líneas
+  const lEl=document.getElementById('kLineas');
+  if(d.avg_lineas!=null) countUp(lEl,d.avg_lineas,700,v=>v.toFixed(1));
+  else lEl.textContent='—';
+  // Backorders
+  document.getElementById('kBack').textContent=d.backorders!=null?fmtNum(d.backorders):'—';
+  // Remitos
+  document.getElementById('kRemitos').textContent=d.remitos!=null?fmtNum(d.remitos):'—';
+}
+
+// ── Fetch & load ──────────────────────────────────────────────────────────
+async function loadData(){
+  try{
+    const r=await fetch('snapshot.json?_='+Date.now());
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const d=await r.json();
+    _prevData=_data;
+    _data=d;
+    render(_data,_prevData);
+  }catch(e){
+    showToast('Error al actualizar: '+e.message);
+  }
+}
+
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+function doRefresh(){
+  const btn=document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  loadData().then(()=>{
+    btn.classList.remove('spinning');
+    showToast('Actualizado');
+  }).catch(()=>btn.classList.remove('spinning'));
+}
+
+// ── Pull-to-refresh ───────────────────────────────────────────────────────
+let _ptStart=0, _ptActive=false;
+const scrollArea=document.getElementById('scrollArea');
+scrollArea.addEventListener('touchstart',e=>{
+  if(scrollArea.scrollTop===0) _ptStart=e.touches[0].clientY;
+},{ passive:true });
+scrollArea.addEventListener('touchmove',e=>{
+  if(!_ptStart) return;
+  const dy=e.touches[0].clientY-_ptStart;
+  if(dy>50&&!_ptActive){
+    _ptActive=true;
+    document.getElementById('ptr').classList.add('visible');
+  }
+},{ passive:true });
+scrollArea.addEventListener('touchend',()=>{
+  if(_ptActive){ _ptActive=false; document.getElementById('ptr').classList.remove('visible'); doRefresh(); }
+  _ptStart=0;
+},{ passive:true });
+
+// ── Auto-refresh timer ────────────────────────────────────────────────────
+function scheduleRefresh(){
+  clearTimeout(_refreshTimer);
+  _refreshTimer=setTimeout(()=>{ loadData().then(scheduleRefresh); }, INTERVAL*1000);
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────
+loadData().then(scheduleRefresh);
+
+// Service Worker
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
 """
 
-import ftplib, io, json, os, struct, threading, time, zlib
-from datetime import datetime
+# ── PHP / htaccess / manifest / sw files ────────────────────────────────────
+_INDEX_PHP = r"""<?php
+$user = $_SERVER['PHP_AUTH_USER'] ?? '';
+$pass = $_SERVER['PHP_AUTH_PASS'] ?? '';
+$ok_user = getenv('FTP_AUTH_USER') ?: 'wurth';
+$ok_hash = getenv('FTP_AUTH_HASH') ?: '';  // SHA-256 hex of password
 
+function safe_hash($s){ return hash('sha256', $s); }
 
-def _make_png(size: int, r: int, g: int, b: int) -> bytes:
-    """Genera un PNG sólido de 'size x size' píxeles sin librerías externas."""
-    def chunk(tag: bytes, data: bytes) -> bytes:
-        return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff)
-    raw = (b'\x00' + bytes([r, g, b]) * size) * size
-    return (b'\x89PNG\r\n\x1a\n'
-            + chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0))
-            + chunk(b'IDAT', zlib.compress(raw, 6))
-            + chunk(b'IEND', b''))
+if(!$ok_hash || $user !== $ok_user || !hash_equals($ok_hash, safe_hash($pass))){
+    header('WWW-Authenticate: Basic realm="Wurth Ventas"');
+    header('HTTP/1.1 401 Unauthorized');
+    exit('Acceso denegado');
+}
 
+$file = __DIR__ . '/snapshot.json';
+if(!file_exists($file)){ http_response_code(503); exit('{"error":"no data"}'); }
+header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store');
+readfile($file);
+"""
 
-# Ícono rojo Würth (#cc0000) — requerido para el prompt de instalación PWA
-_ICON_192 = _make_png(192, 0xcc, 0x00, 0x00)
-_ICON_512 = _make_png(512, 0xcc, 0x00, 0x00)
+_HTACCESS = """<Files "snapshot.json">
+    Order deny,allow
+    Deny from all
+</Files>
+"""
 
-FTP_HOST     = os.environ.get("FTP_HOST",     "")
-FTP_USER     = os.environ.get("FTP_USER",     "")
-FTP_PASS     = os.environ.get("FTP_PASS",     "")
-FTP_PATH     = os.environ.get("FTP_PATH",     "/")
-FTP_INTERVAL = int(os.environ.get("FTP_INTERVAL", "300"))
-FTP_ENABLED  = os.environ.get("FTP_ENABLED",  "0") == "1"
+_MANIFEST = json.dumps({
+    "name": "Ventas Würth",
+    "short_name": "Ventas",
+    "start_url": "./",
+    "display": "standalone",
+    "background_color": "#0d0d0d",
+    "theme_color": "#c8102e",
+    "icons": [
+        {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
+        {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"}
+    ]
+}, ensure_ascii=False, indent=2)
 
-_SW_JS = """
-const CACHE='wurth-snap-v1';
-const ASSETS=['./','./index.html','./manifest.json'];
-self.addEventListener('install',e=>{
-  e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));
-});
-self.addEventListener('activate',e=>{e.waitUntil(clients.claim());});
+_SW_JS = r"""const CACHE='wurth-v2';
+const ASSETS=['./','./manifest.json','./icon-192.png'];
+self.addEventListener('install',e=>e.waitUntil(
+  caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())
+));
+self.addEventListener('activate',e=>e.waitUntil(
+  caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k))))
+    .then(()=>self.clients.claim())
+));
 self.addEventListener('fetch',e=>{
-  const url=new URL(e.request.url);
-  if(url.pathname.endsWith('snapshot.json')){
-    e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));return;
+  if(e.request.url.includes('snapshot.json')){
+    e.respondWith(fetch(e.request).catch(()=>new Response('{"error":"offline"}',{headers:{'Content-Type':'application/json'}})));
+    return;
   }
   e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)));
 });
 """
 
-FTP_AUTH_USER = os.environ.get("FTP_AUTH_USER", "wurth")
-FTP_AUTH_PASS = os.environ.get("FTP_AUTH_PASS", "")
+# ── PNG icon generator (pure Python, no PIL) ─────────────────────────────────
+def _make_png(size):
+    """Generate a red Würth-branded square PNG icon."""
+    w = h = size
+    # Red fill with white "W" letter approximated as pixel art
+    pixels = []
+    cx, cy = w//2, h//2
+    for y in range(h):
+        row = []
+        for x in range(w):
+            # Border
+            border = max(size//32, 1)
+            in_border = x<border or y<border or x>=w-border or y>=h-border
+            if in_border:
+                row.extend([0xA0,0x00,0x1A,255])  # dark red border
+            else:
+                # Draw a simple "W" in white
+                # Normalize coords to -1..1
+                nx = (x-cx)/(w*0.4)
+                ny = (y-cy)/(h*0.4)
+                in_w = False
+                # W shape: two V shapes
+                if abs(ny) < 0.9 and abs(nx) < 0.85:
+                    # Left stroke of W
+                    if abs(nx+0.6 + ny*0.5) < 0.07 and ny < 0.2:
+                        in_w = True
+                    # Right stroke of W
+                    elif abs(nx-0.6 + ny*0.5) < 0.07 and ny < 0.2:
+                        in_w = True
+                    # Left-center stroke
+                    elif abs(nx+0.2 - ny*0.5) < 0.07 and ny > -0.1:
+                        in_w = True
+                    # Right-center stroke
+                    elif abs(nx-0.2 - ny*0.5) < 0.07 and ny > -0.1:
+                        in_w = True
+                if in_w:
+                    row.extend([255,255,255,255])
+                else:
+                    row.extend([0xC8,0x10,0x2E,255])  # Würth red
+        pixels.append(bytes(row))
 
+    def png_chunk(name, data):
+        c = zlib.crc32(name+data) & 0xFFFFFFFF
+        return struct.pack('>I',len(data)) + name + data + struct.pack('>I',c)
 
-def _build_auth_php(auth_user: str, auth_pass: str) -> bytes:
-    # Hash de la contraseña con password_hash de PHP (bcrypt)
-    # Como no podemos llamar PHP desde Python, usamos SHA-256 con prefijo fijo.
-    # El PHP verifica con hash_equals para evitar timing attacks.
-    import hashlib
-    pass_hash = hashlib.sha256(auth_pass.encode()).hexdigest() if auth_pass else ""
-    php = f'''<?php
-// Würth Snapshot — HTTP Basic Auth
-// Credenciales: FTP_AUTH_USER / FTP_AUTH_PASS en el servidor dashboard
-define('AUTH_USER', {json.dumps(auth_user)});
-define('AUTH_HASH', {json.dumps(pass_hash)});  // sha256 de la contraseña
+    raw = b''
+    for row in pixels:
+        raw += b'\x00' + row  # filter type 0
+    compressed = zlib.compress(raw, 9)
 
-function check_auth() {{
-    $u = $_SERVER['PHP_AUTH_USER'] ?? '';
-    $p = $_SERVER['PHP_AUTH_PW']   ?? '';
-    $ph = hash('sha256', $p);
-    return hash_equals(AUTH_USER, $u) && (AUTH_HASH === '' || hash_equals(AUTH_HASH, $ph));
-}}
+    chunks = (
+        b'\x89PNG\r\n\x1a\n' +
+        png_chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)) +
+        png_chunk(b'IDAT', compressed) +
+        png_chunk(b'IEND', b'')
+    )
+    return chunks
 
-if (!check_auth()) {{
-    header('WWW-Authenticate: Basic realm="Würth Operativo"');
-    header('HTTP/1.0 401 Unauthorized');
-    echo '<h2 style="font-family:sans-serif;margin:40px;color:#cc0000">Acceso no autorizado</h2>';
-    exit;
-}}
+# ── Snapshot builder ──────────────────────────────────────────────────────────
+def _build_snapshot_json(data, interval):
+    """Extract relevant fields from get_cached_data() result into snapshot dict."""
+    snap = {"ts": datetime.datetime.now().isoformat(), "interval": interval}
+    try:
+        # Plan mensual
+        plan = data.get("plan") or {}
+        snap["plan_pct"]   = plan.get("pct")
+        snap["plan_fact"]  = plan.get("fact")
+        snap["plan_total"] = plan.get("total")
+        snap["target_date"]= plan.get("target_date")
 
-// Autenticado — servir el archivo solicitado
-$file = basename($_GET['f'] ?? 'index.html');
-$allowed = ['index.html','snapshot.json','manifest.json','sw.js','icon-192.png','icon-512.png'];
-if (!in_array($file, $allowed, true)) {{
-    http_response_code(404); exit;
-}}
-$path = __DIR__ . '/' . $file;
-if (!file_exists($path)) {{ http_response_code(404); exit; }}
-$mime = [
-    'html' => 'text/html; charset=utf-8',
-    'json' => 'application/json; charset=utf-8',
-    'js'   => 'application/javascript',
-    'png'  => 'image/png',
-];
-$ext  = pathinfo($file, PATHINFO_EXTENSION);
-header('Content-Type: ' . ($mime[$ext] ?? 'application/octet-stream'));
-header('Cache-Control: no-store');
-readfile($path);
-'''
-    return php.encode("utf-8")
+        # Día actual
+        hoy = data.get("hoy") or {}
+        snap["venta_dia"]  = hoy.get("venta") or hoy.get("valor")
+        snap["pedidos"]    = hoy.get("pedidos")
+        snap["vendedores"] = hoy.get("vendedores")
+        snap["avg_lineas"] = hoy.get("avg_lineas") or hoy.get("lineas")
+        snap["backorders"] = hoy.get("backorders")
+        snap["remitos"]    = hoy.get("remitos")
 
+        # Comparativo ayer
+        comp = data.get("comp") or data.get("ayer") or {}
+        snap["d_pedidos"]   = comp.get("pedidos")
+        snap["d_valor"]     = comp.get("venta") or comp.get("valor")
+        snap["d_vendedores"]= comp.get("vendedores")
+        snap["comp_date"]   = comp.get("fecha")
 
-_MANIFEST_DICT = {
-  "name":"Würth Resumen Operativo","short_name":"Würth Ops",
-  "start_url":"./","display":"standalone",
-  "background_color":"#f1f5f9","theme_color":"#cc0000",
-  "icons":[
-    {"src":"icon-192.png","sizes":"192x192","type":"image/png"},
-    {"src":"icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
-  ]
-}
+        # Sparklines (últimos N días)
+        spark = data.get("spark") or data.get("sparklines") or {}
+        snap["spark_pedidos"] = spark.get("pedidos")
+        snap["spark_ventas"]  = spark.get("ventas") or spark.get("venta")
 
-_VIEWER_HTML = """<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#cc0000">
-<link rel="manifest" href="manifest.json">
-<title>Würth — Resumen Operativo</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',Arial,sans-serif;background:#f1f5f9;color:#1e293b;min-height:100vh;padding-bottom:32px}
-header{background:#cc0000;color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10}
-.logo-mark{width:28px;height:28px;background:#fff;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.logo-mark span{color:#cc0000;font-weight:900;font-size:16px}
-.hdr-title{font-size:15px;font-weight:700;line-height:1.2}
-.hdr-sub{font-size:11px;opacity:.8}
-.hdr-right{margin-left:auto;text-align:right;font-size:11px;opacity:.9;line-height:1.6}
-.refresh-btn{background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer}
-.container{padding:12px 14px;max-width:720px;margin:0 auto}
-.delay-note{background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:9px 13px;font-size:12px;color:#713f12;margin-bottom:14px}
-.section{font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.07em;margin:18px 0 8px;display:flex;align-items:center;gap:6px}
-.section::after{content:'';flex:1;height:1px;background:#e2e8f0}
-.cards{display:grid;grid-template-columns:1fr 1fr;gap:9px}
-@media(min-width:480px){.cards.c3{grid-template-columns:repeat(3,1fr)}}
-@media(min-width:600px){.cards.c6{grid-template-columns:repeat(3,1fr)}}
-.card{background:#fff;border-radius:10px;padding:13px 15px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
-.card-lbl{font-size:11px;color:#64748b;margin-bottom:3px}
-.card-val{font-size:20px;font-weight:700;color:#1e293b}
-.card-val.red{color:#cc0000}.card-val.green{color:#16a34a}
-.card-sub{font-size:11px;color:#94a3b8;margin-top:2px}
-.plan-card{background:#fff;border-radius:10px;padding:15px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
-.plan-top{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:10px}
-.plan-val{font-size:26px;font-weight:700}.plan-of{font-size:13px;color:#94a3b8;margin-bottom:4px}
-.plan-pct{font-size:14px;font-weight:700;margin-bottom:4px}
-.plan-pct.ok{color:#16a34a}.plan-pct.warn{color:#d97706}.plan-pct.bad{color:#cc0000}
-.plan-bar-wrap{height:8px;background:#f1f5f9;border-radius:4px;margin-bottom:8px;overflow:hidden}
-.plan-bar{height:8px;border-radius:4px;transition:width .6s}
-.plan-bar.ok{background:#16a34a}.plan-bar.warn{background:#d97706}.plan-bar.bad{background:#cc0000}
-.plan-pace{font-size:11px;color:#64748b}.plan-meta{font-size:11px;color:#94a3b8;margin-top:4px}
-.flow{background:#fff;border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
-.flow-row{display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #f1f5f9}
-.flow-row:last-child{border-bottom:none}
-.flow-dot{width:10px;height:10px;border-radius:50%;margin:auto}
-.flow-name{font-size:13px;font-weight:600}.flow-sub{font-size:11px;color:#94a3b8}
-.flow-val{font-size:13px;font-weight:600;text-align:right}
-.flow-bar-wrap{grid-column:2/-1;height:4px;background:#f1f5f9;border-radius:2px;margin-top:3px}
-.flow-bar{height:4px;border-radius:2px}
-.sbas{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden}
-.sbas-row{display:flex;align-items:center;gap:10px;padding:11px 15px;border-bottom:1px solid #f8fafc}
-.sbas-row:last-child{border-bottom:none}
-.sbas-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
-.sbas-name{font-size:13px;color:#374151;flex:1}
-.sbas-val{font-size:14px;font-weight:700;text-align:right}
-.sbas-sub{font-size:11px;color:#94a3b8;text-align:right}
-.hoy-card{background:linear-gradient(135deg,#1e293b 0%,#334155 100%);border-radius:10px;padding:14px 15px;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.1)}
-.hoy-lbl{font-size:11px;opacity:.7;margin-bottom:6px;display:flex;align-items:center;gap:6px}
-.live-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;animation:pulse 1.4s infinite;display:inline-block}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-.hoy-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}
-@media(min-width:420px){.hoy-grid{grid-template-columns:repeat(5,1fr)}}
-.hoy-v{font-size:18px;font-weight:700}.hoy-s{font-size:10px;opacity:.65;margin-top:1px}
-.error-box{background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:11px 14px;font-size:13px;color:#991b1b;margin-bottom:12px}
-.stamp{font-size:11px;color:#94a3b8;text-align:center;margin-bottom:12px}
-.countdown{font-size:11px;color:#94a3b8;text-align:center;margin-top:12px}
-footer{text-align:center;font-size:11px;color:#b0bec5;padding:20px 14px 6px}
-</style>
-</head>
-<body>
-<header>
-  <div class="logo-mark"><span>W</span></div>
-  <div><div class="hdr-title">Würth — Resumen Operativo</div>
-       <div class="hdr-sub">Reactor · MSPA · Snapshot</div></div>
-  <div class="hdr-right">
-    <div id="hdr-ts" style="margin-bottom:3px"></div>
-    <button class="refresh-btn" onclick="manualRefresh()">&#8635; Actualizar</button>
-  </div>
-</header>
-<div class="container">
-  <div class="delay-note">&#9201; Snapshot — retraso máx. <b id="delay-min">5</b> min. Tiempo real solo desde red interna.</div>
-  <div id="err-box" class="error-box" style="display:none"></div>
-  <div class="stamp">Datos al <b id="stamp-ts">—</b> · Operativo: <b id="stamp-date">—</b></div>
-  <div class="section">Hoy en vivo</div>
-  <div class="hoy-card">
-    <div class="hoy-lbl" id="hoy-lbl">—</div>
-    <div class="hoy-grid">
-      <div><div class="hoy-v" id="h-ped">—</div><div class="hoy-s">Pedidos</div></div>
-      <div><div class="hoy-v" id="h-vend">—</div><div class="hoy-s">Vendedores</div></div>
-      <div><div class="hoy-v" id="h-val">—</div><div class="hoy-s">Valor inf.</div></div>
-      <div><div class="hoy-v" id="h-pvend">—</div><div class="hoy-s">Ped/vend</div></div>
-      <div><div class="hoy-v" id="h-lin">—</div><div class="hoy-s">Lín/ped</div></div>
-    </div>
-  </div>
-  <div class="section">Plan de ventas mensual</div>
-  <div class="plan-card">
-    <div class="plan-top">
-      <div><div class="plan-val" id="plan-fact">—</div><div class="plan-of" id="plan-of">de —</div></div>
-      <div><div class="plan-pct" id="plan-pct">—</div><div class="plan-pace" id="plan-pace"></div></div>
-    </div>
-    <div class="plan-bar-wrap"><div class="plan-bar" id="plan-bar" style="width:0"></div></div>
-    <div class="plan-meta" id="plan-meta"></div>
-  </div>
-  <div class="section">Indicadores día anterior</div>
-  <div class="cards c6">
-    <div class="card"><div class="card-lbl">Pedidos</div><div class="card-val" id="r-pedidos">—</div></div>
-    <div class="card"><div class="card-lbl">Vendedores</div><div class="card-val" id="r-vend">—</div></div>
-    <div class="card"><div class="card-lbl">Valor informado</div><div class="card-val" id="r-valor">—</div></div>
-    <div class="card"><div class="card-lbl">Ped / vendedor</div><div class="card-val" id="r-pedvend">—</div></div>
-    <div class="card"><div class="card-lbl">Líneas / pedido</div><div class="card-val" id="r-lineas">—</div></div>
-    <div class="card"><div class="card-lbl">Ticket promedio</div><div class="card-val" id="r-ticket">—</div></div>
-  </div>
-  <div class="section">Flujo del día anterior</div>
-  <div class="flow" id="flow-section"><div style="padding:10px;color:#94a3b8;font-size:13px">Sin datos.</div></div>
-  <div class="section">Facturación MSPA</div>
-  <div class="cards c3">
-    <div class="card"><div class="card-lbl">Facturado</div><div class="card-val red" id="m-venta">—</div><div class="card-sub" id="m-ords">—</div></div>
-    <div class="card"><div class="card-lbl">% Facturado</div><div class="card-val" id="m-pct">—</div></div>
-    <div class="card"><div class="card-lbl">Líneas fact.</div><div class="card-val" id="m-pos">—</div></div>
-  </div>
-  <div class="section">Estado actual MSPA</div>
-  <div class="sbas" id="sbas-section"></div>
-  <div class="countdown" id="countdown"></div>
-</div>
-<footer>Würth Argentina · Snapshot automático · Sin VPN</footer>
-<script>
-if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
-const JSON_URL='snapshot.json';
-let _nextRefresh=0,_interval=300;
-function fmtN(v,dec=0){
-  if(v==null||v===''||isNaN(Number(v)))return '—';
-  return Number(v).toLocaleString('es-AR',{minimumFractionDigits:dec,maximumFractionDigits:dec});
-}
-function fmtK(v){
-  if(v==null||v===''||isNaN(Number(v)))return '—';
-  const n=Number(v);
-  if(Math.abs(n)>=1e9)return '$'+fmtN(n/1e9,2)+'B';
-  if(Math.abs(n)>=1e6)return '$'+fmtN(n/1e6,1)+'M';
-  if(Math.abs(n)>=1e3)return '$'+fmtN(n/1e3,1)+'K';
-  return '$'+fmtN(n,0);
-}
-function set(id,v){const e=document.getElementById(id);if(e)e.textContent=v;}
-function setH(id,h){const e=document.getElementById(id);if(e)e.innerHTML=h;}
-async function load(){
-  try{
-    const res=await fetch(JSON_URL+'?v='+Date.now());
-    if(!res.ok)throw new Error('HTTP '+res.status);
-    render(await res.json());
-  }catch(e){
-    const eb=document.getElementById('err-box');eb.textContent='Error: '+e.message;eb.style.display='';
-  }
-}
-function manualRefresh(){document.getElementById('hdr-ts').textContent='Actualizando…';load();_nextRefresh=Date.now()+_interval*1000;}
-function render(d){
-  const r=d.reactor||{},m=d.mspa||{},ts2=d.today_summary||{};
-  _interval=d.ftp_interval_secs||300;_nextRefresh=Date.now()+_interval*1000;
-  const ts=d.snapshot_ts||'';
-  set('stamp-ts',ts);set('hdr-ts',ts?'Al '+ts:'');
-  set('stamp-date',r.target_date_display||'—');
-  document.getElementById('delay-min').textContent=Math.round(_interval/60);
-  const live=ts2.is_today!==false;
-  const dp=ts2.date?ts2.date.split('-').reverse().join('/'):'';
-  setH('hoy-lbl',live?'Hoy '+dp+' — EN VIVO <span class="live-dot"></span>':'Último día hábil '+dp);
-  set('h-ped',fmtN(ts2.pedidos,0));set('h-vend',fmtN(ts2.vendedores,0));
-  set('h-val',fmtK(ts2.valor));set('h-pvend',fmtN(ts2.avg_ped_vend,1));set('h-lin',fmtN(ts2.avg_lineas,1));
-  const pv=m.plan_ventas||{};
-  if(pv.plan_total){
-    const pct=pv.pct_plan||0,cls=pct>=95?'ok':pct>=70?'warn':'bad';
-    set('plan-fact',fmtK(pv.fact_acum));set('plan-of','de '+fmtK(pv.plan_total));
-    setH('plan-pct','<span class="'+cls+'">'+fmtN(pct,1)+'%</span>');
-    const meta=r.meta||{},wd=meta.curr_wd||0,el=meta.dias_elapsed||0;
-    const paceExp=wd>0?Math.min(el/wd*100,100):0;
-    const gap=paceExp>0?(pct-paceExp).toFixed(1):null;
-    set('plan-pace',gap!=null?(gap>=0?'▲ '+gap+' pts sobre ritmo':'▼ '+Math.abs(gap)+' pts por debajo'):'');
-    const bar=document.getElementById('plan-bar');bar.className='plan-bar '+cls;bar.style.width=Math.min(pct,100)+'%';
-    set('plan-meta',el&&wd?'Día hábil '+el+' de '+wd+' · Restante: '+fmtK(pv.plan_total-pv.fact_acum):'');
-  }
-  set('r-pedidos',fmtN(r.pedidos,0));set('r-vend',fmtN(r.vendedores,0));set('r-valor',fmtK(r.valor));
-  set('r-pedvend',r.pedidos&&r.vendedores?fmtN(r.pedidos/r.vendedores,1):'—');
-  set('r-lineas',fmtN(r.avg_lineas,1));
-  set('r-ticket',r.pedidos&&r.valor?fmtK(r.valor/r.pedidos):'—');
-  const bs=r.by_status||{};
-  const COL={1:'#3b82f6',2:'#22c55e',3:'#f59e0b',4:'#ef4444',5:'#8b5cf6'};
-  const items=Object.entries(bs).map(([id,v])=>({id:+id,name:v.name||'Estado '+id,cnt:v.cnt,val:v.val}));
-  items.sort((a,b)=>b.val-a.val);
-  const maxV=Math.max(...items.map(f=>f.val||0),1);
-  const flowSec=document.getElementById('flow-section');
-  flowSec.innerHTML=items.length?items.map(f=>{
-    const pct=Math.round((f.val||0)/maxV*100),col=COL[f.id]||'#94a3b8';
-    return'<div class="flow-row"><div><div class="flow-dot" style="background:'+col+'"></div></div>'+
-      '<div><div class="flow-name">'+f.name+'</div><div class="flow-sub">'+fmtN(f.cnt,0)+' pedidos</div>'+
-      '<div class="flow-bar-wrap"><div class="flow-bar" style="width:'+pct+'%;background:'+col+'"></div></div></div>'+
-      '<div class="flow-val">'+fmtK(f.val)+'</div></div>';
-  }).join(''):'<div style="padding:10px;color:#94a3b8;font-size:13px">Sin datos de flujo.</div>';
-  const venta=m.venta||{};
-  const pctF=r.valor>0?(venta.val||0)/r.valor*100:0;
-  set('m-venta',fmtK(venta.val));set('m-ords',fmtN(venta.ords,0)+' ped · '+fmtN(venta.pos,0)+' lín');
-  set('m-pct',pctF>0?fmtN(pctF,1)+'%':'—');set('m-pos',fmtN(venta.pos,0));
-  const SBAS=[
-    {key:'backorders',label:'Backorders (Plazos viejos)',color:'#f59e0b'},
-    {key:'bloqueados',label:'Bloqueados Límite Crédito',color:'#ef4444'},
-    {key:'neg_status',label:'Bloqueados (Status < −1)',color:'#ef4444'},
-    {key:'futuros',label:'Pedidos Abiertos (Futuros)',color:'#3b82f6'},
-    {key:'produccion',label:'Producción Abierta',color:'#8b5cf6'},
-    {key:'remitos',label:'Remitos / Facturas Abiertas',color:'#64748b'},
-    {key:'venta',label:'Venta del Día',color:'#22c55e'},
-  ];
-  document.getElementById('sbas-section').innerHTML=SBAS.map(s=>{
-    const v=m[s.key]||{ords:0,pos:0,val:0};
-    return'<div class="sbas-row"><div class="sbas-dot" style="background:'+s.color+'"></div>'+
-      '<div class="sbas-name">'+s.label+'</div>'+
-      '<div><div class="sbas-val">'+fmtK(v.val)+'</div>'+
-      '<div class="sbas-sub">'+fmtN(v.ords,0)+' ped · '+fmtN(v.pos,0)+' lín</div></div></div>';
-  }).join('');
-  const eb=document.getElementById('err-box');
-  const errs=[d.reactor_error&&'Reactor: '+d.reactor_error,d.mspa_error&&'MSPA: '+d.mspa_error].filter(Boolean);
-  if(errs.length){eb.textContent='⚠ '+errs.join(' · ');eb.style.display='';}
-  else eb.style.display='none';
-}
-function tick(){
-  const secs=Math.max(0,Math.round((_nextRefresh-Date.now())/1000));
-  if(secs===0&&_nextRefresh>0){_nextRefresh=Date.now()+_interval*1000;load();}
-  const m2=Math.floor(secs/60),s2=secs%60;
-  const cd=document.getElementById('countdown');
-  if(cd)cd.textContent=secs>0?'Próxima actualización en '+m2+':'+String(s2).padStart(2,'0'):'Actualizando…';
-}
-load();setInterval(tick,1000);
-</script>
-</body></html>"""
+        # Fallbacks: try flat keys
+        for k in ["venta_dia","pedidos","vendedores","avg_lineas","backorders","remitos",
+                  "plan_pct","plan_fact","plan_total"]:
+            if snap.get(k) is None and k in data:
+                snap[k] = data[k]
+    except Exception as e:
+        snap["_error"] = str(e)
+    return snap
 
+# ── FTP uploader ──────────────────────────────────────────────────────────────
+def _ftp_upload_bytes(ftp, remote_path, data_bytes):
+    buf = io.BytesIO(data_bytes)
+    ftp.storbinary(f"STOR {remote_path}", buf)
 
-def _build_snapshot_json(data: dict, interval_secs: int) -> bytes:
-    r = data.get("reactor") or {}
-    m = data.get("mspa") or {}
-    snapshot = {
-        "snapshot_ts":       datetime.now().strftime("%d/%m/%Y %H:%M"),
-        "ftp_interval_secs": interval_secs,
-        "timestamp":         data.get("timestamp"),
-        "reactor": {
-            "target_date":         r.get("target_date"),
-            "target_date_display": r.get("target_date_display"),
-            "pedidos":             r.get("pedidos"),
-            "vendedores":          r.get("vendedores"),
-            "valor":               r.get("valor"),
-            "lineas":              r.get("lineas"),
-            "avg_lineas":          r.get("avg_lineas"),
-            "avg_ped_vend":        r.get("avg_ped_vend"),
-            "by_status":           r.get("by_status"),
-            "meta":                r.get("meta"),
-        },
-        "mspa": {
-            "venta":       m.get("venta"),
-            "backorders":  m.get("backorders"),
-            "bloqueados":  m.get("bloqueados"),
-            "neg_status":  m.get("neg_status"),
-            "futuros":     m.get("futuros"),
-            "produccion":  m.get("produccion"),
-            "remitos":     m.get("remitos"),
-            "plan_ventas": m.get("plan_ventas"),
-        },
-        "today_summary":  data.get("today_summary"),
-        "reactor_error":  data.get("reactor_error"),
-        "mspa_error":     data.get("mspa_error"),
-    }
-    return json.dumps(snapshot, ensure_ascii=False, default=str).encode("utf-8")
+def _ftp_upload_text(ftp, remote_path, text):
+    _ftp_upload_bytes(ftp, remote_path, text.encode("utf-8"))
 
+def _ensure_dir(ftp, path):
+    """Create remote directory tree if needed."""
+    if path in ("/", ""):
+        return
+    parts = [p for p in path.split("/") if p]
+    cur = ""
+    for p in parts:
+        cur += "/" + p
+        try:
+            ftp.cwd(cur)
+        except ftplib.error_perm:
+            try:
+                ftp.mkd(cur)
+            except Exception:
+                pass
 
-def _ftp_upload(json_bytes, html_bytes, sw_bytes, manifest_bytes, auth_php_bytes):
-    ftp = ftplib.FTP()
-    ftp.connect(FTP_HOST, 21, timeout=20)
-    ftp.login(FTP_USER, FTP_PASS)
-    if FTP_PATH and FTP_PATH not in ("/", ""):
-        parts = FTP_PATH.strip("/").split("/")
-        ftp.cwd("/")
-        for part in parts:
-            try: ftp.cwd(part)
-            except ftplib.error_perm: ftp.mkd(part); ftp.cwd(part)
-    ftp.storbinary("STOR snapshot.json", io.BytesIO(json_bytes))
-    ftp.storbinary("STOR index.html",    io.BytesIO(html_bytes))
-    ftp.storbinary("STOR sw.js",         io.BytesIO(sw_bytes))
-    ftp.storbinary("STOR manifest.json", io.BytesIO(manifest_bytes))
-    ftp.storbinary("STOR icon-192.png",  io.BytesIO(_ICON_192))
-    ftp.storbinary("STOR icon-512.png",  io.BytesIO(_ICON_512))
-    # auth.php solo se sube si hay contraseña configurada
-    if auth_php_bytes:
-        ftp.storbinary("STOR auth.php", io.BytesIO(auth_php_bytes))
-    ftp.quit()
-
-
-def _snapshot_loop(get_data_fn):
-    print(f"  [FTP] Job activo — host={FTP_HOST} path={FTP_PATH} cada {FTP_INTERVAL}s", flush=True)
+def _snapshot_loop(get_data_fn, interval):
+    """Main loop: build snapshot and upload every `interval` seconds."""
+    print(f"[FTP] Job activo — host={FTP_HOST}  cada {interval}s", flush=True)
     while True:
         try:
-            data       = get_data_fn()
-            json_bytes = _build_snapshot_json(data, FTP_INTERVAL)
-            html_bytes = _VIEWER_HTML.encode("utf-8")
-            sw_bytes   = _SW_JS.encode("utf-8")
-            man_bytes  = json.dumps(_MANIFEST_DICT, ensure_ascii=False).encode("utf-8")
-            auth_bytes = _build_auth_php(FTP_AUTH_USER, FTP_AUTH_PASS) if FTP_AUTH_PASS else None
-            _ftp_upload(json_bytes, html_bytes, sw_bytes, man_bytes, auth_bytes)
-            print(f"  [FTP] OK — {datetime.now().strftime('%H:%M:%S')} ({len(json_bytes)}b)", flush=True)
+            data = get_data_fn()
+            snap = _build_snapshot_json(data, interval)
+            snap_json = json.dumps(snap, ensure_ascii=False, default=str)
+
+            with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS, timeout=30) as ftp:
+                ftp.set_pasv(True)
+                _ensure_dir(ftp, FTP_PATH)
+                ftp.cwd(FTP_PATH)
+
+                # snapshot.json
+                _ftp_upload_text(ftp, "snapshot.json", snap_json)
+
+                # viewer HTML (replace interval placeholder)
+                viewer = _VIEWER_HTML.replace("__INTERVAL__", str(interval))
+                _ftp_upload_text(ftp, "index.html", viewer)
+
+                # PHP proxy + htaccess (only if auth configured)
+                if FTP_AUTH_PASS:
+                    _ftp_upload_text(ftp, "index.php", _INDEX_PHP)
+                    _ftp_upload_text(ftp, ".htaccess", _HTACCESS)
+
+                # manifest + sw
+                _ftp_upload_text(ftp, "manifest.json", _MANIFEST)
+                _ftp_upload_text(ftp, "sw.js", _SW_JS)
+
+                # icons (only upload if they don't exist yet — save bandwidth)
+                existing = ftp.nlst()
+                if "icon-192.png" not in existing:
+                    _ftp_upload_bytes(ftp, "icon-192.png", _make_png(192))
+                if "icon-512.png" not in existing:
+                    _ftp_upload_bytes(ftp, "icon-512.png", _make_png(512))
+
+            now = datetime.datetime.now().strftime("%H:%M:%S")
+            print(f"[FTP] OK — {now}", flush=True)
         except Exception as e:
-            print(f"  [FTP] Error: {e}", flush=True)
-        time.sleep(FTP_INTERVAL)
+            print(f"[FTP] Error: {e}", flush=True)
 
+        time.sleep(interval)
 
+# ── Public API ────────────────────────────────────────────────────────────────
 def start_snapshot_job(get_data_fn):
-    """Inicia el FTP snapshot job en un thread daemon.
-    Solo se activa si FTP_ENABLED=1 y FTP_HOST esta configurado.
     """
-    print(f"  [FTP] FTP_ENABLED={FTP_ENABLED} FTP_HOST={FTP_HOST!r}", flush=True)
+    Inicia el daemon thread FTP.
+    get_data_fn: callable que retorna el dict de datos (get_cached_data en dashboard.py).
+    Si FTP_ENABLED=0 o FTP_HOST vacío, imprime aviso y retorna sin iniciar.
+    """
     if not FTP_ENABLED:
-        print("  [FTP] Desactivado. Setear FTP_ENABLED=1 para activar.", flush=True)
+        print("[FTP] Deshabilitado (FTP_ENABLED != 1). Setear variables de entorno para activar.", flush=True)
         return
-    if not FTP_HOST or not FTP_USER or not FTP_PASS:
-        print("  [FTP] Faltan FTP_HOST / FTP_USER / FTP_PASS. Job no iniciado.", flush=True)
+    if not FTP_HOST:
+        print("[FTP] Sin host (FTP_HOST vacío). Snapshot FTP no iniciado.", flush=True)
         return
-    threading.Thread(target=_snapshot_loop, args=(get_data_fn,), daemon=True).start()
+    t = threading.Thread(
+        target=_snapshot_loop,
+        args=(get_data_fn, FTP_INTERVAL),
+        daemon=True,
+        name="ftp-snapshot"
+    )
+    t.start()
