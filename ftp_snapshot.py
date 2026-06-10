@@ -114,7 +114,6 @@ body{display:flex;flex-direction:column;max-width:430px;margin:0 auto;padding:en
 </style>
 </head>
 <body>
-<div class="ptr-indicator" id="ptr">↓ Actualizando…</div>
 
 <div class="hdr">
   <div class="hdr-left">
@@ -412,6 +411,8 @@ function render(d, prev){
 
 // ── Fetch & load ──────────────────────────────────────────────────────────
 async function loadData(){
+  const tsEl=document.getElementById('tsText');
+  if(tsEl) tsEl.textContent='Actualizando…';
   try{
     const r=await fetch('snapshot.json?_='+Date.now());
     if(!r.ok) throw new Error('HTTP '+r.status);
@@ -448,13 +449,10 @@ scrollArea.addEventListener('touchstart',e=>{
 scrollArea.addEventListener('touchmove',e=>{
   if(!_ptStart) return;
   const dy=e.touches[0].clientY-_ptStart;
-  if(dy>50&&!_ptActive){
-    _ptActive=true;
-    document.getElementById('ptr').classList.add('visible');
-  }
+  if(dy>50&&!_ptActive){ _ptActive=true; }
 },{ passive:true });
 scrollArea.addEventListener('touchend',()=>{
-  if(_ptActive){ _ptActive=false; document.getElementById('ptr').classList.remove('visible'); doRefresh(); }
+  if(_ptActive){ _ptActive=false; doRefresh(); }
   _ptStart=0;
 },{ passive:true });
 
@@ -498,10 +496,18 @@ header('Cache-Control: no-store');
 readfile($file);
 """
 
-_HTACCESS = """<Files "snapshot.json">
-    Order deny,allow
-    Deny from all
+_HTACCESS = """# Permitir lectura de snapshot.json (lo consume el viewer index.html)
+<Files "snapshot.json">
+    Require all granted
+    Order allow,deny
+    Allow from all
 </Files>
+# No cachear el snapshot para que el celular siempre vea datos frescos
+<IfModule mod_headers.c>
+    <Files "snapshot.json">
+        Header set Cache-Control "no-store, no-cache, must-revalidate"
+    </Files>
+</IfModule>
 """
 
 _MANIFEST = json.dumps({
@@ -517,7 +523,7 @@ _MANIFEST = json.dumps({
     ]
 }, ensure_ascii=False, indent=2)
 
-_SW_JS = r"""const CACHE='wurth-v2';
+_SW_JS = r"""const CACHE='wurth-v3';
 const ASSETS=['./','./manifest.json','./icon-192.png'];
 self.addEventListener('install',e=>e.waitUntil(
   caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())
@@ -595,42 +601,54 @@ def _make_png(size):
 
 # ── Snapshot builder ──────────────────────────────────────────────────────────
 def _build_snapshot_json(data, interval):
-    """Extract relevant fields from get_cached_data() result into snapshot dict."""
+    """Extract relevant fields from get_cached_data() result into snapshot dict.
+
+    Estructura real de get_cached_data():
+      data = {
+        "reactor": {pedidos, vendedores, valor, lineas, avg_lineas,
+                    comp:{pedidos,vendedores,valor,date}, sparklines:{pedidos[],ventas[]}},
+        "mspa":    {backorders:{ords,pos,val}, remitos:{ords,pos,val},
+                    plan_ventas:{plan_total, fact_acum, pct_plan, sellers[]}},
+        "today_summary": {date, is_today, pedidos, vendedores, valor, lineas, avg_lineas, ticket},
+      }
+    """
     snap = {"ts": datetime.datetime.now().isoformat(), "interval": interval}
     try:
-        # Plan mensual
-        plan = data.get("plan") or {}
-        snap["plan_pct"]   = plan.get("pct")
-        snap["plan_fact"]  = plan.get("fact")
-        snap["plan_total"] = plan.get("total")
-        snap["target_date"]= plan.get("target_date")
+        reactor = data.get("reactor") or {}
+        mspa    = data.get("mspa") or {}
+        hoy     = data.get("today_summary") or {}
 
-        # Día actual
-        hoy = data.get("hoy") or {}
-        snap["venta_dia"]  = hoy.get("venta") or hoy.get("valor")
+        # ── Plan de ventas mensual (MSPA) ──────────────────────────────
+        plan = mspa.get("plan_ventas") or {}
+        snap["plan_pct"]   = plan.get("pct_plan")
+        snap["plan_fact"]  = plan.get("fact_acum")
+        snap["plan_total"] = plan.get("plan_total")
+
+        # ── KPIs del día (today_summary = dato vivo de hoy) ────────────
+        snap["venta_dia"]  = hoy.get("valor")
         snap["pedidos"]    = hoy.get("pedidos")
         snap["vendedores"] = hoy.get("vendedores")
-        snap["avg_lineas"] = hoy.get("avg_lineas") or hoy.get("lineas")
-        snap["backorders"] = hoy.get("backorders")
-        snap["remitos"]    = hoy.get("remitos")
+        snap["avg_lineas"] = hoy.get("avg_lineas")
+        snap["comp_date"]  = hoy.get("date")
 
-        # Comparativo ayer
-        comp = data.get("comp") or data.get("ayer") or {}
-        snap["d_pedidos"]   = comp.get("pedidos")
-        snap["d_valor"]     = comp.get("venta") or comp.get("valor")
-        snap["d_vendedores"]= comp.get("vendedores")
-        snap["comp_date"]   = comp.get("fecha")
+        # ── Backorders / Remitos (MSPA, contar órdenes) ────────────────
+        bo = mspa.get("backorders") or {}
+        rm = mspa.get("remitos") or {}
+        snap["backorders"] = bo.get("ords")
+        snap["remitos"]    = rm.get("ords")
 
-        # Sparklines (últimos N días)
-        spark = data.get("spark") or data.get("sparklines") or {}
+        # ── Comparativo día hábil anterior (reactor.comp) ──────────────
+        comp = reactor.get("comp") or {}
+        snap["d_pedidos"]    = comp.get("pedidos")
+        snap["d_valor"]      = comp.get("valor")
+        snap["d_vendedores"] = comp.get("vendedores")
+
+        # ── Sparklines (reactor) ───────────────────────────────────────
+        spark = reactor.get("sparklines") or {}
         snap["spark_pedidos"] = spark.get("pedidos")
-        snap["spark_ventas"]  = spark.get("ventas") or spark.get("venta")
-
-        # Fallbacks: try flat keys
-        for k in ["venta_dia","pedidos","vendedores","avg_lineas","backorders","remitos",
-                  "plan_pct","plan_fact","plan_total"]:
-            if snap.get(k) is None and k in data:
-                snap[k] = data[k]
+        # ventas viene en millones (val/1e6) — reescalar a pesos para el viewer
+        ventas_m = spark.get("ventas") or []
+        snap["spark_ventas"] = [round(v * 1e6) for v in ventas_m] if ventas_m else None
     except Exception as e:
         snap["_error"] = str(e)
     return snap
@@ -689,10 +707,12 @@ def _snapshot_loop(get_data_fn, interval):
                 viewer = _VIEWER_HTML.replace("__INTERVAL__", str(interval))
                 _ftp_upload_text(ftp, "index.html", viewer)
 
-                # PHP proxy + htaccess (only if auth configured)
+                # .htaccess SIEMPRE — pisa cualquier versión vieja que bloquee snapshot.json
+                _ftp_upload_text(ftp, ".htaccess", _HTACCESS)
+
+                # PHP proxy solo si hay auth configurada
                 if FTP_AUTH_PASS:
                     _ftp_upload_text(ftp, "index.php", _INDEX_PHP)
-                    _ftp_upload_text(ftp, ".htaccess", _HTACCESS)
 
                 # manifest + sw
                 _ftp_upload_text(ftp, "manifest.json", _MANIFEST)
