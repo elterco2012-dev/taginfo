@@ -145,17 +145,17 @@ def fetch_reactor(target_date=None):
     for r in status_rows:
         by_status[int(r[0])] = {"name": r[1], "cnt": r[2], "val": float(r[3] or 0)}
 
-    # Monthly trend — 12 COMPLETE months (fix: start from 1st of month 11 months ago)
+    # Monthly trend — upper bound = target_str so divisor and sum cover same days
     trend_rows = run(cur, """
         SELECT DATE_FORMAT(order_date, '%Y-%m') mes,
                COUNT(DISTINCT id) pedidos,
                SUM(total) valor
         FROM order_placed
-        WHERE order_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 11 MONTH), '%Y-%m-01')
-          AND DATE(order_date) <= CURDATE()
+        WHERE order_date >= DATE_FORMAT(DATE_SUB(?, INTERVAL 11 MONTH), '%Y-%m-01')
+          AND DATE(order_date) <= ?
         GROUP BY DATE_FORMAT(order_date, '%Y-%m')
         ORDER BY mes
-    """)
+    """, (target_str, target_str))
 
     # Work days per month
     wd_rows = run(cur, """
@@ -984,6 +984,22 @@ body.tv .meta-curr{font-size:28px}
 }
 /* ── RESPONSIVE ── */
 @media(max-width:1080px){.hero{grid-template-columns:1fr}.bottom{grid-template-columns:1fr}.sellers-wrap{grid-template-columns:1fr}.kpi-grid{grid-template-columns:repeat(2,1fr)}}
+/* ── KIOSK ── */
+.slide-wrap{display:contents}
+body.kiosk .main{position:relative;padding-bottom:74px;overflow:hidden}
+body.kiosk .slide-wrap{position:absolute;left:0;right:0;top:0;padding:var(--gap);display:flex;flex-direction:column;gap:26px;opacity:0;pointer-events:none;transition:opacity .6s ease}
+body.kiosk .slide-wrap.active{position:relative;opacity:1;pointer-events:auto}
+.kiosk-bar{display:none;position:fixed;bottom:0;left:0;right:0;height:52px;background:var(--card);border-top:1px solid var(--border);z-index:200;padding:0 18px;align-items:center;grid-template-columns:1fr auto 1fr}
+body.kiosk .kiosk-bar{display:grid}
+.kiosk-lbl{font-size:11px;color:var(--text3);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.kiosk-dots{display:flex;gap:8px;justify-content:center}
+.kiosk-dot{width:8px;height:8px;border-radius:50%;background:var(--border);border:none;cursor:pointer;padding:0;transition:background .2s,transform .2s}
+.kiosk-dot.active{background:var(--wurth-red);transform:scale(1.3)}
+.kiosk-right{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.kiosk-prog{flex:1;max-width:80px;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+.kiosk-prog-fill{height:100%;background:var(--wurth-red);transition:width .3s linear}
+.rest-chip{display:inline-block;background:var(--amber,#f59e0b);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle}
+.rest-chip.urgent{background:var(--red,#ef4444)}
 </style>
 </head>
 <body>
@@ -1016,6 +1032,9 @@ body.tv .meta-curr{font-size:28px}
     <button class="icon-btn" onclick="window.print()" title="Exportar / Imprimir">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>
     </button>
+    <button class="icon-btn" onclick="toggleKiosk()" id="kiosk-btn" title="Modo Kiosk (presentación)">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+    </button>
     <button class="icon-btn" onclick="toggleTV()" id="tv-btn" title="Modo TV">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="15" x="2" y="3" rx="2"/><path d="M7 21h10M12 18v3"/></svg>
     </button>
@@ -1027,6 +1046,9 @@ body.tv .meta-curr{font-size:28px}
 <div class="hist-banner" id="hist-banner">⚠ MODO HISTÓRICO — Datos del <span id="hist-date"></span> · No son datos de hoy</div>
 
 <div class="main">
+
+  <!-- Slide 1: alertas, hero, KPIs, flujo, hoy -->
+  <div class="slide-wrap active" id="slide-1">
 
   <!-- Banda de alertas por excepción -->
   <div id="alerts-band" style="display:none"></div>
@@ -1238,6 +1260,11 @@ body.tv .meta-curr{font-size:28px}
     </div>
   </div>
 
+  </div><!-- /slide-1 -->
+
+  <!-- Slide 2: ritmo, gráfico, MSPA, ranking -->
+  <div class="slide-wrap" id="slide-2">
+
   <!-- Ritmo mensual -->
   <div class="meta-card">
     <div class="sec-lbl">Ritmo Mensual — Pedidos vs. Mes Anterior</div>
@@ -1291,10 +1318,10 @@ body.tv .meta-curr{font-size:28px}
         <div class="sk" style="width:75%;height:34px;border-radius:4px"></div>
       </div>
     </div>
-  </div>
+  </div><!-- /slide-2 -->
 
-  <!-- Ranking vendedores -->
-  <div class="sec">
+  <!-- Ranking vendedores — oculto por pedido de Daniel -->
+  <div class="sec" style="display:none">
     <div class="sec-lbl">Ranking de vendedores</div>
     <div class="sellers-wrap">
       <div class="card">
@@ -1348,6 +1375,24 @@ body.tv .meta-curr{font-size:28px}
           <div class="sk" style="width:70%;height:26px;border-radius:4px"></div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Kiosk bar -->
+  <div class="kiosk-bar">
+    <span class="kiosk-lbl" id="kiosk-lbl">Página 1 de 2</span>
+    <div class="kiosk-dots">
+      <button class="kiosk-dot active" onclick="kioskGoTo(0)" id="kdot-0"></button>
+      <button class="kiosk-dot" onclick="kioskGoTo(1)" id="kdot-1"></button>
+    </div>
+    <div class="kiosk-right">
+      <div class="kiosk-prog"><div class="kiosk-prog-fill" id="kiosk-prog-fill" style="width:0%"></div></div>
+      <button class="icon-btn" id="kiosk-pause-btn" onclick="kioskTogglePause()" title="Pausar/Reanudar">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" id="kiosk-pause-ico"><path d="M10 15V9M14 15V9"/></svg>
+      </button>
+      <button class="icon-btn" onclick="kioskStop()" title="Salir del modo kiosk">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+      </button>
     </div>
   </div>
 
@@ -1460,7 +1505,14 @@ function renderPlan(pv, diasElapsed, diasHab){
   document.getElementById('hero-bar').style.width=fill+'%';
   document.getElementById('hero-bar').style.background=barColor;
   document.getElementById('hero-pace').style.left=pacePos.toFixed(1)+'%';
-  document.getElementById('hero-foot-l').textContent=diasHab>0?`Día hábil ${diasElapsed} de ${diasHab}`:'';
+  if(diasHab>0){
+    const restDias=diasHab-diasElapsed;
+    const urgente=restDias<=3;
+    const chip=`<span class="rest-chip${urgente?' urgent':''}">${restDias} día${restDias!==1?'s':''} hábil${restDias!==1?'es':''} restante${restDias!==1?'s':''}</span>`;
+    document.getElementById('hero-foot-l').innerHTML=`Día hábil ${diasElapsed} de ${diasHab}${chip}`;
+  } else {
+    document.getElementById('hero-foot-l').textContent='';
+  }
   document.getElementById('hero-foot-r').textContent=plan>0?`Restante: ${fmtK(plan-fact)}`:'';
 
   const tag=document.getElementById('hero-tag');
@@ -1901,6 +1953,70 @@ function gotoDate(clear){
 
 load();
 setInterval(tick,1000);
+
+// ── KIOSK ──
+const KIOSK_PAGES=['slide-1','slide-2'];
+const KIOSK_INTERVAL=20000;
+let _kioskPage=0, _kioskTimer=null, _kioskPaused=false, _kioskTick=0;
+
+function kioskGoTo(idx){
+  _kioskPage=idx;
+  _kioskTick=0;
+  KIOSK_PAGES.forEach((id,i)=>{
+    const el=document.getElementById(id);
+    if(el){el.classList.toggle('active',i===idx);}
+  });
+  document.querySelectorAll('.kiosk-dot').forEach((d,i)=>d.classList.toggle('active',i===idx));
+  document.getElementById('kiosk-lbl').textContent=`Página ${idx+1} de ${KIOSK_PAGES.length}`;
+  document.getElementById('kiosk-prog-fill').style.width='0%';
+}
+function kioskAdvance(){
+  kioskGoTo((_kioskPage+1)%KIOSK_PAGES.length);
+}
+function kioskTick(){
+  if(_kioskPaused)return;
+  _kioskTick+=200;
+  const pct=Math.min(_kioskTick/KIOSK_INTERVAL*100,100);
+  const fill=document.getElementById('kiosk-prog-fill');
+  if(fill)fill.style.width=pct+'%';
+  if(_kioskTick>=KIOSK_INTERVAL)kioskAdvance();
+}
+function kioskTogglePause(){
+  _kioskPaused=!_kioskPaused;
+  const ico=document.getElementById('kiosk-pause-ico');
+  if(ico)ico.innerHTML=_kioskPaused
+    ?'<polygon points="5 3 19 12 5 21 5 3"/>'
+    :'<path d="M10 15V9M14 15V9"/>';
+}
+function kioskStart(){
+  _kioskPage=0; _kioskTick=0; _kioskPaused=false;
+  document.body.classList.add('kiosk','tv');
+  document.getElementById('kiosk-btn').classList.add('on');
+  kioskGoTo(0);
+  if(_kioskTimer)clearInterval(_kioskTimer);
+  _kioskTimer=setInterval(kioskTick,200);
+  if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{});
+  if(_lastTrend)renderChart(_lastTrend);
+}
+function kioskStop(){
+  if(_kioskTimer){clearInterval(_kioskTimer);_kioskTimer=null;}
+  document.body.classList.remove('kiosk','tv');
+  document.getElementById('kiosk-btn').classList.remove('on');
+  KIOSK_PAGES.forEach((id,i)=>{
+    const el=document.getElementById(id);
+    if(el)el.classList.toggle('active',i===0);
+  });
+  if(document.exitFullscreen&&document.fullscreenElement)document.exitFullscreen().catch(()=>{});
+  if(_lastTrend)renderChart(_lastTrend);
+}
+function toggleKiosk(){
+  if(document.body.classList.contains('kiosk'))kioskStop();
+  else kioskStart();
+}
+document.addEventListener('fullscreenchange',()=>{
+  if(!document.fullscreenElement&&document.body.classList.contains('kiosk'))kioskStop();
+});
+if(new URLSearchParams(location.search).get('kiosk')==='1')setTimeout(kioskStart,400);
 </script>
 </body>
 </html>
