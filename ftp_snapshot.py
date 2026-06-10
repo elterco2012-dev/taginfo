@@ -114,7 +114,6 @@ body{display:flex;flex-direction:column;max-width:430px;margin:0 auto;padding:en
 </style>
 </head>
 <body>
-<div class="ptr-indicator" id="ptr">↓ Actualizando…</div>
 
 <div class="hdr">
   <div class="hdr-left">
@@ -412,6 +411,8 @@ function render(d, prev){
 
 // ── Fetch & load ──────────────────────────────────────────────────────────
 async function loadData(){
+  const tsEl=document.getElementById('tsText');
+  if(tsEl) tsEl.textContent='Actualizando…';
   try{
     const r=await fetch('snapshot.json?_='+Date.now());
     if(!r.ok) throw new Error('HTTP '+r.status);
@@ -448,13 +449,10 @@ scrollArea.addEventListener('touchstart',e=>{
 scrollArea.addEventListener('touchmove',e=>{
   if(!_ptStart) return;
   const dy=e.touches[0].clientY-_ptStart;
-  if(dy>50&&!_ptActive){
-    _ptActive=true;
-    document.getElementById('ptr').classList.add('visible');
-  }
+  if(dy>50&&!_ptActive){ _ptActive=true; }
 },{ passive:true });
 scrollArea.addEventListener('touchend',()=>{
-  if(_ptActive){ _ptActive=false; document.getElementById('ptr').classList.remove('visible'); doRefresh(); }
+  if(_ptActive){ _ptActive=false; doRefresh(); }
   _ptStart=0;
 },{ passive:true });
 
