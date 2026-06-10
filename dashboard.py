@@ -1001,9 +1001,9 @@ body.tv .meta-curr{font-size:28px}
 @media(max-width:1080px){.hero{grid-template-columns:1fr}.bottom{grid-template-columns:1fr}.sellers-wrap{grid-template-columns:1fr}.kpi-grid{grid-template-columns:repeat(2,1fr)}}
 /* ── KIOSK ── */
 .slide-wrap{display:contents}
-body.kiosk .main{position:relative;padding-bottom:74px;overflow:hidden}
-body.kiosk .slide-wrap{position:absolute;left:0;right:0;top:0;padding:var(--gap);display:flex;flex-direction:column;gap:26px;opacity:0;pointer-events:none;transition:opacity .6s ease}
-body.kiosk .slide-wrap.active{position:relative;opacity:1;pointer-events:auto}
+body.kiosk .main{padding-bottom:74px}
+body.kiosk .slide-wrap{display:none;flex-direction:column;gap:26px}
+body.kiosk .slide-wrap.active{display:flex}
 .kiosk-bar{display:none;position:fixed;bottom:0;left:0;right:0;height:52px;background:var(--card);border-top:1px solid var(--border);z-index:200;padding:0 18px;align-items:center;grid-template-columns:1fr auto 1fr}
 body.kiosk .kiosk-bar{display:grid}
 .kiosk-lbl{font-size:11px;color:var(--text3);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
@@ -1013,8 +1013,8 @@ body.kiosk .kiosk-bar{display:grid}
 .kiosk-right{display:flex;align-items:center;gap:8px;justify-content:flex-end}
 .kiosk-prog{flex:1;max-width:80px;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
 .kiosk-prog-fill{height:100%;background:var(--wurth-red);transition:width .3s linear}
-.rest-chip{display:inline-block;background:var(--amber,#f59e0b);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle}
-.rest-chip.urgent{background:var(--red,#ef4444)}
+.rest-chip{display:inline-block;background:var(--bg2,#f1f5f9);color:var(--text3,#64748b);font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle;border:1px solid var(--border)}
+.rest-chip.urgent{background:#fef3c7;color:#92400e;border-color:#fde68a}
 </style>
 </head>
 <body>
@@ -1683,7 +1683,7 @@ function renderAlerts(r,m){
     const pctVal=pv.pct_plan||0;
     if(pacePos>0&&pctVal<pacePos){
       const gap=pacePos-pctVal;
-      alerts.push(`<div class="alert warn">${ICO.trendingDown}<span>Plan de ventas <b>${fmtN(gap,1)} pts por debajo del ritmo</b> (${fmtN(pctVal,1)}% vs ${fmtN(pacePos,1)}% esperado)</span><a class="a-act" href="#">Ver plan →</a></div>`);
+      alerts.push(`<div class="alert warn">${ICO.trendingDown}<span>Plan de ventas <b>${fmtN(gap,1)} pts por debajo del ritmo</b> (${fmtN(pctVal,1)}% vs ${fmtN(pacePos,1)}% esperado)</span></div>`);
     }
   }
 
