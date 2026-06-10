@@ -1150,6 +1150,33 @@ body.tv .mspa-val{font-size:17px}
 body.tv .seller-tbl{font-size:14px}
 body.tv .meta-curr{font-size:28px}
 
+/* ── MODO KIOSK / TV — rotación de 2 páginas ── */
+.slide-wrap{display:contents}
+body.tv .main{position:relative;padding-bottom:64px}
+body.tv .slide-wrap{display:block;position:absolute;left:0;right:0;top:0;
+  display:flex;flex-direction:column;gap:26px;
+  opacity:0;pointer-events:none;transition:opacity .7s ease}
+body.tv .slide-wrap.active{position:relative;opacity:1;pointer-events:auto}
+/* barra inferior de kiosk */
+.kiosk-bar{display:none}
+body.tv .kiosk-bar{display:flex;align-items:center;gap:16px;
+  position:fixed;left:0;right:0;bottom:0;z-index:50;
+  padding:10px 40px;background:var(--surface);border-top:1px solid var(--border)}
+.kiosk-dots{display:flex;gap:8px}
+.kiosk-dot{width:9px;height:9px;border-radius:50%;background:var(--border-2);transition:background .3s}
+.kiosk-dot.on{background:var(--wurth-red)}
+.kiosk-label{font-size:13px;color:var(--text-2);font-weight:600}
+.kiosk-prog{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.kiosk-prog-fill{height:100%;width:0;background:var(--wurth-red);border-radius:2px}
+.kiosk-btn{background:none;border:1px solid var(--border-2);color:var(--text-2);
+  border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;font-family:inherit}
+/* chip días hábiles restantes */
+.rest-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
+  padding:3px 10px;border-radius:20px;background:var(--surface-2);
+  border:1px solid var(--border);color:var(--text-2)}
+.rest-chip.urgent{background:var(--amber-bg);border-color:var(--amber);color:var(--amber)}
+body.tv .rest-chip{font-size:15px;padding:5px 14px}
+
 @media print{
   .hdr-right .icon-btn,.date-badge{display:none}
   body{background:#fff}
@@ -1200,6 +1227,9 @@ body.tv .meta-curr{font-size:28px}
 <div class="hist-banner" id="hist-banner">⚠ MODO HISTÓRICO — Datos del <span id="hist-date"></span> · No son datos de hoy</div>
 
 <div class="main">
+
+  <!-- ══ SLIDE 1 ══ -->
+  <div id="slide-1" class="slide-wrap active">
 
   <!-- Banda de alertas por excepción -->
   <div id="alerts-band" style="display:none"></div>
@@ -1416,6 +1446,11 @@ body.tv .meta-curr{font-size:28px}
     </div>
   </div>
 
+  </div><!-- ══ /SLIDE 1 ══ -->
+
+  <!-- ══ SLIDE 2 ══ -->
+  <div id="slide-2" class="slide-wrap">
+
   <!-- Ritmo mensual -->
   <div class="meta-card">
     <div class="sec-lbl">Ritmo Mensual — Pedidos vs. Mes Anterior</div>
@@ -1527,6 +1562,19 @@ body.tv .meta-curr{font-size:28px}
         </div>
       </div>
     </div>
+  </div>
+
+  </div><!-- ══ /SLIDE 2 ══ -->
+
+  <!-- Barra de control kiosk (solo visible en modo TV) -->
+  <div class="kiosk-bar" id="kiosk-bar">
+    <div class="kiosk-dots">
+      <span class="kiosk-dot on" id="kdot-1"></span>
+      <span class="kiosk-dot" id="kdot-2"></span>
+    </div>
+    <span class="kiosk-label" id="kiosk-label">Operación del día</span>
+    <div class="kiosk-prog"><div class="kiosk-prog-fill" id="kiosk-prog"></div></div>
+    <button class="kiosk-btn" id="kiosk-pause" onclick="kioskTogglePause()">⏸ Pausar</button>
   </div>
 
 </div>
@@ -1646,7 +1694,18 @@ function renderPlan(pv, diasElapsed, diasHab){
   document.getElementById('hero-bar').style.width=fill+'%';
   document.getElementById('hero-bar').style.background=barColor;
   document.getElementById('hero-pace').style.left=pacePos.toFixed(1)+'%';
-  document.getElementById('hero-foot-l').textContent=diasHab>0?`Día hábil ${diasElapsed} de ${diasHab}`:'';
+  const lEl=document.getElementById('hero-foot-l');
+  if(diasHab>0){
+    const restDias=diasHab-diasElapsed;
+    let chip='';
+    if(restDias>0){
+      const urgente=restDias<=3;
+      chip=` <span class="rest-chip${urgente?' urgent':''}">${restDias} ${restDias===1?'día hábil':'días hábiles'} restantes del mes</span>`;
+    } else {
+      chip=` <span class="rest-chip urgent">Último día hábil del mes</span>`;
+    }
+    lEl.innerHTML=`Día hábil ${diasElapsed} de ${diasHab}${chip}`;
+  } else { lEl.textContent=''; }
   document.getElementById('hero-foot-r').textContent=plan>0?`Restante: ${fmtK(plan-fact)}`:'';
 
   const tag=document.getElementById('hero-tag');
@@ -2062,15 +2121,65 @@ function toggleDark(){
   localStorage.setItem('wuerth-dark',dark?'1':'0');
   if(_lastTrend)renderChart(_lastTrend);
 }
+// ── Modo TV + rotación kiosk ──────────────────────────────────────────────
+const KIOSK_INTERVAL=20000;            // 20s por página
+const KIOSK_LABELS=['Operación del día','Análisis mensual y ranking'];
+let _kioskPage=1, _kioskTimer=null, _kioskProgTimer=null, _kioskPaused=false, _kioskT0=0;
+
+function kioskGoTo(page){
+  _kioskPage=page;
+  for(let i=1;i<=2;i++){
+    const sl=document.getElementById('slide-'+i);
+    const dot=document.getElementById('kdot-'+i);
+    if(sl)sl.classList.toggle('active',i===page);
+    if(dot)dot.classList.toggle('on',i===page);
+  }
+  const lbl=document.getElementById('kiosk-label');
+  if(lbl)lbl.textContent=KIOSK_LABELS[page-1];
+  if(_lastTrend&&page===2)renderChart(_lastTrend); // recalcular tamaño del gráfico al mostrarse
+  kioskProgReset();
+}
+function kioskAdvance(){ kioskGoTo(_kioskPage===1?2:1); }
+function kioskProgReset(){
+  _kioskT0=Date.now();
+  const fill=document.getElementById('kiosk-prog');
+  if(fill)fill.style.width='0%';
+}
+function kioskTick(){
+  if(_kioskPaused)return;
+  const fill=document.getElementById('kiosk-prog');
+  const pct=Math.min((Date.now()-_kioskT0)/KIOSK_INTERVAL*100,100);
+  if(fill)fill.style.width=pct+'%';
+}
+function kioskStart(){
+  kioskGoTo(1);
+  clearInterval(_kioskTimer); clearInterval(_kioskProgTimer);
+  _kioskTimer=setInterval(()=>{ if(!_kioskPaused)kioskAdvance(); }, KIOSK_INTERVAL);
+  _kioskProgTimer=setInterval(kioskTick,150);
+}
+function kioskStop(){
+  clearInterval(_kioskTimer); clearInterval(_kioskProgTimer);
+  _kioskTimer=null; _kioskProgTimer=null;
+  // restaurar ambas slides visibles (scroll normal)
+  for(let i=1;i<=2;i++){const sl=document.getElementById('slide-'+i);if(sl)sl.classList.remove('active');}
+}
+function kioskTogglePause(){
+  _kioskPaused=!_kioskPaused;
+  const b=document.getElementById('kiosk-pause');
+  if(b)b.textContent=_kioskPaused?'▶ Reanudar':'⏸ Pausar';
+  if(!_kioskPaused)kioskProgReset();
+}
 function toggleTV(){
   const tv=document.body.classList.toggle('tv');
   document.getElementById('tv-btn').classList.toggle('on',tv);
   localStorage.setItem('wuerth-tv',tv?'1':'0');
+  if(tv)kioskStart(); else kioskStop();
   if(_lastTrend)renderChart(_lastTrend);
 }
-if(localStorage.getItem('wuerth-tv')==='1'){
+if(localStorage.getItem('wuerth-tv')==='1'||new URLSearchParams(location.search).get('tv')==='1'){
   document.body.classList.add('tv');
   document.getElementById('tv-btn').classList.add('on');
+  kioskStart();
 }
 if(localStorage.getItem('wuerth-dark')==='1'||new URLSearchParams(location.search).get('dark')==='1'){
   document.body.classList.add('dark');
