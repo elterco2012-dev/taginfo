@@ -18,7 +18,7 @@ REQUIRED = [
     ("rest-chip",                  "Plan: chip dias habiles restantes falta"),
     ("restDias",                   "Plan: calculo restDias falta"),
     # Trend fix
-    ("target_str, target_str",     "Chart: trend query debe usar target_str (no CURDATE)"),
+    ("wd_log if d <= target_str",   "Chart: trend query debe filtrar por wd_log hasta target_str"),
     # Ranking oculto
     ('display:none">',             "Ranking: debe estar oculto con display:none"),
 ]

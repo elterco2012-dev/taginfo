@@ -145,18 +145,6 @@ def fetch_reactor(target_date=None):
     for r in status_rows:
         by_status[int(r[0])] = {"name": r[1], "cnt": r[2], "val": float(r[3] or 0)}
 
-    # Monthly trend — upper bound = target_str so divisor and sum cover same days
-    trend_rows = run(cur, """
-        SELECT DATE_FORMAT(order_date, '%Y-%m') mes,
-               COUNT(DISTINCT id) pedidos,
-               SUM(total) valor
-        FROM order_placed
-        WHERE order_date >= DATE_FORMAT(DATE_SUB(?, INTERVAL 11 MONTH), '%Y-%m-01')
-          AND DATE(order_date) <= ?
-        GROUP BY DATE_FORMAT(order_date, '%Y-%m')
-        ORDER BY mes
-    """, (target_str, target_str))
-
     # Work days per month
     wd_rows = run(cur, """
         SELECT CONCAT(year, '-', LPAD(month, 2, '0')) mes, days
@@ -167,7 +155,6 @@ def fetch_reactor(target_date=None):
     wd_map = {r[0]: r[1] for r in wd_rows} if wd_rows else {}
 
     # Exact business day per calendar date from work_days_log
-    # real_date = date, working_day = business day number within month
     wdl_rows = run(cur, """
         SELECT DATE_FORMAT(real_date, '%Y-%m-%d'), working_day
         FROM work_days_log
@@ -175,18 +162,22 @@ def fetch_reactor(target_date=None):
     """)
     wd_log = {str(r[0]): int(r[1]) for r in (wdl_rows or []) if r[0] and r[1]}
 
-    # Monthly trend — all days of month, excludes anulados (status 14)
-    trend_rows = run(cur, """
-        SELECT DATE_FORMAT(order_date, '%Y-%m') mes,
-               COUNT(DISTINCT id) pedidos,
-               SUM(total) valor
-        FROM order_placed
-        WHERE order_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 11 MONTH), '%Y-%m-01')
-          AND DATE(order_date) <= CURDATE()
-          AND id_order_status <> 14
-        GROUP BY DATE_FORMAT(order_date, '%Y-%m')
-        ORDER BY mes
-    """)
+    # Monthly trend — solo días hábiles (wd_log), todos los estados
+    # Así el numerador SUM(total) y el divisor (elapsed_wd / dias_tot) cuentan exactamente los mismos días
+    trend_dates = sorted(d for d in wd_log if d <= target_str)
+    if trend_dates:
+        td_ph = ",".join(["?"] * len(trend_dates))
+        trend_rows = run(cur, f"""
+            SELECT DATE_FORMAT(order_date, '%Y-%m') mes,
+                   COUNT(DISTINCT id) pedidos,
+                   SUM(total) valor
+            FROM order_placed
+            WHERE DATE(order_date) IN ({td_ph})
+            GROUP BY DATE_FORMAT(order_date, '%Y-%m')
+            ORDER BY mes
+        """, tuple(trend_dates))
+    else:
+        trend_rows = []
 
     # Días hábiles transcurridos en el mes del target (para el mes en curso)
     cur_mes = target_dt.strftime("%Y-%m")
