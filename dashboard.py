@@ -1150,26 +1150,32 @@ body.tv .mspa-val{font-size:17px}
 body.tv .seller-tbl{font-size:14px}
 body.tv .meta-curr{font-size:28px}
 
-/* ── MODO KIOSK / TV — rotación de 2 páginas ── */
+/* ── MODO KIOSK — rotación de 2 páginas (modo propio, separado del TV) ── */
 .slide-wrap{display:contents}
-body.tv .main{position:relative;padding-bottom:64px}
-body.tv .slide-wrap{display:block;position:absolute;left:0;right:0;top:0;
+body.kiosk .main{position:relative;padding-bottom:74px}
+body.kiosk .slide-wrap{position:absolute;left:0;right:0;top:0;
   display:flex;flex-direction:column;gap:26px;
-  opacity:0;pointer-events:none;transition:opacity .7s ease}
-body.tv .slide-wrap.active{position:relative;opacity:1;pointer-events:auto}
-/* barra inferior de kiosk */
+  opacity:0;pointer-events:none;transition:opacity .6s ease}
+body.kiosk .slide-wrap.active{position:relative;opacity:1;pointer-events:auto}
+/* barra inferior de kiosk — dots centrados y clickeables */
 .kiosk-bar{display:none}
-body.tv .kiosk-bar{display:flex;align-items:center;gap:16px;
+body.kiosk .kiosk-bar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
   position:fixed;left:0;right:0;bottom:0;z-index:50;
-  padding:10px 40px;background:var(--surface);border-top:1px solid var(--border)}
-.kiosk-dots{display:flex;gap:8px}
-.kiosk-dot{width:9px;height:9px;border-radius:50%;background:var(--border-2);transition:background .3s}
+  padding:12px 40px;background:var(--surface);border-top:1px solid var(--border);
+  box-shadow:0 -4px 16px rgba(0,0,0,.06)}
+.kiosk-label{font-size:14px;color:var(--text-2);font-weight:600;justify-self:start}
+.kiosk-dots{display:flex;gap:14px;justify-self:center}
+.kiosk-dot{width:14px;height:14px;border-radius:50%;background:var(--border-2);
+  cursor:pointer;transition:background .3s,transform .2s;border:none;padding:0}
+.kiosk-dot:hover{transform:scale(1.25)}
 .kiosk-dot.on{background:var(--wurth-red)}
-.kiosk-label{font-size:13px;color:var(--text-2);font-weight:600}
-.kiosk-prog{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
-.kiosk-prog-fill{height:100%;width:0;background:var(--wurth-red);border-radius:2px}
+.kiosk-right{display:flex;align-items:center;gap:14px;justify-self:end}
+.kiosk-prog{width:120px;height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.kiosk-prog-fill{height:100%;width:0;background:var(--wurth-red);border-radius:3px}
 .kiosk-btn{background:none;border:1px solid var(--border-2);color:var(--text-2);
-  border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;font-family:inherit}
+  border-radius:6px;padding:5px 14px;font-size:13px;cursor:pointer;font-family:inherit}
+.kiosk-btn:hover{border-color:var(--wurth-red);color:var(--wurth-red)}
+/* en kiosk usamos las mismas fuentes grandes del modo TV (clase tv se agrega junto) */
 /* chip días hábiles restantes */
 .rest-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
   padding:3px 10px;border-radius:20px;background:var(--surface-2);
@@ -1216,8 +1222,11 @@ body.tv .rest-chip{font-size:15px;padding:5px 14px}
     <button class="icon-btn" onclick="window.print()" title="Exportar / Imprimir">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>
     </button>
-    <button class="icon-btn" onclick="toggleTV()" id="tv-btn" title="Modo TV">
+    <button class="icon-btn" onclick="toggleTV()" id="tv-btn" title="Modo TV (fuentes grandes)">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="15" x="2" y="3" rx="2"/><path d="M7 21h10M12 18v3"/></svg>
+    </button>
+    <button class="icon-btn" onclick="toggleKiosk()" id="kiosk-btn" title="Modo Kiosk (rotación pantalla completa)">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
     </button>
     <button class="icon-btn" onclick="toggleDark()" id="mode-btn" title="Modo oscuro">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" id="mode-ico"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
@@ -1566,15 +1575,18 @@ body.tv .rest-chip{font-size:15px;padding:5px 14px}
 
   </div><!-- ══ /SLIDE 2 ══ -->
 
-  <!-- Barra de control kiosk (solo visible en modo TV) -->
+  <!-- Barra de control kiosk (solo visible en modo kiosk) -->
   <div class="kiosk-bar" id="kiosk-bar">
-    <div class="kiosk-dots">
-      <span class="kiosk-dot on" id="kdot-1"></span>
-      <span class="kiosk-dot" id="kdot-2"></span>
-    </div>
     <span class="kiosk-label" id="kiosk-label">Operación del día</span>
-    <div class="kiosk-prog"><div class="kiosk-prog-fill" id="kiosk-prog"></div></div>
-    <button class="kiosk-btn" id="kiosk-pause" onclick="kioskTogglePause()">⏸ Pausar</button>
+    <div class="kiosk-dots">
+      <button class="kiosk-dot on" id="kdot-1" onclick="kioskGoTo(1)" title="Operación del día"></button>
+      <button class="kiosk-dot" id="kdot-2" onclick="kioskGoTo(2)" title="Análisis mensual y ranking"></button>
+    </div>
+    <div class="kiosk-right">
+      <div class="kiosk-prog"><div class="kiosk-prog-fill" id="kiosk-prog"></div></div>
+      <button class="kiosk-btn" id="kiosk-pause" onclick="kioskTogglePause()">⏸ Pausar</button>
+      <button class="kiosk-btn" onclick="toggleKiosk()">✕ Salir</button>
+    </div>
   </div>
 
 </div>
@@ -2121,7 +2133,19 @@ function toggleDark(){
   localStorage.setItem('wuerth-dark',dark?'1':'0');
   if(_lastTrend)renderChart(_lastTrend);
 }
-// ── Modo TV + rotación kiosk ──────────────────────────────────────────────
+// ── Modo TV (solo fuentes grandes, con scroll) ────────────────────────────
+function toggleTV(){
+  const tv=document.body.classList.toggle('tv');
+  document.getElementById('tv-btn').classList.toggle('on',tv);
+  localStorage.setItem('wuerth-tv',tv?'1':'0');
+  if(_lastTrend)renderChart(_lastTrend);
+}
+if(localStorage.getItem('wuerth-tv')==='1'){
+  document.body.classList.add('tv');
+  document.getElementById('tv-btn').classList.add('on');
+}
+
+// ── Modo KIOSK — rotación de 2 páginas en pantalla completa ────────────────
 const KIOSK_INTERVAL=20000;            // 20s por página
 const KIOSK_LABELS=['Operación del día','Análisis mensual y ranking'];
 let _kioskPage=1, _kioskTimer=null, _kioskProgTimer=null, _kioskPaused=false, _kioskT0=0;
@@ -2137,6 +2161,11 @@ function kioskGoTo(page){
   const lbl=document.getElementById('kiosk-label');
   if(lbl)lbl.textContent=KIOSK_LABELS[page-1];
   if(_lastTrend&&page===2)renderChart(_lastTrend); // recalcular tamaño del gráfico al mostrarse
+  // reiniciar el temporizador completo (al hacer click en un dot, vuelve a contar 20s)
+  if(_kioskTimer){
+    clearInterval(_kioskTimer);
+    _kioskTimer=setInterval(()=>{ if(!_kioskPaused)kioskAdvance(); }, KIOSK_INTERVAL);
+  }
   kioskProgReset();
 }
 function kioskAdvance(){ kioskGoTo(_kioskPage===1?2:1); }
@@ -2152,16 +2181,31 @@ function kioskTick(){
   if(fill)fill.style.width=pct+'%';
 }
 function kioskStart(){
+  document.body.classList.add('kiosk','tv'); // tv = fuentes grandes
+  document.getElementById('kiosk-btn').classList.add('on');
   kioskGoTo(1);
   clearInterval(_kioskTimer); clearInterval(_kioskProgTimer);
   _kioskTimer=setInterval(()=>{ if(!_kioskPaused)kioskAdvance(); }, KIOSK_INTERVAL);
   _kioskProgTimer=setInterval(kioskTick,150);
+  if(_lastTrend)renderChart(_lastTrend);
+  // entrar en pantalla completa
+  const el=document.documentElement;
+  if(el.requestFullscreen) el.requestFullscreen().catch(()=>{});
 }
 function kioskStop(){
   clearInterval(_kioskTimer); clearInterval(_kioskProgTimer);
-  _kioskTimer=null; _kioskProgTimer=null;
-  // restaurar ambas slides visibles (scroll normal)
+  _kioskTimer=null; _kioskProgTimer=null; _kioskPaused=false;
+  document.body.classList.remove('kiosk');
+  // solo quitar 'tv' si el modo TV no estaba activo por su cuenta
+  if(localStorage.getItem('wuerth-tv')!=='1') document.body.classList.remove('tv');
+  document.getElementById('kiosk-btn').classList.remove('on');
   for(let i=1;i<=2;i++){const sl=document.getElementById('slide-'+i);if(sl)sl.classList.remove('active');}
+  if(document.fullscreenElement&&document.exitFullscreen) document.exitFullscreen().catch(()=>{});
+  if(_lastTrend)renderChart(_lastTrend);
+}
+function toggleKiosk(){
+  if(document.body.classList.contains('kiosk')) kioskStop();
+  else kioskStart();
 }
 function kioskTogglePause(){
   _kioskPaused=!_kioskPaused;
@@ -2169,17 +2213,13 @@ function kioskTogglePause(){
   if(b)b.textContent=_kioskPaused?'▶ Reanudar':'⏸ Pausar';
   if(!_kioskPaused)kioskProgReset();
 }
-function toggleTV(){
-  const tv=document.body.classList.toggle('tv');
-  document.getElementById('tv-btn').classList.toggle('on',tv);
-  localStorage.setItem('wuerth-tv',tv?'1':'0');
-  if(tv)kioskStart(); else kioskStop();
-  if(_lastTrend)renderChart(_lastTrend);
-}
-if(localStorage.getItem('wuerth-tv')==='1'||new URLSearchParams(location.search).get('tv')==='1'){
-  document.body.classList.add('tv');
-  document.getElementById('tv-btn').classList.add('on');
-  kioskStart();
+// salir del kiosk si el usuario sale de pantalla completa (tecla Esc)
+document.addEventListener('fullscreenchange',()=>{
+  if(!document.fullscreenElement && document.body.classList.contains('kiosk')) kioskStop();
+});
+// auto-arranque por URL ?kiosk=1
+if(new URLSearchParams(location.search).get('kiosk')==='1'){
+  window.addEventListener('load',()=>setTimeout(kioskStart,400));
 }
 if(localStorage.getItem('wuerth-dark')==='1'||new URLSearchParams(location.search).get('dark')==='1'){
   document.body.classList.add('dark');
