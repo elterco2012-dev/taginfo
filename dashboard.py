@@ -175,6 +175,19 @@ def fetch_reactor(target_date=None):
     """)
     wd_log = {str(r[0]): int(r[1]) for r in (wdl_rows or []) if r[0] and r[1]}
 
+    # Monthly trend — all days of month, excludes anulados (status 14)
+    trend_rows = run(cur, """
+        SELECT DATE_FORMAT(order_date, '%Y-%m') mes,
+               COUNT(DISTINCT id) pedidos,
+               SUM(total) valor
+        FROM order_placed
+        WHERE order_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 11 MONTH), '%Y-%m-01')
+          AND DATE(order_date) <= CURDATE()
+          AND id_order_status <> 14
+        GROUP BY DATE_FORMAT(order_date, '%Y-%m')
+        ORDER BY mes
+    """)
+
     # Días hábiles transcurridos en el mes del target (para el mes en curso)
     cur_mes = target_dt.strftime("%Y-%m")
     elapsed_wd = sum(1 for d in wd_log if d.startswith(cur_mes) and d <= target_str)
@@ -342,6 +355,7 @@ def fetch_reactor(target_date=None):
                            SUM(total) valor
                     FROM order_placed
                     WHERE DATE(order_date) IN ({ph})
+                      AND id_order_status <> 14
                     GROUP BY DATE(order_date)
                     ORDER BY fecha
                 """, tuple(spark_dates))
@@ -352,6 +366,7 @@ def fetch_reactor(target_date=None):
                     FROM order_placed op
                     JOIN order_detail od ON od.id_order_placed = op.id
                     WHERE DATE(op.order_date) IN ({ph})
+                      AND op.id_order_status <> 14
                     GROUP BY DATE(op.order_date)
                     ORDER BY fecha
                 """, tuple(spark_dates))
