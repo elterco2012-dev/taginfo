@@ -13,15 +13,8 @@ import threading
 import base64
 import os
 import calendar
-import hashlib
-import secrets
 from datetime import date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from socketserver import ThreadingMixIn
-from ftp_snapshot import start_snapshot_job
-
-class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
-    daemon_threads = True
 
 
 class _Enc(json.JSONEncoder):
@@ -39,123 +32,6 @@ FIRMA       = 1
 PORT        = 8765
 MSPA_TTL    = 60
 REACTOR_TTL = 600
-
-# ── Autenticación ─────────────────────────────────────────────────────────────
-DASH_USER     = os.environ.get("DASH_USER", "wurth")
-DASH_PASS     = os.environ.get("DASH_PASS", "Dashboard2026!")
-SESSION_TTL   = 12 * 3600  # 12 horas en segundos
-_sessions: dict = {}        # token -> datetime de creación
-_sess_lock = threading.Lock()
-
-# Protección brute-force: max 5 intentos fallidos por IP, bloqueo 15 minutos
-MAX_FAILED    = 5
-LOCKOUT_SECS  = 15 * 60
-_failed: dict = {}   # ip -> {"count": int, "since": datetime, "locked_at": datetime|None}
-_fail_lock    = threading.Lock()
-
-def _check_lockout(ip):
-    """Retorna (bloqueado, segundos_restantes)."""
-    with _fail_lock:
-        e = _failed.get(ip)
-        if not e:
-            return False, 0
-        if e.get("locked_at"):
-            elapsed = (datetime.now() - e["locked_at"]).total_seconds()
-            if elapsed < LOCKOUT_SECS:
-                return True, int(LOCKOUT_SECS - elapsed)
-            # Bloqueo expiró — limpiar
-            _failed.pop(ip, None)
-        return False, 0
-
-def _register_fail(ip):
-    with _fail_lock:
-        e = _failed.setdefault(ip, {"count": 0, "since": datetime.now(), "locked_at": None})
-        e["count"] += 1
-        if e["count"] >= MAX_FAILED:
-            e["locked_at"] = datetime.now()
-            print(f"  [AUTH] IP {ip} bloqueada por {LOCKOUT_SECS//60} min tras {e['count']} intentos fallidos")
-
-def _register_ok(ip):
-    with _fail_lock:
-        _failed.pop(ip, None)
-
-def _new_session():
-    token = secrets.token_hex(32)
-    with _sess_lock:
-        _sessions[token] = datetime.now()
-    return token
-
-def _valid_session(token):
-    if not token:
-        return False
-    with _sess_lock:
-        ts = _sessions.get(token)
-        if not ts:
-            return False
-        if (datetime.now() - ts).total_seconds() > SESSION_TTL:
-            _sessions.pop(token, None)
-            return False
-        return True
-
-def _get_cookie(headers, name):
-    cookie_hdr = headers.get("Cookie", "")
-    for part in cookie_hdr.split(";"):
-        k, _, v = part.strip().partition("=")
-        if k.strip() == name:
-            return v.strip()
-    return None
-
-LOGIN_HTML = """<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Operations Dashboard · Login</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',sans-serif;background:#f1f5f9;display:flex;align-items:center;
-     justify-content:center;min-height:100vh}
-.card{background:#fff;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,.1);
-      padding:40px;width:340px}
-.logo{display:flex;align-items:center;gap:10px;margin-bottom:28px}
-.logo-mark{width:32px;height:32px;background:#cc0000;border-radius:6px}
-.logo-txt{font-size:14px;font-weight:700;color:#1e293b}
-.logo-sub{font-size:11px;color:#64748b;margin-top:1px}
-h2{font-size:20px;font-weight:700;color:#1e293b;margin-bottom:6px}
-p{font-size:13px;color:#64748b;margin-bottom:24px}
-label{display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:5px}
-input{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:7px;
-      font-size:14px;outline:none;transition:border .15s}
-input:focus{border-color:#cc0000;box-shadow:0 0 0 3px rgba(204,0,0,.1)}
-.field{margin-bottom:16px}
-.err{color:#dc2626;font-size:12px;margin-bottom:14px;display:none}
-.err.show{display:block}
-button{width:100%;padding:11px;background:#cc0000;color:#fff;border:none;
-       border-radius:7px;font-size:14px;font-weight:600;cursor:pointer;
-       transition:background .15s}
-button:hover{background:#b91c1c}
-</style></head>
-<body>
-<div class="card">
-  <div class="logo">
-    <div class="logo-mark"></div>
-    <div><div class="logo-txt">Operations Dashboard</div>
-         <div class="logo-sub">Reactor · MSPA · Tiempo Real</div></div>
-  </div>
-  <h2>Iniciar sesión</h2>
-  <p>Ingresá tus credenciales para continuar</p>
-  <form method="POST" action="/login">
-    <div class="field"><label>Usuario</label>
-      <input name="u" type="text" autocomplete="username" autofocus></div>
-    <div class="field"><label>Contraseña</label>
-      <input name="p" type="password" autocomplete="current-password"></div>
-    <div class="err" id="err">@@ERR@@</div>
-    <button type="submit">Ingresar</button>
-  </form>
-</div>
-<script>
-if(document.getElementById('err').textContent.trim())
-  document.getElementById('err').classList.add('show');
-</script>
-</body></html>"""
 
 _lock           = threading.Lock()
 _cache_mspa     = None
@@ -269,20 +145,6 @@ def fetch_reactor(target_date=None):
     for r in status_rows:
         by_status[int(r[0])] = {"name": r[1], "cnt": r[2], "val": float(r[3] or 0)}
 
-    # Monthly trend — 12 COMPLETE months (fix: start from 1st of month 11 months ago)
-    # Excludes anulados (status 14) to show real sales only
-    trend_rows = run(cur, """
-        SELECT DATE_FORMAT(order_date, '%Y-%m') mes,
-               COUNT(DISTINCT id) pedidos,
-               SUM(total) valor
-        FROM order_placed
-        WHERE order_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 11 MONTH), '%Y-%m-01')
-          AND DATE(order_date) <= CURDATE()
-          AND id_order_status <> 14
-        GROUP BY DATE_FORMAT(order_date, '%Y-%m')
-        ORDER BY mes
-    """)
-
     # Work days per month
     wd_rows = run(cur, """
         SELECT CONCAT(year, '-', LPAD(month, 2, '0')) mes, days
@@ -300,6 +162,24 @@ def fetch_reactor(target_date=None):
         WHERE real_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 13 MONTH), '%Y-%m-01')
     """)
     wd_log = {str(r[0]): int(r[1]) for r in (wdl_rows or []) if r[0] and r[1]}
+
+    # Monthly trend — only business days, only non-anulados
+    # Filter by wd_log dates so numerator and denominator count the same days
+    trend_dates = sorted(d for d in wd_log if d <= target_str)
+    if trend_dates:
+        td_ph = ",".join(["?"] * len(trend_dates))
+        trend_rows = run(cur, f"""
+            SELECT DATE_FORMAT(order_date, '%Y-%m') mes,
+                   COUNT(DISTINCT id) pedidos,
+                   SUM(total) valor
+            FROM order_placed
+            WHERE DATE(order_date) IN ({td_ph})
+              AND id_order_status <> 14
+            GROUP BY DATE_FORMAT(order_date, '%Y-%m')
+            ORDER BY mes
+        """, tuple(trend_dates))
+    else:
+        trend_rows = []
 
     # Días hábiles transcurridos en el mes del target (para el mes en curso)
     cur_mes = target_dt.strftime("%Y-%m")
@@ -416,25 +296,25 @@ def fetch_reactor(target_date=None):
         "days_in_month": days_in_month,
     }
 
-    # Sellers: id_user en order_placed = user.id (interno)
-    # username = número de vendedor, name+surname = nombre completo
-    user_names = {}   # user.id -> {"nombre": ..., "code": username}
-    rows_u = run(cur, "SELECT id, username, name, surname FROM `user`")
+    # Sellers: keyed by username (= número de vendedor), name + surname concatenados
+    user_names = {}
+    rows_u = run(cur, "SELECT username, name, surname FROM `user`")
     if rows_u:
         for r in rows_u:
-            uid  = r[0]
-            code = str(r[1]).strip() if r[1] else str(uid)
-            name = str(r[2]).strip() if r[2] else ""
-            surn = str(r[3]).strip() if r[3] else ""
-            full = (name + " " + surn).strip()
-            user_names[uid] = {"nombre": full, "code": code}
+            uname = str(r[0]).strip() if r[0] else None
+            name  = str(r[1]).strip() if r[1] else ""
+            surn  = str(r[2]).strip() if r[2] else ""
+            full  = (name + " " + surn).strip()
+            if uname and full:
+                user_names[uname] = full
         print(f"  user names loaded: {len(user_names)} rows")
 
     def seller_name(uid):
-        u = user_names.get(uid)
-        if u and u["nombre"]:
-            return f"{u['nombre']} ({u['code']})"
-        return f"Vend. {uid}"
+        key = str(uid).strip()
+        n   = user_names.get(key, "")
+        if n:
+            return f"{n} ({key})"
+        return f"Vend. {key}"
 
     ret_rows = run(cur, """
         SELECT id_user, COUNT(*) cnt, SUM(total) val
@@ -442,13 +322,8 @@ def fetch_reactor(target_date=None):
         WHERE DATE(order_date) = ? AND id_order_status = 15
         GROUP BY id_user ORDER BY cnt DESC LIMIT 15
     """, (target_str,))
-    def seller_dict(uid, cnt, val):
-        u = user_names.get(uid, {})
-        return {"id": uid, "code": u.get("code", str(uid)),
-                "nombre": seller_name(uid),
-                "cnt": int(cnt or 0), "val": float(val or 0)}
-
-    sellers_ret = [seller_dict(r[0], r[1], r[2]) for r in ret_rows]
+    sellers_ret = [{"id": r[0], "nombre": seller_name(r[0]),
+                    "cnt": int(r[1] or 0), "val": float(r[2] or 0)} for r in ret_rows]
 
     an_rows = run(cur, """
         SELECT id_user, COUNT(*) cnt, SUM(total) val
@@ -456,11 +331,11 @@ def fetch_reactor(target_date=None):
         WHERE DATE(order_date) = ? AND id_order_status = 14
         GROUP BY id_user ORDER BY cnt DESC LIMIT 15
     """, (target_str,))
-    sellers_an = [seller_dict(r[0], r[1], r[2]) for r in an_rows]
+    sellers_an = [{"id": r[0], "nombre": seller_name(r[0]),
+                   "cnt": int(r[1] or 0), "val": float(r[2] or 0)} for r in an_rows]
 
     # Sparklines — últimos 14 días hábiles (reusa wd_log ya consultado)
-    sparklines = {"pedidos": [], "ventas": [], "ped_vend": [], "avg_lin": [],
-                  "ticket": [], "fact_pct": []}
+    sparklines = {"pedidos": [], "ventas": [], "ped_vend": [], "avg_lin": []}
     try:
         if wd_log:
             spark_dates = sorted(d for d in wd_log if d <= target_str)[-14:]
@@ -488,32 +363,17 @@ def fetch_reactor(target_date=None):
                     GROUP BY DATE(op.order_date)
                     ORDER BY fecha
                 """, tuple(spark_dates))
-                # Facturados (status 13/18) por fecha — para % facturado
-                sp_fact = run(cur, f"""
-                    SELECT DATE(order_date) fecha, COUNT(DISTINCT id) facturados
-                    FROM order_placed
-                    WHERE DATE(order_date) IN ({ph}) AND id_order_status IN (13, 18)
-                    GROUP BY DATE(order_date)
-                    ORDER BY fecha
-                """, tuple(spark_dates))
-                lin_by_date  = {str(r[0]): (r[1] or 0, r[2] or 0) for r in (sp_lin or [])}
-                fact_by_date = {str(r[0]): int(r[1] or 0) for r in (sp_fact or [])}
+                lin_by_date = {str(r[0]): (r[1] or 0, r[2] or 0) for r in (sp_lin or [])}
                 for row in (sp_rows or []):
                     fd   = str(row[0])
                     ped  = int(row[1] or 0)
                     vend = int(row[2] or 0)
                     val  = float(row[3] or 0)
                     lin, lped = lin_by_date.get(fd, (0, 0))
-                    fact = fact_by_date.get(fd, 0)
                     sparklines["pedidos"].append(ped)
                     sparklines["ventas"].append(round(val / 1e6, 3))
                     sparklines["ped_vend"].append(round(ped / vend, 2) if vend else 0)
                     sparklines["avg_lin"].append(round(lin / lped, 2) if lped else 0)
-                    sparklines["ticket"].append(round(val / ped) if ped else 0)
-                    # % Facturado: solo días con facturación real (fact > 0).
-                    # Los días muy recientes aún no maduraron y darían 0% artificial.
-                    if ped and fact > 0:
-                        sparklines["fact_pct"].append(round(fact / ped * 100, 1))
     except Exception as e:
         print(f"  sparklines error: {e}")
 
@@ -546,30 +406,16 @@ def fetch_reactor(target_date=None):
 # HOY SUMMARY — pedidos informados hoy (panel informativo)
 # ─────────────────────────────────────────────────────────────────────────────
 def fetch_today_summary():
-    today    = date.today()
-    today_str = str(today)
+    today_str = str(date.today())
     conn = get_reactor()
     cur  = conn.cursor()
     try:
-        # Día hábil de referencia = último día hábil <= hoy (work_days_log).
-        # En día hábil: es hoy mismo (live). Fin de semana/feriado: el último hábil
-        # (ej: sábado/domingo muestran el viernes) hasta que avance el día hábil.
-        ref_str   = today_str
-        is_today  = True
-        wd_ref = run(cur, """
-            SELECT DATE_FORMAT(real_date, '%Y-%m-%d')
-            FROM work_days_log WHERE real_date <= ?
-            ORDER BY real_date DESC LIMIT 1
-        """, (today_str,))
-        if wd_ref and wd_ref[0][0]:
-            ref_str  = str(wd_ref[0][0])
-            is_today = (ref_str == today_str)
         rows = run(cur, """
             SELECT COUNT(DISTINCT id) pedidos,
                    COUNT(DISTINCT id_user) vendedores,
                    SUM(total) valor
             FROM order_placed WHERE DATE(order_date) = ?
-        """, (ref_str,))
+        """, (today_str,))
         pedidos, vendedores, valor = rows[0] if rows else (0, 0, 0)
         pedidos    = int(pedidos    or 0)
         vendedores = int(vendedores or 0)
@@ -579,11 +425,10 @@ def fetch_today_summary():
             FROM order_placed op
             JOIN order_detail od ON od.id_order_placed = op.id
             WHERE DATE(op.order_date) = ?
-        """, (ref_str,))
+        """, (today_str,))
         lineas = int(lineas_row[0][0] or 0) if lineas_row else 0
         return {
-            "date":         ref_str,
-            "is_today":     is_today,
+            "date":         today_str,
             "pedidos":      pedidos,
             "vendedores":   vendedores,
             "valor":        valor,
@@ -594,8 +439,8 @@ def fetch_today_summary():
         }
     except Exception as e:
         print(f"  fetch_today_summary error: {e}")
-        return {"date": today_str, "is_today": True, "pedidos": 0, "vendedores": 0,
-                "valor": 0, "lineas": 0, "avg_lineas": 0, "avg_ped_vend": 0, "ticket": 0}
+        return {"date": today_str, "pedidos": 0, "vendedores": 0, "valor": 0,
+                "lineas": 0, "avg_lineas": 0, "avg_ped_vend": 0, "ticket": 0}
     finally:
         conn.close()
 
@@ -831,31 +676,24 @@ def get_cached_data(override_date=None):
     now = datetime.now()
     today_summary = None
     if override_date:
-        # Fecha manual: fetch en paralelo para reducir tiempo de espera
-        results = {}
-        def _fetch_r():
-            try: results["reactor"] = fetch_reactor(target_date=override_date)
-            except Exception as e: results["reactor"] = {"error": str(e)}
-        def _fetch_m():
-            try: results["mspa"] = fetch_mspa(target_date=override_date)
-            except Exception as e: results["mspa"] = {"error": str(e)}
-        tr = threading.Thread(target=_fetch_r); tr.start()
-        tm = threading.Thread(target=_fetch_m); tm.start()
-        tr.join(); tm.join()
-        reactor, mspa = results["reactor"], results["mspa"]
+        # Fecha manual: fetch directo sin cache — datos exactos para esa fecha
+        try:
+            reactor = fetch_reactor(target_date=override_date)
+        except Exception as e:
+            reactor = {"error": str(e)}
+        try:
+            mspa = fetch_mspa(target_date=override_date)
+        except Exception as e:
+            mspa = {"error": str(e)}
         r_age, m_age = 0, 0
     else:
         with _lock:
             reactor = _get_cached(REACTOR_TTL, fetch_reactor, "reactor")
             mspa    = _get_cached(MSPA_TTL,    fetch_mspa,    "mspa")
             # Today summary se refresca con el mismo TTL que MSPA
-            # Refresca por TTL o si la captura es de un día calendario anterior
-            # (rollover de medianoche). No comparar contra date.today() directo:
-            # el "date" del summary es el último día hábil, que en fin de semana
-            # difiere de hoy y forzaría refetch en cada request.
             if (_cache_today is None or _cache_today_ts is None
                     or (now - _cache_today_ts).total_seconds() >= MSPA_TTL
-                    or _cache_today_ts.date() != now.date()):
+                    or _cache_today.get("date") != str(date.today())):
                 try:
                     _cache_today    = fetch_today_summary()
                     _cache_today_ts = now
@@ -875,10 +713,9 @@ def get_cached_data(override_date=None):
         vnames = mspa.get("vertr_names", {})
         for lst in ("sellers_ret", "sellers_an"):
             for s in reactor.get(lst, []):
-                # code = user.username = número de vendedor = clave en f040
-                code = str(s.get("code", s.get("id", ""))).strip()
-                if code in vnames:
-                    s["nombre"] = f"{vnames[code]} ({code})"
+                uid = str(s.get("id", "")).strip()
+                if uid in vnames:
+                    s["nombre"] = f"{vnames[uid]} ({uid})"
 
     return {
         "timestamp":      now.strftime("%d/%m/%Y %H:%M:%S"),
@@ -1000,9 +837,6 @@ body.dark .date-pop input{color-scheme:dark}
 
 /* ── HERO ── */
 .hero{display:grid;grid-template-columns:1.5fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r-card);overflow:hidden}
-.hero.flash{animation:heroFlash 1.4s ease-out}
-@keyframes heroFlash{0%{box-shadow:0 0 0 0 rgba(245,158,11,.45)}30%{box-shadow:0 0 0 4px rgba(245,158,11,.35)}100%{box-shadow:0 0 0 0 rgba(245,158,11,0)}}
-.a-act{cursor:pointer}
 .hero-main{background:var(--surface);padding:22px 26px}
 .hero-side{background:var(--surface);padding:22px 26px;display:flex;flex-direction:column;justify-content:center;gap:18px}
 .hero-eyebrow{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-3);margin-bottom:14px;white-space:nowrap}
@@ -1039,7 +873,6 @@ body.dark .state-neutral{background:#334155;color:var(--text-3)}
 .kpi-val{font-size:25px;font-weight:700;line-height:1;color:var(--text);font-variant-numeric:tabular-nums}
 .spark{width:74px;height:30px;flex-shrink:0;opacity:.9}
 .kpi-foot{display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap}
-.spark-avg{font-size:9px;color:var(--text-3);font-variant-numeric:tabular-nums;text-align:right;margin-top:2px;letter-spacing:.2px;cursor:help}
 .delta{display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
 .delta .ico{width:13px;height:13px}
 .delta.up{color:var(--pos-fg)}.delta.down{color:var(--neg-fg)}.delta.flat{color:var(--text-3)}
@@ -1052,8 +885,6 @@ body.dark .state-neutral{background:#334155;color:var(--text-3)}
 .flow-bar{display:flex;align-items:stretch;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);overflow:hidden}
 .hoy-bar{display:flex;align-items:stretch;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-card);overflow:hidden;margin-top:0}
 .hoy-bar.hidden{display:none}
-.live-badge{display:inline-flex;align-items:center;gap:5px;margin-left:8px;font-size:9px;font-weight:800;letter-spacing:.6px;color:var(--green);background:var(--green-bg);padding:2px 7px;border-radius:20px;vertical-align:middle}
-.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:ring 2.4s ease-out infinite;flex-shrink:0}
 .hoy-cell{flex:1;padding:12px 18px;display:flex;flex-direction:column;gap:3px;min-width:0;border-left:1px solid var(--border)}
 .hoy-cell:first-child{border-left:none}
 .hoy-lbl{font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
@@ -1154,39 +985,6 @@ body.tv .mspa-val{font-size:17px}
 body.tv .seller-tbl{font-size:14px}
 body.tv .meta-curr{font-size:28px}
 
-/* ── MODO KIOSK — rotación de 2 páginas (modo propio, separado del TV) ── */
-.slide-wrap{display:contents}
-body.kiosk .main{position:relative;padding-bottom:74px}
-body.kiosk .slide-wrap{position:absolute;left:0;right:0;top:0;
-  display:flex;flex-direction:column;gap:26px;
-  opacity:0;pointer-events:none;transition:opacity .6s ease}
-body.kiosk .slide-wrap.active{position:relative;opacity:1;pointer-events:auto}
-/* barra inferior de kiosk — dots centrados y clickeables */
-.kiosk-bar{display:none}
-body.kiosk .kiosk-bar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
-  position:fixed;left:0;right:0;bottom:0;z-index:50;
-  padding:12px 40px;background:var(--surface);border-top:1px solid var(--border);
-  box-shadow:0 -4px 16px rgba(0,0,0,.06)}
-.kiosk-label{font-size:14px;color:var(--text-2);font-weight:600;justify-self:start}
-.kiosk-dots{display:flex;gap:14px;justify-self:center}
-.kiosk-dot{width:14px;height:14px;border-radius:50%;background:var(--border-2);
-  cursor:pointer;transition:background .3s,transform .2s;border:none;padding:0}
-.kiosk-dot:hover{transform:scale(1.25)}
-.kiosk-dot.on{background:var(--wurth-red)}
-.kiosk-right{display:flex;align-items:center;gap:14px;justify-self:end}
-.kiosk-prog{width:120px;height:5px;background:var(--border);border-radius:3px;overflow:hidden}
-.kiosk-prog-fill{height:100%;width:0;background:var(--wurth-red);border-radius:3px}
-.kiosk-btn{background:none;border:1px solid var(--border-2);color:var(--text-2);
-  border-radius:6px;padding:5px 14px;font-size:13px;cursor:pointer;font-family:inherit}
-.kiosk-btn:hover{border-color:var(--wurth-red);color:var(--wurth-red)}
-/* en kiosk usamos las mismas fuentes grandes del modo TV (clase tv se agrega junto) */
-/* chip días hábiles restantes */
-.rest-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
-  padding:3px 10px;border-radius:20px;background:var(--surface-2);
-  border:1px solid var(--border);color:var(--text-2)}
-.rest-chip.urgent{background:var(--amber-bg);border-color:var(--amber);color:var(--amber)}
-body.tv .rest-chip{font-size:15px;padding:5px 14px}
-
 @media print{
   .hdr-right .icon-btn,.date-badge{display:none}
   body{background:#fff}
@@ -1226,11 +1024,8 @@ body.tv .rest-chip{font-size:15px;padding:5px 14px}
     <button class="icon-btn" onclick="window.print()" title="Exportar / Imprimir">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>
     </button>
-    <button class="icon-btn" onclick="toggleTV()" id="tv-btn" title="Modo TV (fuentes grandes)">
+    <button class="icon-btn" onclick="toggleTV()" id="tv-btn" title="Modo TV">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="15" x="2" y="3" rx="2"/><path d="M7 21h10M12 18v3"/></svg>
-    </button>
-    <button class="icon-btn" onclick="toggleKiosk()" id="kiosk-btn" title="Modo Kiosk (rotación pantalla completa)">
-      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
     </button>
     <button class="icon-btn" onclick="toggleDark()" id="mode-btn" title="Modo oscuro">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" id="mode-ico"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
@@ -1241,14 +1036,11 @@ body.tv .rest-chip{font-size:15px;padding:5px 14px}
 
 <div class="main">
 
-  <!-- ══ SLIDE 1 ══ -->
-  <div id="slide-1" class="slide-wrap active">
-
   <!-- Banda de alertas por excepción -->
   <div id="alerts-band" style="display:none"></div>
 
   <!-- HERO: Plan de Ventas + Venta del Día + Pedidos -->
-  <div class="hero" id="hero-card">
+  <div class="hero">
     <div class="hero-main">
       <div class="hero-eyebrow">
         <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
@@ -1314,10 +1106,7 @@ body.tv .rest-chip{font-size:15px;padding:5px 14px}
 
   <!-- KPI strip secundario -->
   <div class="sec">
-    <div class="sec-lbl" style="display:flex;align-items:center;gap:6px">
-      <span id="sec-reactor">Indicadores del día · —</span>
-      <span class="tooltip-info">ⓘ<span class="tt" style="white-space:normal;width:230px;text-align:left">La <b>flecha y el %</b> comparan contra el<br>mismo día hábil del mes anterior.<br>El <b>mini-gráfico</b> muestra la tendencia<br>de los últimos 14 días hábiles.<br>Pueden ir en sentidos distintos.</span></span>
-    </div>
+    <div class="sec-lbl" id="sec-reactor">Indicadores del día · —</div>
     <div id="err-r" class="err"></div>
     <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
       <div class="kpi">
@@ -1337,10 +1126,9 @@ body.tv .rest-chip{font-size:15px;padding:5px 14px}
         <div class="kpi-foot" id="d-avg"></div>
       </div>
       <div class="kpi">
-        <div class="kpi-lbl">Pedido Promedio</div>
+        <div class="kpi-lbl">Ticket Promedio</div>
         <div class="kpi-top">
           <div class="kpi-val num" id="k-ticket">—</div>
-          <div id="spark-ticket"></div>
         </div>
         <div class="kpi-foot" id="d-ticket"></div>
       </div>
@@ -1348,7 +1136,6 @@ body.tv .rest-chip{font-size:15px;padding:5px 14px}
         <div class="kpi-lbl">% Facturado del Día</div>
         <div class="kpi-top">
           <div class="kpi-val num" id="k-factpct">—</div>
-          <div id="spark-factpct"></div>
         </div>
         <div class="kpi-foot" id="d-factpct"></div>
       </div>
@@ -1445,7 +1232,7 @@ body.tv .rest-chip{font-size:15px;padding:5px 14px}
         <div class="hoy-val num" id="hoy-valor">—</div>
       </div>
       <div class="hoy-cell">
-        <div class="hoy-lbl">Pedido Promedio</div>
+        <div class="hoy-lbl">Ticket Promedio</div>
         <div class="hoy-val num" id="hoy-ticket">—</div>
       </div>
       <div class="hoy-cell">
@@ -1458,11 +1245,6 @@ body.tv .rest-chip{font-size:15px;padding:5px 14px}
       </div>
     </div>
   </div>
-
-  </div><!-- ══ /SLIDE 1 ══ -->
-
-  <!-- ══ SLIDE 2 ══ -->
-  <div id="slide-2" class="slide-wrap">
 
   <!-- Ritmo mensual -->
   <div class="meta-card">
@@ -1577,22 +1359,6 @@ body.tv .rest-chip{font-size:15px;padding:5px 14px}
     </div>
   </div>
 
-  </div><!-- ══ /SLIDE 2 ══ -->
-
-  <!-- Barra de control kiosk (solo visible en modo kiosk) -->
-  <div class="kiosk-bar" id="kiosk-bar">
-    <span class="kiosk-label" id="kiosk-label">Operación del día</span>
-    <div class="kiosk-dots">
-      <button class="kiosk-dot on" id="kdot-1" onclick="kioskGoTo(1)" title="Operación del día"></button>
-      <button class="kiosk-dot" id="kdot-2" onclick="kioskGoTo(2)" title="Análisis mensual y ranking"></button>
-    </div>
-    <div class="kiosk-right">
-      <div class="kiosk-prog"><div class="kiosk-prog-fill" id="kiosk-prog"></div></div>
-      <button class="kiosk-btn" id="kiosk-pause" onclick="kioskTogglePause()">⏸ Pausar</button>
-      <button class="kiosk-btn" onclick="toggleKiosk()">✕ Salir</button>
-    </div>
-  </div>
-
 </div>
 
 <script>
@@ -1628,19 +1394,13 @@ const MSPA_DEF=[
   {k:'venta',      l:'Venta del Día',                  cls:'venta', ico:'banknote'},
 ];
 
-// Formateador propio: siempre punto=miles, coma=decimal (independiente del browser/OS)
-function fmtN(n,d=0){
-  const s=Number(n||0).toFixed(d);
-  const[int,dec]=s.split('.');
-  const intFmt=int.replace(/\B(?=(\d{3})+(?!\d))/g,'.');
-  return dec!==undefined?intFmt+','+dec:intFmt;
-}
+function fmtN(n,d=0){return Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:d,maximumFractionDigits:d})}
 function fmtK(n){
   n=Number(n)||0;
-  const fmt1=v=>{const s=v.toFixed(1);const[i,d]=s.split('.');return i.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+d;};
+  const fmt1=v=>v.toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1});
   if(n>=1e9)return '$'+fmt1(n/1e9)+'B';
   if(n>=1e6)return '$'+fmt1(n/1e6)+'M';
-  if(n>=1e3)return '$'+Math.round(n/1e3).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.')+'K';
+  if(n>=1e3)return '$'+Math.round(n/1e3).toLocaleString('es-AR')+'K';
   return '$'+fmtN(n,0);
 }
 function pct(a,b){return b?fmtN((a/b)*100,1)+'%':'—'}
@@ -1662,13 +1422,13 @@ function sparkSvg(data,w=74,h=30){
   const pts=data.map((v,i)=>[pad+i*step, h-pad-((v-mn)/rng)*(h-pad*2)]);
   const d=pts.map(([x,y],i)=>`${i?'L':'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
   const area=`${d} L${pts[pts.length-1][0].toFixed(1)} ${h} L${pts[0][0].toFixed(1)} ${h} Z`;
-  const c='var(--text-3)';
+  const up=data[data.length-1]>=data[0];
+  const c=up?'var(--green)':'var(--red)';
   const gid='sg'+Math.abs(data.slice(0,3).reduce((a,v,i)=>a^(v*1000+i*7),0)).toString(36);
   const [lx,ly]=pts[pts.length-1];
-  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" opacity=".7">
-  <title>Tendencia últimos 14 días hábiles</title>
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
   <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0%" stop-color="${c}" stop-opacity=".15"/><stop offset="100%" stop-color="${c}" stop-opacity="0"/>
+    <stop offset="0%" stop-color="${c}" stop-opacity=".18"/><stop offset="100%" stop-color="${c}" stop-opacity="0"/>
   </linearGradient></defs>
   <path d="${area}" fill="url(#${gid})"/>
   <path d="${d}" fill="none" stroke="${c}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1679,11 +1439,9 @@ function sparkSvg(data,w=74,h=30){
 function deltaHtml(curr,prev,compLbl){
   if(!prev||!curr)return '';
   const p=(curr-prev)/prev*100;
-  const lbl=compLbl?`<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`:'';
-  if(Math.abs(p)<0.05)
-    return `<span class="delta flat">— sin cambio</span>${lbl}`;
   const ico=p>0?ICO.arrowUp:ICO.arrowDown;
   const cls=p>0?'up':'down';
+  const lbl=compLbl?`<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`:'';
   return `<span class="delta ${cls}">${ico} ${fmtN(Math.abs(p),1)}%</span>${lbl}`;
 }
 
@@ -1710,18 +1468,7 @@ function renderPlan(pv, diasElapsed, diasHab){
   document.getElementById('hero-bar').style.width=fill+'%';
   document.getElementById('hero-bar').style.background=barColor;
   document.getElementById('hero-pace').style.left=pacePos.toFixed(1)+'%';
-  const lEl=document.getElementById('hero-foot-l');
-  if(diasHab>0){
-    const restDias=diasHab-diasElapsed;
-    let chip='';
-    if(restDias>0){
-      const urgente=restDias<=3;
-      chip=` <span class="rest-chip${urgente?' urgent':''}">${restDias} ${restDias===1?'día hábil':'días hábiles'} restantes del mes</span>`;
-    } else {
-      chip=` <span class="rest-chip urgent">Último día hábil del mes</span>`;
-    }
-    lEl.innerHTML=`Día hábil ${diasElapsed} de ${diasHab}${chip}`;
-  } else { lEl.textContent=''; }
+  document.getElementById('hero-foot-l').textContent=diasHab>0?`Día hábil ${diasElapsed} de ${diasHab}`:'';
   document.getElementById('hero-foot-r').textContent=plan>0?`Restante: ${fmtK(plan-fact)}`:'';
 
   const tag=document.getElementById('hero-tag');
@@ -1818,17 +1565,12 @@ function renderChart(trend){
             const t=trend[i];
             if(t&&t.is_partial)return items[0].label.replace(' *','')+' (parcial — '+t.dias_hab+' días hábiles transcurridos de '+t.dias_tot+')';
             return items[0].label;
-          },
-          label(ctx){
-            const v=ctx.parsed.y;
-            const txt=Number(v).toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1});
-            return ctx.dataset.label+': '+txt;
           }
         }}
       },
       scales:{
         x:{grid:{display:false},ticks:{color:txtColor,font:{size:10}}},
-        y1:{position:'left',title:{display:true,text:'pedidos/día',color:txtColor,font:{size:10}},ticks:{color:txtColor,font:{size:10},callback:v=>fmtN(v,0)},grid:{color:gridColor}},
+        y1:{position:'left',title:{display:true,text:'pedidos/día',color:txtColor,font:{size:10}},ticks:{color:txtColor,font:{size:10}},grid:{color:gridColor}},
         y2:{position:'right',title:{display:true,text:'M$/día',color:txtColor,font:{size:10}},ticks:{color:'#cc0000',font:{size:10},callback:v=>fmtN(v,1)},grid:{drawOnChartArea:false}},
       }
     }
@@ -1882,7 +1624,7 @@ function renderAlerts(r,m){
     const pctVal=pv.pct_plan||0;
     if(pacePos>0&&pctVal<pacePos){
       const gap=pacePos-pctVal;
-      alerts.push(`<div class="alert warn">${ICO.trendingDown}<span>Plan de ventas <b>${fmtN(gap,1)} pts por debajo del ritmo</b> (${fmtN(pctVal,1)}% vs ${fmtN(pacePos,1)}% esperado)</span><a class="a-act" href="#" onclick="scrollToPlan(event)">Ver plan →</a></div>`);
+      alerts.push(`<div class="alert warn">${ICO.trendingDown}<span>Plan de ventas <b>${fmtN(gap,1)} pts por debajo del ritmo</b> (${fmtN(pctVal,1)}% vs ${fmtN(pacePos,1)}% esperado)</span><a class="a-act" href="#">Ver plan →</a></div>`);
     }
   }
 
@@ -1898,17 +1640,10 @@ function renderAlerts(r,m){
 
 function renderTodaySummary(ts){
   const sec=document.getElementById('hoy-sec');
-  // Mostrar siempre en modo en vivo, aunque hoy tenga 0 pedidos (ej: sábado/domingo).
-  // Solo ocultar si la consulta falló por completo (ts == null).
-  if(!ts){if(sec)sec.style.display='none';return;}
+  if(!ts||!ts.pedidos){if(sec)sec.style.display='none';return;}
   if(sec)sec.style.display='';
   const dp=ts.date?ts.date.split('-').reverse().join('/'):new Date().toLocaleDateString('es-AR');
-  // is_today: día hábil en curso (live). Si false: fin de semana/feriado mostrando
-  // el último día hábil cerrado (no pulsar "EN VIVO").
-  const live=ts.is_today!==false;
-  document.getElementById('hoy-lbl').innerHTML=
-    (live?'Hoy '+dp:'Último día hábil '+dp)+' — Pedidos informados'+
-    (live?'<span class="live-badge"><span class="live-dot"></span>EN VIVO</span>':'');
+  document.getElementById('hoy-lbl').textContent='Hoy '+dp+' — Pedidos informados hoy (en tiempo real)';
   document.getElementById('hoy-pedidos').textContent=fmtN(ts.pedidos,0);
   document.getElementById('hoy-vend').textContent=fmtN(ts.vendedores,0)+' vendedores activos';
   document.getElementById('hoy-valor').textContent=fmtK(ts.valor||0);
@@ -1991,23 +1726,12 @@ function render(data){
   document.getElementById('k-avg').textContent=fmtN(r.avg_lineas,1);
   document.getElementById('d-avg').innerHTML=c&&c.avg_lineas?deltaHtml(r.avg_lineas,c.avg_lineas,compLbl):'';
 
-  // Sparklines + promedio 14 días hábiles debajo
+  // Sparklines
   const sp=r.sparklines||{};
-  const avg14=(arr,fmt)=>{
-    if(!arr||arr.length<2)return '';
-    const m=arr.reduce((a,b)=>a+(Number(b)||0),0)/arr.length;
-    return `<div class="spark-avg" title="Promedio de los últimos ${arr.length} días hábiles">prom 14d: ${fmt(m)}</div>`;
-  };
-  const renderSpark=(id,arr,fmt)=>{
-    const el=document.getElementById(id);
-    if(el)el.innerHTML=sparkSvg(arr)+avg14(arr,fmt);
-  };
-  renderSpark('spark-ped',    sp.pedidos, v=>fmtN(v,0));
-  renderSpark('spark-ventas', sp.ventas,  v=>fmtK(v*1e6));
-  renderSpark('spark-vend',   sp.ped_vend,v=>fmtN(v,1));
-  renderSpark('spark-avg',    sp.avg_lin, v=>fmtN(v,1));
-  renderSpark('spark-ticket', sp.ticket,  v=>fmtK(v));
-  renderSpark('spark-factpct',sp.fact_pct,v=>fmtN(v,1)+'%');
+  document.getElementById('spark-ped').innerHTML=sparkSvg(sp.pedidos);
+  document.getElementById('spark-ventas').innerHTML=sparkSvg(sp.ventas);
+  document.getElementById('spark-vend').innerHTML=sparkSvg(sp.ped_vend);
+  document.getElementById('spark-avg').innerHTML=sparkSvg(sp.avg_lin);
 
   // Flow bar
   const fact_cnt=(bs[13]?.cnt||0)+(bs[18]?.cnt||0);
@@ -2072,7 +1796,7 @@ function render(data){
     }
     mhtml+=`<div class="mspa-row ${row.cls}">
       <span class="mspa-l">${sem}<span class="mspa-lbl">${row.l}</span></span>
-      <span class="mspa-val">${fmtK(d.val)}<span class="mspa-sub-txt">${fmtN(d.ords)} ped · ${fmtN(d.pos)} líneas</span></span>
+      <span class="mspa-val">${fmtK(d.val)}<span class="mspa-sub-txt">${fmtN(d.ords)} ord · ${fmtN(d.pos)} pos</span></span>
     </div>`;
   });
   document.getElementById('mspa-body').innerHTML=mhtml;
@@ -2137,7 +1861,6 @@ function toggleDark(){
   localStorage.setItem('wuerth-dark',dark?'1':'0');
   if(_lastTrend)renderChart(_lastTrend);
 }
-// ── Modo TV (solo fuentes grandes, con scroll) ────────────────────────────
 function toggleTV(){
   const tv=document.body.classList.toggle('tv');
   document.getElementById('tv-btn').classList.toggle('on',tv);
@@ -2147,83 +1870,6 @@ function toggleTV(){
 if(localStorage.getItem('wuerth-tv')==='1'){
   document.body.classList.add('tv');
   document.getElementById('tv-btn').classList.add('on');
-}
-
-// ── Modo KIOSK — rotación de 2 páginas en pantalla completa ────────────────
-const KIOSK_INTERVAL=20000;            // 20s por página
-const KIOSK_LABELS=['Operación del día','Análisis mensual y ranking'];
-let _kioskPage=1, _kioskTimer=null, _kioskProgTimer=null, _kioskPaused=false, _kioskT0=0;
-
-function kioskGoTo(page){
-  _kioskPage=page;
-  for(let i=1;i<=2;i++){
-    const sl=document.getElementById('slide-'+i);
-    const dot=document.getElementById('kdot-'+i);
-    if(sl)sl.classList.toggle('active',i===page);
-    if(dot)dot.classList.toggle('on',i===page);
-  }
-  const lbl=document.getElementById('kiosk-label');
-  if(lbl)lbl.textContent=KIOSK_LABELS[page-1];
-  if(_lastTrend&&page===2)renderChart(_lastTrend); // recalcular tamaño del gráfico al mostrarse
-  // reiniciar el temporizador completo (al hacer click en un dot, vuelve a contar 20s)
-  if(_kioskTimer){
-    clearInterval(_kioskTimer);
-    _kioskTimer=setInterval(()=>{ if(!_kioskPaused)kioskAdvance(); }, KIOSK_INTERVAL);
-  }
-  kioskProgReset();
-}
-function kioskAdvance(){ kioskGoTo(_kioskPage===1?2:1); }
-function kioskProgReset(){
-  _kioskT0=Date.now();
-  const fill=document.getElementById('kiosk-prog');
-  if(fill)fill.style.width='0%';
-}
-function kioskTick(){
-  if(_kioskPaused)return;
-  const fill=document.getElementById('kiosk-prog');
-  const pct=Math.min((Date.now()-_kioskT0)/KIOSK_INTERVAL*100,100);
-  if(fill)fill.style.width=pct+'%';
-}
-function kioskStart(){
-  document.body.classList.add('kiosk','tv'); // tv = fuentes grandes
-  document.getElementById('kiosk-btn').classList.add('on');
-  kioskGoTo(1);
-  clearInterval(_kioskTimer); clearInterval(_kioskProgTimer);
-  _kioskTimer=setInterval(()=>{ if(!_kioskPaused)kioskAdvance(); }, KIOSK_INTERVAL);
-  _kioskProgTimer=setInterval(kioskTick,150);
-  if(_lastTrend)renderChart(_lastTrend);
-  // entrar en pantalla completa
-  const el=document.documentElement;
-  if(el.requestFullscreen) el.requestFullscreen().catch(()=>{});
-}
-function kioskStop(){
-  clearInterval(_kioskTimer); clearInterval(_kioskProgTimer);
-  _kioskTimer=null; _kioskProgTimer=null; _kioskPaused=false;
-  document.body.classList.remove('kiosk');
-  // solo quitar 'tv' si el modo TV no estaba activo por su cuenta
-  if(localStorage.getItem('wuerth-tv')!=='1') document.body.classList.remove('tv');
-  document.getElementById('kiosk-btn').classList.remove('on');
-  for(let i=1;i<=2;i++){const sl=document.getElementById('slide-'+i);if(sl)sl.classList.remove('active');}
-  if(document.fullscreenElement&&document.exitFullscreen) document.exitFullscreen().catch(()=>{});
-  if(_lastTrend)renderChart(_lastTrend);
-}
-function toggleKiosk(){
-  if(document.body.classList.contains('kiosk')) kioskStop();
-  else kioskStart();
-}
-function kioskTogglePause(){
-  _kioskPaused=!_kioskPaused;
-  const b=document.getElementById('kiosk-pause');
-  if(b)b.textContent=_kioskPaused?'▶ Reanudar':'⏸ Pausar';
-  if(!_kioskPaused)kioskProgReset();
-}
-// salir del kiosk si el usuario sale de pantalla completa (tecla Esc)
-document.addEventListener('fullscreenchange',()=>{
-  if(!document.fullscreenElement && document.body.classList.contains('kiosk')) kioskStop();
-});
-// auto-arranque por URL ?kiosk=1
-if(new URLSearchParams(location.search).get('kiosk')==='1'){
-  window.addEventListener('load',()=>setTimeout(kioskStart,400));
 }
 if(localStorage.getItem('wuerth-dark')==='1'||new URLSearchParams(location.search).get('dark')==='1'){
   document.body.classList.add('dark');
@@ -2258,22 +1904,7 @@ function updateDpHint(v){
 function gotoDate(clear){
   if(clear){window.location.href=window.location.pathname;return;}
   const v=document.getElementById('dp-input').value;
-  if(!v)return;
-  // Si eligen el día de hoy, ir a la URL limpia (modo operativo en vivo, no histórico)
-  const today=new Date().toISOString().slice(0,10);
-  if(v===today){window.location.href=window.location.pathname;return;}
-  window.location.href=window.location.pathname+'?date='+v;
-}
-
-function scrollToPlan(e){
-  if(e)e.preventDefault();
-  const el=document.getElementById('hero-card');
-  if(!el)return;
-  el.scrollIntoView({behavior:'smooth',block:'center'});
-  el.classList.remove('flash');
-  void el.offsetWidth;
-  el.classList.add('flash');
-  setTimeout(()=>el.classList.remove('flash'),1400);
+  if(v)window.location.href=window.location.pathname+'?date='+v;
 }
 
 load();
@@ -2287,7 +1918,6 @@ setInterval(tick,1000);
 # ─────────────────────────────────────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args): pass
-    def address_string(self): return self.client_address[0]
 
     def send_json(self, data):
         body=json.dumps(data,ensure_ascii=False,cls=_Enc).encode()
@@ -2297,86 +1927,24 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def send_html(self, html, status=200, extra_headers=None):
+    def send_html(self, html):
         body=html.encode()
-        self.send_response(status)
+        self.send_response(200)
         self.send_header("Content-Type","text/html; charset=utf-8")
         self.send_header("Content-Length",len(body))
-        for k,v in (extra_headers or []):
-            self.send_header(k,v)
         self.end_headers()
         self.wfile.write(body)
-
-    def redirect(self, location, extra_headers=None):
-        self.send_response(302)
-        self.send_header("Location", location)
-        for k,v in (extra_headers or []):
-            self.send_header(k,v)
-        self.end_headers()
-
-    def _authenticated(self):
-        token = _get_cookie(self.headers, "dash_session")
-        return _valid_session(token)
 
     def do_GET(self):
         from urllib.parse import urlparse, parse_qs
         parsed = urlparse(self.path)
         qs     = parse_qs(parsed.query)
-        if parsed.path == "/login":
-            self.send_html(LOGIN_HTML.replace("@@ERR@@",""))
-            return
-        if parsed.path == "/logout":
-            token = _get_cookie(self.headers, "dash_session")
-            if token:
-                with _sess_lock: _sessions.pop(token, None)
-            self.redirect("/login", [("Set-Cookie","dash_session=; Max-Age=0; Path=/")])
-            return
-        if not self._authenticated():
-            self.redirect("/login")
-            return
         if parsed.path in ("/", "/index.html"):
             self.send_html(HTML_PAGE)
         elif parsed.path == "/api/data":
             override = qs.get("date", [None])[0]
             self.send_json(get_cached_data(override_date=override))
-        else:
-            self.send_response(404); self.end_headers()
-
-    def do_POST(self):
-        from urllib.parse import urlparse, parse_qs
-        parsed = urlparse(self.path)
-        if parsed.path == "/login":
-            ip = self.client_address[0]
-            # Verificar bloqueo por intentos fallidos
-            locked, secs_left = _check_lockout(ip)
-            if locked:
-                mins = secs_left // 60
-                self.send_html(
-                    LOGIN_HTML.replace("@@ERR@@", f"Demasiados intentos fallidos. Esperá {mins} minuto{'s' if mins!=1 else ''}."),
-                    status=429
-                )
-                return
-            length = int(self.headers.get("Content-Length", 0))
-            body   = self.rfile.read(length).decode()
-            params = parse_qs(body)
-            u = params.get("u", [""])[0].strip()
-            p = params.get("p", [""])[0]
-            if u == DASH_USER and p == DASH_PASS:
-                _register_ok(ip)
-                token  = _new_session()
-                cookie = f"dash_session={token}; Max-Age={SESSION_TTL}; Path=/; HttpOnly"
-                self.redirect("/", [("Set-Cookie", cookie)])
-            else:
-                _register_fail(ip)
-                locked2, secs2 = _check_lockout(ip)
-                if locked2:
-                    mins = secs2 // 60
-                    msg = f"Demasiados intentos fallidos. Esperá {mins} minuto{'s' if mins!=1 else ''}."
-                else:
-                    msg = "Usuario o contraseña incorrectos"
-                self.send_html(LOGIN_HTML.replace("@@ERR@@", msg), status=401)
-        else:
-            self.send_response(404); self.end_headers()
+        else: self.send_response(404); self.end_headers()
 
 
 def main():
@@ -2385,11 +1953,7 @@ def main():
     print(f"MSPA TTL: {MSPA_TTL}s  |  Reactor TTL: {REACTOR_TTL}s")
     print(f"SOLO LECTURA  |  http://localhost:{PORT}  |  Oscuro: ?dark=1")
     print("Ctrl+C para detener\n")
-    try:
-        start_snapshot_job(get_cached_data)
-    except Exception as e:
-        print(f"  [FTP] No se pudo iniciar el job: {e}", flush=True)
-    server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    server=HTTPServer(("0.0.0.0",PORT),Handler)
     try: server.serve_forever()
     except KeyboardInterrupt: print("\nDetenido.")
 
