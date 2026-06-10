@@ -163,23 +163,18 @@ def fetch_reactor(target_date=None):
     """)
     wd_log = {str(r[0]): int(r[1]) for r in (wdl_rows or []) if r[0] and r[1]}
 
-    # Monthly trend — only business days, only non-anulados
-    # Filter by wd_log dates so numerator and denominator count the same days
-    trend_dates = sorted(d for d in wd_log if d <= target_str)
-    if trend_dates:
-        td_ph = ",".join(["?"] * len(trend_dates))
-        trend_rows = run(cur, f"""
-            SELECT DATE_FORMAT(order_date, '%Y-%m') mes,
-                   COUNT(DISTINCT id) pedidos,
-                   SUM(total) valor
-            FROM order_placed
-            WHERE DATE(order_date) IN ({td_ph})
-              AND id_order_status <> 14
-            GROUP BY DATE_FORMAT(order_date, '%Y-%m')
-            ORDER BY mes
-        """, tuple(trend_dates))
-    else:
-        trend_rows = []
+    # Monthly trend — all days of month, excludes anulados (status 14)
+    trend_rows = run(cur, """
+        SELECT DATE_FORMAT(order_date, '%Y-%m') mes,
+               COUNT(DISTINCT id) pedidos,
+               SUM(total) valor
+        FROM order_placed
+        WHERE order_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 11 MONTH), '%Y-%m-01')
+          AND DATE(order_date) <= CURDATE()
+          AND id_order_status <> 14
+        GROUP BY DATE_FORMAT(order_date, '%Y-%m')
+        ORDER BY mes
+    """)
 
     # Días hábiles transcurridos en el mes del target (para el mes en curso)
     cur_mes = target_dt.strftime("%Y-%m")
@@ -1301,8 +1296,8 @@ body.tv .meta-curr{font-size:28px}
     </div>
   </div>
 
-  <!-- Ranking vendedores -->
-  <div class="sec">
+  <!-- Ranking vendedores — oculto por pedido de Daniel -->
+  <div class="sec" style="display:none">
     <div class="sec-lbl">Ranking de vendedores</div>
     <div class="sellers-wrap">
       <div class="card">
