@@ -1942,25 +1942,23 @@ KIOSK_PAGE = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Würth — Kiosk / Wallboard</title>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root{
-  --wurth-red:#cc0000;
-  --bg:#0b0f1a; --panel:#121826; --panel-2:#0e1422;
-  --border:#1f2937; --border-2:#2b3648;
-  --text:#f4f7fb; --text-2:#a9b6c9; --text-3:#6b7a91;
-  --blue:#3b82f6; --green:#22c55e; --amber:#f59e0b; --red:#ef4444;
-  --green-bg:#0d2a1a; --amber-bg:#2e2206; --red-bg:#2c0f12;
+  --wurth-red:#cc0000; --wurth-red-hover:#b00000;
+  --bg:#eef1f5; --panel:#ffffff; --panel-2:#f6f8fb;
+  --border:#e6eaf0; --border-2:#d3dae3;
+  --text:#0f172a; --text-2:#475569; --text-3:#8a97a8;
+  --blue:#2563eb; --green:#059669; --amber:#d97706; --red:#dc2626;
+  --green-bg:#ecfdf3; --amber-bg:#fff8eb; --red-bg:#fef2f2; --blue-bg:#eff5ff;
   --font-sans:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  --shadow:0 1px 3px rgba(15,23,42,.06),0 1px 2px rgba(15,23,42,.04);
 }
 *{margin:0;padding:0;box-sizing:border-box}
 .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
-html,body{height:100%;background:#000;overflow:hidden;font-family:var(--font-sans)}
-.viewport{position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center}
+html,body{height:100%;background:var(--bg);overflow:hidden;font-family:var(--font-sans)}
+.viewport{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center}
 .stage{width:1920px;height:1080px;background:var(--bg);position:relative;transform-origin:center center;overflow:hidden;color:var(--text)}
-.kt-top{height:96px;display:flex;align-items:center;justify-content:space-between;padding:0 44px;border-bottom:2px solid var(--wurth-red);background:var(--panel)}
+.kt-top{height:96px;display:flex;align-items:center;justify-content:space-between;padding:0 44px;border-bottom:3px solid var(--wurth-red);background:var(--panel)}
 .kt-brand{display:flex;align-items:center;gap:22px}
 .kt-logo{font-size:34px;font-weight:800;color:var(--wurth-red);letter-spacing:-1px}
 .kt-divider{width:2px;height:44px;background:var(--border-2)}
@@ -1970,8 +1968,9 @@ html,body{height:100%;background:#000;overflow:hidden;font-family:var(--font-san
 .kt-conn{display:flex;flex-direction:column;gap:7px;font-size:15px;color:var(--text-2)}
 .kt-conn-row{display:flex;align-items:center;gap:9px}
 .kt-dot{width:11px;height:11px;border-radius:50%}
-.kt-dot.ok{background:var(--green);box-shadow:0 0 12px 1px rgba(34,197,94,.7)}
-.kt-dot.down{background:var(--red);box-shadow:0 0 12px 1px rgba(239,68,68,.7)}
+.kt-dot.ok{background:var(--green)}
+.kt-dot.slow{background:var(--amber)}
+.kt-dot.down{background:var(--red)}
 .kt-conn b{color:var(--text);font-weight:600}
 .kt-clock{text-align:right}
 .kt-time{font-size:42px;font-weight:700;line-height:1;letter-spacing:-.5px}
@@ -1989,7 +1988,7 @@ html,body{height:100%;background:#000;overflow:hidden;font-family:var(--font-san
 .kt-eyebrow{display:flex;align-items:center;gap:9px;font-size:16px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:var(--text-3);margin-bottom:14px}
 .kt-eyebrow .ico{width:18px;height:18px}
 .b1-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto auto;gap:20px;height:100%}
-.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:26px 30px}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:26px 30px;box-shadow:var(--shadow)}
 .b1-plan{grid-column:1 / -1;display:flex;align-items:center;gap:54px;padding:30px 36px}
 .b1-plan-l{flex:1;min-width:0}
 .b1-plan-eyebrow{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:var(--text-3);margin-bottom:12px}
@@ -2066,9 +2065,29 @@ html,body{height:100%;background:#000;overflow:hidden;font-family:var(--font-san
 .kt-rot{position:absolute;bottom:0;left:0;right:0;height:6px;display:flex;gap:4px;padding:0 44px 0;align-items:flex-end}
 .kt-rot-track{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
 .kt-rot-fill{height:100%;width:0;background:var(--wurth-red);border-radius:2px}
-.kt-dots{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:9px}
-.kt-pg{width:9px;height:9px;border-radius:50%;background:var(--border-2);transition:background .3s}
+.kt-dots{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:11px}
+.kt-pg{width:13px;height:13px;border-radius:50%;background:var(--border-2);cursor:pointer;transition:background .25s,transform .25s}
+.kt-pg:hover{transform:scale(1.25)}
 .kt-pg.on{background:var(--wurth-red)}
+/* ── Empty state del strip EN VIVO ── */
+.b1-live-empty{flex:1;font-size:24px;color:var(--text-3);font-weight:500;padding-left:8px}
+/* ── Barra de CONTROLES (fuera del stage, no escala) ── */
+.kt-ctrl{position:fixed;bottom:26px;right:30px;z-index:1000;display:flex;align-items:center;gap:10px;
+  background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border:1px solid var(--border-2);
+  border-radius:14px;padding:9px 12px;box-shadow:0 10px 30px rgba(15,23,42,.18);
+  opacity:0;pointer-events:none;transition:opacity .3s}
+.kt-ctrl.show{opacity:1;pointer-events:auto}
+.kt-ctrl button{width:42px;height:42px;border:none;border-radius:10px;background:transparent;color:var(--text-2);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s}
+.kt-ctrl button:hover{background:var(--bg);color:var(--text)}
+.kt-ctrl button.exit:hover{background:#fee2e2;color:var(--wurth-red)}
+.kt-ctrl button svg{width:22px;height:22px;stroke-width:1.9}
+.kt-ctrl .sep{width:1px;height:26px;background:var(--border-2);margin:0 2px}
+.kt-ctrl .pgnum{font-size:14px;font-weight:700;color:var(--text-3);padding:0 8px;min-width:46px;text-align:center;font-variant-numeric:tabular-nums}
+.kt-hint{position:fixed;bottom:80px;right:30px;z-index:1000;font-size:13px;color:var(--text-3);
+  background:rgba(255,255,255,.92);border:1px solid var(--border);border-radius:8px;padding:6px 11px;
+  opacity:0;pointer-events:none;transition:opacity .3s}
+.kt-hint.show{opacity:1}
 </style>
 </head>
 <body>
@@ -2235,13 +2254,15 @@ function board1(){
           <span class="b1-live-badge"><span class="pdot"></span>En vivo · parcial</span>
           <span class="b1-live-ttl">Así viene hoy · carga en curso</span>
         </div>
-        <div class="b1-live-items">
+        ${HOY.pedidos===0
+          ? `<div class="b1-live-empty">Aún sin movimiento hoy · primeros pedidos en breve</div>`
+          : `<div class="b1-live-items">
           ${liveItem('Pedidos',fmtN(HOY.pedidos))}
           ${liveItem('Monto informado',fmtK(HOY.monto))}
           ${liveItem('Ticket promedio',fmtK(HOY.ticket))}
           ${liveItem('Ped / Vendedor',fmtN(HOY.ped_vend,1))}
           ${liveItem('Líneas / Pedido',fmtN(HOY.lineas,1))}
-        </div>
+        </div>`}
       </div>
     </div>
   </div>`;
@@ -2272,22 +2293,33 @@ function board2(){
     </div>
   </div>`;
 }
-let chartInst=null;
+let chartInst=null, chartJsLoading=false;
+function ensureChartJs(cb){
+  if(window.Chart){cb();return;}
+  if(chartJsLoading)return;
+  chartJsLoading=true;
+  const s=document.createElement('script');
+  s.src='/static/chart.min.js';
+  s.onload=()=>{chartJsLoading=false;cb();};
+  s.onerror=()=>{chartJsLoading=false;const w=document.getElementById('kt-chart');if(w&&w.closest('.b2-chart-wrap'))w.closest('.b2-chart-wrap').innerHTML='<div style="display:flex;height:100%;align-items:center;justify-content:center;color:var(--text-3);font-size:18px">No se pudo cargar el gráfico</div>';};
+  document.head.appendChild(s);
+}
 function drawChart(){
   const cv=document.getElementById('kt-chart');
-  if(!cv||!window.Chart||!TREND.length)return;
+  if(!cv||!TREND.length)return;
+  if(!window.Chart){ensureChartJs(drawChart);return;}
   if(chartInst){chartInst.destroy();chartInst=null;}
   chartInst=new Chart(cv.getContext('2d'),{
     data:{labels:TREND.map(t=>t[0]),datasets:[
-      {type:'bar',label:'Pedidos / día hábil',data:TREND.map(t=>+(t[1]/t[3]).toFixed(1)),backgroundColor:'rgba(148,163,184,.22)',borderColor:'#334155',borderWidth:1,yAxisID:'y1',order:2},
-      {type:'line',label:'M$ / día hábil',data:TREND.map(t=>+(t[2]/t[3]).toFixed(2)),borderColor:'#ef4444',backgroundColor:'rgba(239,68,68,.08)',borderWidth:3,pointRadius:3,pointBackgroundColor:'#ef4444',tension:.35,yAxisID:'y2',order:1,fill:true},
+      {type:'bar',label:'Pedidos / día hábil',data:TREND.map(t=>+(t[1]/t[3]).toFixed(1)),backgroundColor:'rgba(203,213,225,.75)',borderColor:'#cbd5e1',borderWidth:1,yAxisID:'y1',order:2},
+      {type:'line',label:'M$ / día hábil',data:TREND.map(t=>+(t[2]/t[3]).toFixed(2)),borderColor:'#cc0000',backgroundColor:'rgba(204,0,0,.06)',borderWidth:3,pointRadius:3,pointBackgroundColor:'#cc0000',tension:.35,yAxisID:'y2',order:1,fill:true},
     ]},
     options:{responsive:true,maintainAspectRatio:false,animation:false,
-      plugins:{legend:{labels:{color:'#a9b6c9',font:{size:16},boxWidth:16,padding:22,usePointStyle:true}},
+      plugins:{legend:{labels:{color:'#475569',font:{size:16},boxWidth:16,padding:22,usePointStyle:true}},
         tooltip:{callbacks:{label:(c)=>c.dataset.label+': '+Number(c.parsed.y).toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1})}}},
-      scales:{x:{ticks:{color:'#6b7a91',font:{size:14}},grid:{display:false}},
-        y1:{position:'left',ticks:{color:'#6b7a91',font:{size:13}},grid:{color:'#1f2937'}},
-        y2:{position:'right',ticks:{color:'#ef4444',font:{size:13},callback:v=>v.toFixed(1).replace('.',',')},grid:{drawOnChartArea:false}}}}
+      scales:{x:{ticks:{color:'#64748b',font:{size:14}},grid:{display:false}},
+        y1:{position:'left',ticks:{color:'#64748b',font:{size:13}},grid:{color:'#eef2f7'}},
+        y2:{position:'right',ticks:{color:'#cc0000',font:{size:13},callback:v=>v.toFixed(1).replace('.',',')},grid:{drawOnChartArea:false}}}}
   });
 }
 function tickClock(){
@@ -2297,18 +2329,34 @@ function tickClock(){
   if(d)d.textContent=now.toLocaleDateString('es-AR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
 }
 const ROTATE_MS=18000;
+const NBOARDS=2;
 let board=0;
+let paused=false;
+let rotStart=Date.now();
 const stage=document.getElementById('stage');
 function render(){
   stage.innerHTML=topBar()+alertRibbon()+(board===0?board1():board2())+
     `<div class="kt-rot"><div class="kt-rot-track"><div class="kt-rot-fill" id="kt-fill"></div></div></div>
-     <div class="kt-dots"><span class="kt-pg${board===0?' on':''}"></span><span class="kt-pg${board===1?' on':''}"></span></div>`;
+     <div class="kt-dots" id="kt-dots">${Array.from({length:NBOARDS},(_,i)=>
+        `<span class="kt-pg${board===i?' on':''}" data-go="${i}"></span>`).join('')}</div>`;
   tickClock();
   if(board===1)drawChart();
 }
 function fitStage(){
   const s=Math.min(window.innerWidth/1920,window.innerHeight/1080);
   stage.style.transform='scale('+s+')';
+}
+function goTo(n){board=(n+NBOARDS)%NBOARDS;rotStart=Date.now();render();syncCtrl();}
+function next(){goTo(board+1);}
+function prev(){goTo(board-1);}
+function togglePause(){paused=!paused;rotStart=Date.now();syncCtrl();}
+function toggleFull(){
+  if(document.fullscreenElement)document.exitFullscreen();
+  else if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen();
+}
+function exitKiosk(){
+  if(document.fullscreenElement)document.exitFullscreen();
+  window.location.href='/';
 }
 async function refrescar(){
   try{
@@ -2318,15 +2366,73 @@ async function refrescar(){
     render();
   }catch(e){ DATOS_AL.mspaOk=false; DATOS_AL.reactorOk=false; render(); }
 }
+/* ── barra de controles (fuera del stage → no escala, siempre clickeable) ── */
+const CTRL_ICONS={
+  prev:'<path d="M15 18l-6-6 6-6"/>', next:'<path d="M9 18l6-6-6-6"/>',
+  pause:'<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>',
+  play:'<path d="M6 4l14 8-14 8V4z"/>',
+  full:'<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>',
+  exit:'<path d="M18 6 6 18M6 6l12 12"/>',
+};
+function ctrlBtn(action,name,title,cls){
+  return `<button class="${cls||''}" data-act="${action}" title="${title}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${CTRL_ICONS[name]}</svg></button>`;
+}
+const ctrl=document.createElement('div');
+ctrl.className='kt-ctrl'; ctrl.id='kt-ctrl';
+document.body.appendChild(ctrl);
+function syncCtrl(){
+  ctrl.innerHTML=
+    ctrlBtn('prev','prev','Anterior (←)')+
+    ctrlBtn('pause',paused?'play':'pause',paused?'Reanudar (espacio)':'Pausar (espacio)')+
+    ctrlBtn('next','next','Siguiente (→)')+
+    `<span class="pgnum">${board+1} / ${NBOARDS}</span>`+
+    `<span class="sep"></span>`+
+    ctrlBtn('full','full','Pantalla completa (F)')+
+    ctrlBtn('exit','exit','Salir del modo kiosk (Esc)','exit');
+}
+ctrl.addEventListener('click',(e)=>{
+  const b=e.target.closest('button');if(!b)return;
+  ({prev,next,pause:togglePause,full:toggleFull,exit:exitKiosk})[b.dataset.act]?.();
+});
+stage.addEventListener('click',(e)=>{
+  const d=e.target.closest('[data-go]');if(d)goTo(+d.dataset.go);
+});
+/* mostrar controles al mover el mouse, ocultar tras 3s */
+let hideT;
+const hint=document.createElement('div');
+hint.className='kt-hint'; hint.textContent='← → cambiar · espacio pausar · F pantalla · Esc salir';
+document.body.appendChild(hint);
+function poke(){
+  ctrl.classList.add('show');hint.classList.add('show');
+  clearTimeout(hideT);
+  hideT=setTimeout(()=>{ctrl.classList.remove('show');hint.classList.remove('show');},3000);
+}
+window.addEventListener('mousemove',poke);
+window.addEventListener('touchstart',poke);
+document.addEventListener('keydown',(e)=>{
+  if(e.key==='ArrowRight')next();
+  else if(e.key==='ArrowLeft')prev();
+  else if(e.key===' '){e.preventDefault();togglePause();}
+  else if(e.key==='f'||e.key==='F')toggleFull();
+  else if(e.key==='Escape')exitKiosk();
+  poke();
+});
 fitStage();
 window.addEventListener('resize',fitStage);
 render();
+syncCtrl();
 refrescar();
 setInterval(tickClock,1000);
 setInterval(refrescar,60000);
-let rotStart=Date.now();
-setInterval(()=>{const fill=document.getElementById('kt-fill');if(fill)fill.style.width=Math.min((Date.now()-rotStart)/ROTATE_MS*100,100)+'%';},100);
-setInterval(()=>{board=(board+1)%2;rotStart=Date.now();render();},ROTATE_MS);
+setInterval(()=>{
+  const fill=document.getElementById('kt-fill');
+  const pct=paused?0:Math.min((Date.now()-rotStart)/ROTATE_MS*100,100);
+  if(fill)fill.style.width=pct+'%';
+},100);
+setInterval(()=>{
+  if(paused){rotStart=Date.now();return;}
+  if(Date.now()-rotStart>=ROTATE_MS)next();
+},500);
 </script>
 </body>
 </html>
@@ -2364,7 +2470,24 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/data":
             override = qs.get("date", [None])[0]
             self.send_json(get_cached_data(override_date=override))
+        elif parsed.path == "/static/chart.min.js":
+            self.send_static("chart.min.js", "application/javascript; charset=utf-8")
         else: self.send_response(404); self.end_headers()
+
+    def send_static(self, name, ctype):
+        import os
+        base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+        path = os.path.normpath(os.path.join(base, os.path.basename(name)))
+        if not path.startswith(base) or not os.path.isfile(path):
+            self.send_response(404); self.end_headers(); return
+        with open(path, "rb") as f:
+            body = f.read()
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", len(body))
+        self.send_header("Cache-Control", "public, max-age=86400")
+        self.end_headers()
+        self.wfile.write(body)
 
 
 def main():
