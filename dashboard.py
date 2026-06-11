@@ -923,7 +923,7 @@ body.dark .state-neutral{background:#334155;color:var(--text-3)}
 .meta-bar-pace{position:absolute;top:0;bottom:0;width:2px;background:var(--amber)}
 .meta-bar-labels{font-size:10px;color:var(--text-3);margin-top:3px;font-variant-numeric:tabular-nums}
 .meta-tags{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.meta-tag{font-size:10px;padding:2px 8px;border-radius:12px;font-weight:600}
+.meta-tag{font-size:13px;padding:3px 10px;border-radius:12px;font-weight:700}
 .tag-ok{background:var(--pos-bg);color:var(--pos-fg)}.tag-warn{background:var(--amber-bg);color:var(--amber)}
 .tag-danger{background:var(--neg-bg);color:var(--neg-fg)}.tag-neutral{background:#f1f5f9;color:var(--text-3)}
 body.dark .tag-neutral{background:#334155}
@@ -1010,8 +1010,8 @@ body.tv .meta-curr{font-size:28px}
     @@LOGO@@
     <div class="div-v"></div>
     <div>
-      <div class="hdr-title">Operations Dashboard</div>
-      <div class="hdr-sub">Reactor · MSPA · Tiempo Real</div>
+      <div class="hdr-title">Operaciones · Tiempo Real</div>
+      <div class="hdr-sub">Reactor · MSPA · Actualización automática</div>
     </div>
   </div>
   <div class="hdr-right">
@@ -1859,7 +1859,7 @@ function render(data){
     }
     mhtml+=`<div class="mspa-row ${row.cls}">
       <span class="mspa-l">${sem}<span class="mspa-lbl">${row.l}</span></span>
-      <span class="mspa-val">${fmtK(d.val)}<span class="mspa-sub-txt">${fmtN(d.ords)} ord · ${fmtN(d.pos)} pos</span></span>
+      <span class="mspa-val">${fmtK(d.val)}<span class="mspa-sub-txt">${fmtN(d.ords)} ped · ${fmtN(d.pos)} lin</span></span>
     </div>`;
   });
   document.getElementById('mspa-body').innerHTML=mhtml;
@@ -2266,7 +2266,7 @@ function topBar(){
       @@LOGO@@
       <div class="kt-divider"></div>
       <div><div class="kt-title">Operaciones · Tiempo Real</div>
-        <div class="kt-sub">Reactor · MSPA · Sala de control</div></div>
+        <div class="kt-sub">Reactor · MSPA · Actualización automática</div></div>
     </div>
     <div class="kt-right">
       <div class="kt-conn">
@@ -2291,7 +2291,7 @@ function ctxBar(){
     ${ico(onTrack?'trendingUp':'trendingDown',30)}
     <span class="ctx-alert">${alertTxt}</span>
     <span class="ctx-sep">·</span>
-    <span class="ctx-metric">Falta <b class="num">${fmtK(PLAN.plan_total-PLAN.fact_acum)}</b></span>
+    <span class="ctx-metric">Restante <b class="num">${fmtK(PLAN.plan_total-PLAN.fact_acum)}</b></span>
     <span class="ctx-sep">·</span>
     <span class="ctx-metric">Venta hoy <b class="num">${fmtK(VENTA.val)}</b></span>
     ${tagTxt?`<span class="ctx-tag">${tagTxt}</span>`:''}
@@ -2345,7 +2345,7 @@ function board1(){
           : `<div class="b1-live-items">
           ${liveItem('Pedidos',fmtN(HOY.pedidos))}
           ${liveItem('Monto informado',fmtK(HOY.monto))}
-          ${liveItem('Ticket promedio',fmtK(HOY.ticket))}
+          ${liveItem('Pedido promedio',fmtK(HOY.ticket))}
           ${liveItem('Ped / Vendedor',fmtN(HOY.ped_vend,1))}
           ${liveItem('Líneas / Pedido',fmtN(HOY.lineas,1))}
         </div>`}
@@ -2356,7 +2356,7 @@ function board1(){
 function board2(){
   const mspaRow=(r)=>{
     const sem=r.venta?'mspa-sem':'mspa-sem'+(r.sev!=='ok'?' '+r.sev:'');
-    return `<div class="mspa-row${r.venta?' venta':''}"><span class="mspa-l"><span class="${sem}"></span><span class="mspa-lbl">${r.k}</span></span><span class="mspa-val num">${fmtK(r.val)}<div class="sub num">${fmtN(r.ords)} ord · ${fmtN(r.pos)} pos</div></span></div>`;
+    return `<div class="mspa-row${r.venta?' venta':''}"><span class="mspa-l"><span class="${sem}"></span><span class="mspa-lbl">${r.k}</span></span><span class="mspa-val num">${fmtK(r.val)}<div class="sub num">${fmtN(r.ords)} ped · ${fmtN(r.pos)} lin</div></span></div>`;
   };
   return `<div class="kt-board top1 active">
     <div class="b2-grid">
@@ -2450,7 +2450,7 @@ function tickClock(){
   if(t)t.textContent=now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
   if(d)d.textContent=now.toLocaleDateString('es-AR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
 }
-const ROTATE_MS=20000;
+const ROTATE_MS=30000;
 const NBOARDS=2;
 let board=0;
 let paused=false;
@@ -2587,6 +2587,48 @@ setInterval(()=>{
 """.replace("@@LOGO@@", LOGO_HTML)
 
 
+def get_web_html():
+    """Genera el HTML estático del dashboard web (para FTP).
+    Idéntico al dashboard local pero lee snapshot.json en vez de /api/data.
+    En celular redirige automáticamente a la app móvil.
+    """
+    # ── Dashboard principal ──────────────────────────────────────────────
+    dash = HTML_PAGE.replace(
+        "fetch(url)",
+        "fetch('snapshot.json?_='+Date.now())"
+    ).replace(
+        "const url='/api/data'+(_customDate?'?date='+_customDate:'');",
+        "const url='snapshot.json?_='+Date.now();"
+    ).replace(
+        # Auto-refresh cada 60s en la versión estática (reemplaza el tick basado en TTL)
+        "if(_mspaNext<=0){load();_mspaNext=60;}",
+        "if(_mspaNext<=0){load();_mspaNext=60;} // static: refresca snapshot.json"
+    ).replace(
+        # Ocultar date picker (requiere servidor)
+        'id="date-badge-btn"',
+        'id="date-badge-btn" style="display:none"'
+    ).replace(
+        # Kiosk apunta a kiosk.html
+        "window.location.href='/kiosk'",
+        "window.location.href='kiosk.html'"
+    )
+    # ── Kiosk ────────────────────────────────────────────────────────────
+    kiosk = KIOSK_PAGE.replace(
+        "fetch('/api/data',{cache:'no-store'})",
+        "fetch('snapshot.json?_='+Date.now(),{cache:'no-store'})"
+    ).replace(
+        "s.src='/static/chart.min.js';",
+        "s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';"
+    ).replace(
+        "window.location.href='/'",
+        "window.location.href='index.html'"
+    ).replace(
+        "window.location.href='/kiosk'",
+        "window.location.href='kiosk.html'"
+    )
+    return dash, kiosk
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args): pass
@@ -2646,7 +2688,7 @@ def main():
     print("Ctrl+C para detener\n")
     try:
         from ftp_snapshot import start_snapshot_job
-        start_snapshot_job(get_cached_data)
+        start_snapshot_job(get_cached_data, get_web_html)
     except Exception as e:
         print(f"[FTP] No se pudo iniciar el job: {e}")
     server=HTTPServer(("0.0.0.0",PORT),Handler)
