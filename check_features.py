@@ -5,15 +5,12 @@ Ejecutar antes de cada git push para evitar perder cambios."""
 REQUIRED = [
     # FTP
     ("start_snapshot_job",         "FTP: start_snapshot_job no esta en main()"),
-    # Kiosk CSS
-    ("body.kiosk .main",           "Kiosk: CSS body.kiosk falta"),
-    ("kiosk-bar",                  "Kiosk: kiosk-bar falta"),
-    # Kiosk HTML
-    ('id="kiosk-p2"',              "Kiosk: ancla kiosk-p2 falta en HTML"),
+    # Kiosk / Wallboard (tablero fijo 1920x1080 en /kiosk)
+    ("KIOSK_PAGE",                 "Kiosk: pagina wallboard KIOSK_PAGE falta"),
+    ('"/kiosk"',                   "Kiosk: ruta /kiosk falta en do_GET"),
     ("toggleKiosk",                "Kiosk: boton toggleKiosk falta"),
-    # Kiosk JS
-    ("kioskStart",                 "Kiosk: funcion kioskStart falta"),
-    ("KIOSK_INTERVAL",             "Kiosk: KIOSK_INTERVAL falta"),
+    ("function mapData",           "Kiosk: mapData (datos reales) falta"),
+    ("fitStage",                   "Kiosk: escalado fitStage falta"),
     # Dias habiles restantes
     ("rest-chip",                  "Plan: chip dias habiles restantes falta"),
     ("restDias",                   "Plan: calculo restDias falta"),

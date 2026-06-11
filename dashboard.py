@@ -990,18 +990,7 @@ body.tv .meta-curr{font-size:28px}
 }
 /* ── RESPONSIVE ── */
 @media(max-width:1080px){.hero{grid-template-columns:1fr}.bottom{grid-template-columns:1fr}.sellers-wrap{grid-template-columns:1fr}.kpi-grid{grid-template-columns:repeat(2,1fr)}}
-/* ── KIOSK ── */
-body.kiosk{overflow:hidden}
-body.kiosk .main{padding-bottom:74px}
-.kiosk-bar{display:none;position:fixed;bottom:0;left:0;right:0;height:52px;background:var(--card);border-top:1px solid var(--border);z-index:200;padding:0 18px;align-items:center;grid-template-columns:1fr auto 1fr}
-body.kiosk .kiosk-bar{display:grid}
-.kiosk-lbl{font-size:11px;color:var(--text3);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
-.kiosk-dots{display:flex;gap:8px;justify-content:center}
-.kiosk-dot{width:8px;height:8px;border-radius:50%;background:var(--border);border:none;cursor:pointer;padding:0;transition:background .2s,transform .2s}
-.kiosk-dot.active{background:var(--wurth-red);transform:scale(1.3)}
-.kiosk-right{display:flex;align-items:center;gap:8px;justify-content:flex-end}
-.kiosk-prog{flex:1;max-width:80px;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
-.kiosk-prog-fill{height:100%;background:var(--wurth-red);transition:width .3s linear}
+/* ── Chip días hábiles restantes ── */
 .rest-chip{display:inline-block;background:var(--bg2,#f1f5f9);color:var(--text3,#64748b);font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle;border:1px solid var(--border)}
 .rest-chip.urgent{background:#fef3c7;color:#92400e;border-color:#fde68a}
 </style>
@@ -1372,23 +1361,6 @@ body.kiosk .kiosk-bar{display:grid}
     </div>
   </div>
 
-  <!-- Kiosk bar -->
-  <div class="kiosk-bar">
-    <span class="kiosk-lbl" id="kiosk-lbl">Página 1 de 2</span>
-    <div class="kiosk-dots">
-      <button class="kiosk-dot active" onclick="kioskGoTo(0)" id="kdot-0"></button>
-      <button class="kiosk-dot" onclick="kioskGoTo(1)" id="kdot-1"></button>
-    </div>
-    <div class="kiosk-right">
-      <div class="kiosk-prog"><div class="kiosk-prog-fill" id="kiosk-prog-fill" style="width:0%"></div></div>
-      <button class="icon-btn" id="kiosk-pause-btn" onclick="kioskTogglePause()" title="Pausar/Reanudar">
-        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" id="kiosk-pause-ico"><path d="M10 15V9M14 15V9"/></svg>
-      </button>
-      <button class="icon-btn" onclick="kioskStop()" title="Salir del modo kiosk">
-        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
-      </button>
-    </div>
-  </div>
 
 </div>
 
@@ -1948,73 +1920,417 @@ function gotoDate(clear){
 load();
 setInterval(tick,1000);
 
-// ── KIOSK (scroll-based, no rompe layout) ──
-const KIOSK_ANCHORS=[null,'kiosk-p2']; // null = top, id = scroll target
-const KIOSK_INTERVAL=20000;
-let _kioskPage=0, _kioskTimer=null, _kioskPaused=false, _kioskTick=0;
-
-function kioskGoTo(idx){
-  _kioskPage=idx;
-  _kioskTick=0;
-  const anchor=KIOSK_ANCHORS[idx];
-  if(anchor){
-    const el=document.getElementById(anchor);
-    if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
-  } else {
-    window.scrollTo({top:0,behavior:'smooth'});
-  }
-  document.querySelectorAll('.kiosk-dot').forEach((d,i)=>d.classList.toggle('active',i===idx));
-  document.getElementById('kiosk-lbl').textContent=`Página ${idx+1} de ${KIOSK_ANCHORS.length}`;
-  document.getElementById('kiosk-prog-fill').style.width='0%';
-}
-function kioskAdvance(){kioskGoTo((_kioskPage+1)%KIOSK_ANCHORS.length);}
-function kioskTick(){
-  if(_kioskPaused)return;
-  _kioskTick+=200;
-  const pct=Math.min(_kioskTick/KIOSK_INTERVAL*100,100);
-  const fill=document.getElementById('kiosk-prog-fill');
-  if(fill)fill.style.width=pct+'%';
-  if(_kioskTick>=KIOSK_INTERVAL)kioskAdvance();
-}
-function kioskTogglePause(){
-  _kioskPaused=!_kioskPaused;
-  const ico=document.getElementById('kiosk-pause-ico');
-  if(ico)ico.innerHTML=_kioskPaused
-    ?'<polygon points="5 3 19 12 5 21 5 3"/>'
-    :'<path d="M10 15V9M14 15V9"/>';
-}
-function kioskStart(){
-  _kioskPage=0; _kioskTick=0; _kioskPaused=false;
-  document.body.classList.add('kiosk','tv');
-  document.getElementById('kiosk-btn').classList.add('on');
-  window.scrollTo({top:0});
-  document.querySelectorAll('.kiosk-dot').forEach((d,i)=>d.classList.toggle('active',i===0));
-  document.getElementById('kiosk-lbl').textContent=`Página 1 de ${KIOSK_ANCHORS.length}`;
-  document.getElementById('kiosk-prog-fill').style.width='0%';
-  if(_kioskTimer)clearInterval(_kioskTimer);
-  _kioskTimer=setInterval(kioskTick,200);
-  if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{});
-  if(_lastTrend)renderChart(_lastTrend);
-}
-function kioskStop(){
-  if(_kioskTimer){clearInterval(_kioskTimer);_kioskTimer=null;}
-  document.body.classList.remove('kiosk','tv');
-  document.getElementById('kiosk-btn').classList.remove('on');
-  if(document.exitFullscreen&&document.fullscreenElement)document.exitFullscreen().catch(()=>{});
-  if(_lastTrend)renderChart(_lastTrend);
-}
+// ── KIOSK — abre el wallboard /kiosk (tablero fijo, rota solo, sin botones) ──
 function toggleKiosk(){
-  if(document.body.classList.contains('kiosk'))kioskStop();
-  else kioskStart();
+  // Pide fullscreen y navega al wallboard
+  try{ if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); }catch(e){}
+  window.location.href='/kiosk';
 }
-document.addEventListener('fullscreenchange',()=>{
-  if(!document.fullscreenElement&&document.body.classList.contains('kiosk'))kioskStop();
-});
-if(new URLSearchParams(location.search).get('kiosk')==='1')setTimeout(kioskStart,400);
 </script>
 </body>
 </html>
 """.replace("@@LOGO@@", LOGO_HTML)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# KIOSK / WALLBOARD — tablero fijo 1920×1080 escalado a la TV, sin scroll,
+# sin botones, rota en silencio entre 2 tableros. Consume /api/data (datos reales).
+# ─────────────────────────────────────────────────────────────────────────────
+KIOSK_PAGE = r"""<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Würth — Kiosk / Wallboard</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --wurth-red:#cc0000;
+  --bg:#0b0f1a; --panel:#121826; --panel-2:#0e1422;
+  --border:#1f2937; --border-2:#2b3648;
+  --text:#f4f7fb; --text-2:#a9b6c9; --text-3:#6b7a91;
+  --blue:#3b82f6; --green:#22c55e; --amber:#f59e0b; --red:#ef4444;
+  --green-bg:#0d2a1a; --amber-bg:#2e2206; --red-bg:#2c0f12;
+  --font-sans:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+html,body{height:100%;background:#000;overflow:hidden;font-family:var(--font-sans)}
+.viewport{position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center}
+.stage{width:1920px;height:1080px;background:var(--bg);position:relative;transform-origin:center center;overflow:hidden;color:var(--text)}
+.kt-top{height:96px;display:flex;align-items:center;justify-content:space-between;padding:0 44px;border-bottom:2px solid var(--wurth-red);background:var(--panel)}
+.kt-brand{display:flex;align-items:center;gap:22px}
+.kt-logo{font-size:34px;font-weight:800;color:var(--wurth-red);letter-spacing:-1px}
+.kt-divider{width:2px;height:44px;background:var(--border-2)}
+.kt-title{font-size:30px;font-weight:700;letter-spacing:-.3px;line-height:1}
+.kt-sub{font-size:16px;color:var(--text-3);margin-top:5px;letter-spacing:.4px}
+.kt-right{display:flex;align-items:center;gap:40px}
+.kt-conn{display:flex;flex-direction:column;gap:7px;font-size:15px;color:var(--text-2)}
+.kt-conn-row{display:flex;align-items:center;gap:9px}
+.kt-dot{width:11px;height:11px;border-radius:50%}
+.kt-dot.ok{background:var(--green);box-shadow:0 0 12px 1px rgba(34,197,94,.7)}
+.kt-dot.down{background:var(--red);box-shadow:0 0 12px 1px rgba(239,68,68,.7)}
+.kt-conn b{color:var(--text);font-weight:600}
+.kt-clock{text-align:right}
+.kt-time{font-size:42px;font-weight:700;line-height:1;letter-spacing:-.5px}
+.kt-date{font-size:17px;color:var(--text-3);margin-top:4px;text-transform:capitalize}
+.kt-alert{height:70px;display:flex;align-items:center;gap:18px;padding:0 44px;font-size:25px;font-weight:600}
+.kt-alert .ico{width:30px;height:30px;flex-shrink:0}
+.kt-alert b{font-weight:800}
+.kt-alert.warn{background:var(--amber-bg);color:#fcd34d;border-bottom:1px solid #4a3a0e}
+.kt-alert.danger{background:var(--red-bg);color:#fca5a5;border-bottom:1px solid #4a1418}
+.kt-alert.ok{background:var(--green-bg);color:#86efac;border-bottom:1px solid #143a26}
+.kt-board{position:absolute;left:0;right:0;bottom:14px;padding:26px 44px 0;display:none}
+.kt-board.active{display:block}
+.kt-board.top1{top:166px}
+.kt-board.top0{top:96px}
+.kt-eyebrow{display:flex;align-items:center;gap:9px;font-size:16px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:var(--text-3);margin-bottom:14px}
+.kt-eyebrow .ico{width:18px;height:18px}
+.b1-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto auto;gap:20px;height:100%}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:26px 30px}
+.b1-plan{grid-column:1 / -1;display:flex;align-items:center;gap:54px;padding:30px 36px}
+.b1-plan-l{flex:1;min-width:0}
+.b1-plan-eyebrow{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:var(--text-3);margin-bottom:12px}
+.b1-plan-eyebrow .ico{width:18px;height:18px;color:var(--wurth-red)}
+.b1-figs{display:flex;align-items:baseline;gap:18px}
+.b1-curr{font-size:104px;font-weight:700;line-height:.92;letter-spacing:-3px}
+.b1-total{font-size:40px;color:var(--text-3);font-weight:600}
+.b1-bar-line{display:flex;align-items:center;gap:22px;margin-top:22px}
+.b1-pct{font-size:34px;font-weight:800;min-width:120px}
+.b1-bar-bg{flex:1;height:26px;background:var(--border);border-radius:13px;position:relative;overflow:hidden}
+.b1-bar-fill{height:100%;border-radius:13px}
+.b1-bar-pace{position:absolute;top:-6px;bottom:-6px;width:4px;background:var(--text)}
+.b1-plan-foot{display:flex;gap:40px;margin-top:20px;font-size:20px;color:var(--text-2)}
+.b1-plan-foot b{color:var(--text);font-weight:700}
+.b1-plan-r{width:1px;align-self:stretch;background:var(--border)}
+.b1-proy{flex-shrink:0;text-align:right;min-width:300px}
+.b1-proy .l{font-size:17px;text-transform:uppercase;letter-spacing:1px;color:var(--text-3);margin-bottom:10px}
+.b1-proy .v{font-size:58px;font-weight:800;line-height:1;color:var(--wurth-red)}
+.b1-proy .s{font-size:24px;color:var(--text-2);margin-top:8px;font-weight:600}
+.b1-state{display:inline-flex;align-items:center;gap:8px;margin-top:16px;font-size:19px;font-weight:700;padding:7px 16px;border-radius:10px}
+.b1-state.warn{background:var(--amber-bg);color:#fcd34d}
+.b1-state.ok{background:var(--green-bg);color:#86efac}
+.b1-stat{display:flex;flex-direction:column;justify-content:center}
+.b1-stat .l{font-size:18px;text-transform:uppercase;letter-spacing:1px;color:var(--text-3);margin-bottom:12px}
+.b1-stat .v{font-size:72px;font-weight:700;line-height:1}
+.b1-stat .s{font-size:20px;color:var(--text-2);margin-top:10px}
+.b1-delta{display:inline-flex;align-items:center;gap:5px;font-size:22px;font-weight:700;margin-top:10px}
+.b1-delta .ico{width:22px;height:22px}
+.b1-delta.up{color:var(--green)}.b1-delta.down{color:var(--red)}
+.b1-flow{grid-column:1 / -1;display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding:0;overflow:hidden}
+.b1-flow-cell{padding:24px 28px;border-left:1px solid var(--border);display:flex;flex-direction:column;gap:9px}
+.b1-flow-cell:first-child{border-left:none}
+.b1-flow-top{display:flex;align-items:center;gap:11px}
+.b1-tick{width:14px;height:14px;border-radius:4px}
+.b1-flow-label{font-size:18px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--text-2)}
+.b1-flow-val{font-size:54px;font-weight:700;line-height:1}
+.b1-flow-sub{font-size:18px;color:var(--text-3)}
+.tk-blue{background:var(--blue)}.tk-amber{background:var(--amber)}.tk-red{background:var(--red)}.tk-green{background:var(--green)}
+.b1-live{grid-column:1 / -1;background:var(--panel-2);border:1px solid var(--border);border-radius:16px;padding:20px 30px;display:flex;align-items:center;gap:0}
+.b1-live-head{display:flex;flex-direction:column;gap:8px;padding-right:34px;border-right:1px solid var(--border);margin-right:6px}
+.b1-live-badge{display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:800;letter-spacing:.8px;color:var(--green);text-transform:uppercase}
+.b1-live-badge .pdot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 10px 1px rgba(34,197,94,.7)}
+.b1-live-ttl{font-size:17px;color:var(--text-3)}
+.b1-live-items{flex:1;display:grid;grid-template-columns:repeat(5,1fr);gap:0}
+.b1-live-item{padding:0 26px;border-left:1px solid var(--border)}
+.b1-live-item:first-child{border-left:none}
+.b1-live-item .l{font-size:14px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-3);margin-bottom:7px}
+.b1-live-item .v{font-size:34px;font-weight:700;color:var(--text-2);line-height:1}
+.b2-grid{display:grid;grid-template-columns:1.4fr 1fr;grid-template-rows:1fr auto;gap:20px;height:100%}
+.b2-chart{grid-row:1 / 2}
+.b2-mspa{grid-row:1 / 3}
+.b2-ritmo{grid-row:2 / 3}
+.b2-chart-wrap{position:relative;height:calc(100% - 46px)}
+.mspa-row{display:flex;align-items:center;justify-content:space-between;padding:15px 0;border-bottom:1px solid var(--border)}
+.mspa-row:last-child{border-bottom:none}
+.mspa-l{display:flex;align-items:center;gap:14px}
+.mspa-sem{width:12px;height:12px;border-radius:50%;background:var(--green)}
+.mspa-sem.warn{background:var(--amber);box-shadow:0 0 10px 1px rgba(245,158,11,.5)}
+.mspa-sem.danger{background:var(--red);box-shadow:0 0 10px 1px rgba(239,68,68,.6)}
+.mspa-lbl{font-size:22px;color:var(--text-2)}
+.mspa-val{font-size:26px;font-weight:700;text-align:right}
+.mspa-val .sub{font-size:15px;color:var(--text-3);font-weight:400;margin-top:2px}
+.mspa-row.venta{border-top:2px solid var(--border);margin-top:4px;padding-top:18px}
+.mspa-row.venta .mspa-lbl{color:var(--text);font-weight:700;font-size:24px}
+.mspa-row.venta .mspa-val{color:var(--green);font-size:38px}
+.b2-ritmo-row{display:flex;align-items:center;gap:24px}
+.b2-ritmo-fig{font-size:46px;font-weight:800;color:var(--blue);white-space:nowrap}
+.b2-ritmo-fig small{font-size:22px;color:var(--text-3);font-weight:600}
+.b2-ritmo-bar{flex:1;height:22px;background:var(--border);border-radius:11px;position:relative;overflow:hidden}
+.b2-ritmo-fill{height:100%;border-radius:11px;background:var(--blue)}
+.b2-ritmo-pace{position:absolute;top:0;bottom:0;width:3px;background:var(--amber)}
+.b2-ritmo-tag{font-size:19px;font-weight:700;white-space:nowrap}
+.b2-ritmo-tag.ok{color:var(--green)}.b2-ritmo-tag.warn{color:var(--amber)}
+.kt-rot{position:absolute;bottom:0;left:0;right:0;height:6px;display:flex;gap:4px;padding:0 44px 0;align-items:flex-end}
+.kt-rot-track{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+.kt-rot-fill{height:100%;width:0;background:var(--wurth-red);border-radius:2px}
+.kt-dots{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:9px}
+.kt-pg{width:9px;height:9px;border-radius:50%;background:var(--border-2);transition:background .3s}
+.kt-pg.on{background:var(--wurth-red)}
+</style>
+</head>
+<body>
+<div class="viewport"><div class="stage" id="stage"></div></div>
+<script>
+function fmtN(n,d=0){return Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:d,maximumFractionDigits:d});}
+function fmtK(n){
+  n=Number(n)||0;const neg=n<0;n=Math.abs(n);let s;
+  if(n>=1e9)s='$'+(n/1e9).toFixed(1).replace('.',',')+'B';
+  else if(n>=1e6)s='$'+(n/1e6).toFixed(1).replace('.',',')+'M';
+  else if(n>=1e3)s='$'+Math.round(n/1e3)+'K';
+  else s='$'+fmtN(n,0);
+  return (neg?'−':'')+s;
+}
+const ICONS={
+  target:'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+  trendingDown:'<path d="M16 17h6v-6"/><path d="m22 17-8.5-8.5-5 5L2 7"/>',
+  trendingUp:'<path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/>',
+  arrowDown:'<path d="M12 5v14M5 12l7 7 7-7"/>',
+  arrowUp:'<path d="M12 19V5M5 12l7-7 7 7"/>',
+  layers:'<path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65M22 12.65l-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
+  activity:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+};
+function ico(name,w=18){return `<svg class="ico" style="width:${w}px;height:${w}px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||''}</svg>`;}
+
+/* ── estado (se llena con /api/data) ── */
+const PLAN={fact_acum:0,plan_total:0,pct:0,pace:0,proy:0,proy_pct:0,dia_habil:0,dias_tot:0,dias_rest:0};
+const VENTA={val:0,ords:0};
+const PEDIDOS={v:0,delta:0};
+const FLOW={informado:{v:0,val:0},retenido:{v:0,val:0,pct:0},anulado:{v:0,val:0,pct:0},facturado:{v:0,val:0}};
+const HOY={pedidos:0,monto:0,ticket:0,ped_vend:0,lineas:0};
+const RITMO={curr:0,last:0,pct:0,pace:0,sobre:0,onTrack:true};
+let MSPA=[];
+let TREND=[];
+const DATOS_AL={mspa:'—',reactor:'—',mspaOk:true,reactorOk:true};
+const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const MSPA_DEF=[
+  {k:'backorders',l:'Backorders (Plazos viejos)'},
+  {k:'bloqueados',l:'Bloqueados por Límite Crédito'},
+  {k:'neg_status',l:'Bloqueados (Status < -1)'},
+  {k:'futuros',l:'Pedidos Abiertos (Futuros)'},
+  {k:'produccion',l:'Producción Abierta'},
+  {k:'remitos',l:'Remitos / Facturas Abiertas'},
+  {k:'venta',l:'Venta del Día',venta:true},
+];
+
+function mapData(d){
+  const r=d.reactor||{}, m=d.mspa||{}, ts=d.today_summary||{};
+  const pv=m.plan_ventas||{}, meta=r.meta||{}, bs=r.by_status||{};
+  // PLAN
+  PLAN.fact_acum=pv.fact_acum||0; PLAN.plan_total=pv.plan_total||0; PLAN.pct=pv.pct_plan||0;
+  PLAN.dia_habil=meta.dias_elapsed||0; PLAN.dias_tot=meta.curr_wd||0;
+  PLAN.dias_rest=Math.max(0,(meta.curr_wd||0)-(meta.dias_elapsed||0));
+  PLAN.pace=meta.curr_wd>0?(meta.dias_elapsed/meta.curr_wd*100):0;
+  PLAN.proy=PLAN.dia_habil>0?PLAN.fact_acum/PLAN.dia_habil*PLAN.dias_tot:0;
+  PLAN.proy_pct=PLAN.plan_total>0?PLAN.proy/PLAN.plan_total*100:0;
+  // VENTA
+  const v=m.venta||{}; VENTA.val=v.val||0; VENTA.ords=v.ords||0;
+  // PEDIDOS
+  PEDIDOS.v=r.pedidos||0;
+  const comp=r.comp||null;
+  PEDIDOS.delta=comp&&comp.pedidos?((r.pedidos-comp.pedidos)/comp.pedidos*100):0;
+  // FLOW
+  const total=r.pedidos||0;
+  const fcnt=(bs[13]?.cnt||0)+(bs[18]?.cnt||0), fval=(bs[13]?.val||0)+(bs[18]?.val||0);
+  FLOW.informado={v:total,val:r.valor||0};
+  FLOW.retenido={v:bs[15]?.cnt||0,val:bs[15]?.val||0,pct:total?(bs[15]?.cnt||0)/total*100:0};
+  FLOW.anulado={v:bs[14]?.cnt||0,val:bs[14]?.val||0,pct:total?(bs[14]?.cnt||0)/total*100:0};
+  FLOW.facturado={v:fcnt,val:fval};
+  // HOY (parcial en vivo)
+  HOY.pedidos=ts.pedidos||0; HOY.monto=ts.valor||0; HOY.ticket=ts.ticket||0;
+  HOY.ped_vend=ts.avg_ped_vend||0; HOY.lineas=ts.avg_lineas||0;
+  // MSPA
+  MSPA=MSPA_DEF.map(row=>{
+    const x=m[row.k]||{ords:0,pos:0,val:0};
+    return {k:row.l,val:x.val||0,ords:x.ords||0,pos:x.pos||0,venta:!!row.venta,sev:(!row.venta&&(x.val||0)>0)?'warn':'ok'};
+  });
+  // RITMO
+  RITMO.curr=meta.curr_pedidos||0; RITMO.last=meta.last_pedidos||0;
+  RITMO.pct=RITMO.last>0?Math.min(RITMO.curr/RITMO.last*100,120):0;
+  RITMO.pace=meta.curr_wd>0?(meta.dias_elapsed/meta.curr_wd*100):0;
+  const paceTarget=RITMO.last>0?(Math.min(RITMO.pace,100)/100)*RITMO.last:0;
+  RITMO.onTrack=RITMO.curr>=paceTarget;
+  RITMO.sobre=Math.round(RITMO.curr-paceTarget);
+  // TREND (solo meses con datos)
+  TREND=(r.trend||[]).map(t=>{
+    const[y,mo]=String(t.mes).split('-');
+    return [MESES[+mo-1]+' '+String(y).slice(2), t.pedidos||0, (t.valor||0)/1e6, t.dias_hab||1];
+  });
+  // datos al / conexión
+  DATOS_AL.mspaOk=!d.mspa_error; DATOS_AL.reactorOk=!d.reactor_error;
+  DATOS_AL.mspa=d.timestamp||'—'; DATOS_AL.reactor=d.timestamp||'—';
+}
+
+function topBar(){
+  return `<div class="kt-top">
+    <div class="kt-brand">
+      <span class="kt-logo">WÜRTH</span>
+      <div class="kt-divider"></div>
+      <div><div class="kt-title">Operaciones · Tiempo Real</div>
+        <div class="kt-sub">Reactor · MSPA · Sala de control</div></div>
+    </div>
+    <div class="kt-right">
+      <div class="kt-conn">
+        <span class="kt-conn-row"><span class="kt-dot ${DATOS_AL.mspaOk?'ok':'down'}"></span>MSPA ${DATOS_AL.mspaOk?'OK':'sin datos'} · <b>${DATOS_AL.mspa}</b></span>
+        <span class="kt-conn-row"><span class="kt-dot ${DATOS_AL.reactorOk?'ok':'down'}"></span>Reactor ${DATOS_AL.reactorOk?'OK':'sin datos'}</span>
+      </div>
+      <div class="kt-clock"><div class="kt-time num" id="kt-time">--:--:--</div>
+        <div class="kt-date" id="kt-date"></div></div>
+    </div>
+  </div>`;
+}
+function alertRibbon(){
+  const onTrack=PLAN.pct>=PLAN.pace;
+  if(!PLAN.plan_total)return '';
+  if(onTrack){
+    return `<div class="kt-alert ok">${ico('trendingUp',30)}<span>Plan de ventas <b>en ritmo</b> — ${fmtN(PLAN.pct,1)}% acumulado vs ${fmtN(PLAN.pace,1)}% esperado a hoy</span></div>`;
+  }
+  const gap=fmtN(PLAN.pace-PLAN.pct,1);
+  const sev=(PLAN.pace-PLAN.pct)>10?'danger':'warn';
+  return `<div class="kt-alert ${sev}">${ico('trendingDown',30)}<span>Plan de ventas <b>${gap} pts por debajo del ritmo</b> esperado — ${fmtN(PLAN.pct,1)}% acumulado vs ${fmtN(PLAN.pace,1)}% esperado a hoy</span></div>`;
+}
+function board1(){
+  const onTrack=PLAN.pct>=PLAN.pace;
+  const fill=onTrack?'var(--green)':'var(--amber)';
+  const flowCell=(tick,label,val,sub)=>`<div class="b1-flow-cell"><div class="b1-flow-top"><span class="b1-tick ${tick}"></span><span class="b1-flow-label">${label}</span></div><div class="b1-flow-val num">${val}</div><div class="b1-flow-sub num">${sub}</div></div>`;
+  const liveItem=(l,v)=>`<div class="b1-live-item"><div class="l">${l}</div><div class="v num">${v}</div></div>`;
+  const up=PEDIDOS.delta>=0;
+  return `<div class="kt-board top1 active">
+    <div class="b1-grid">
+      <div class="b1-plan panel">
+        <div class="b1-plan-l">
+          <div class="b1-plan-eyebrow">${ico('target')} Plan de ventas · Facturación acumulada del mes</div>
+          <div class="b1-figs"><span class="b1-curr num">${fmtK(PLAN.fact_acum)}</span><span class="b1-total num">/ ${fmtK(PLAN.plan_total)}</span></div>
+          <div class="b1-bar-line">
+            <span class="b1-pct num" style="color:${fill}">${fmtN(PLAN.pct,1)}%</span>
+            <div class="b1-bar-bg"><div class="b1-bar-fill" style="width:${Math.min(PLAN.pct,100)}%;background:${fill}"></div><div class="b1-bar-pace" style="left:${Math.min(PLAN.pace,100)}%"></div></div>
+          </div>
+          <div class="b1-plan-foot">
+            <span>Día hábil <b class="num">${PLAN.dia_habil} de ${PLAN.dias_tot}</b></span>
+            <span><b class="num">${PLAN.dias_rest}</b> días hábiles restantes</span>
+            <span>Restante: <b class="num">${fmtK(PLAN.plan_total-PLAN.fact_acum)}</b></span>
+          </div>
+        </div>
+        <div class="b1-plan-r"></div>
+        <div class="b1-proy">
+          <div class="l">Proyección de cierre</div>
+          <div class="v num">${fmtK(PLAN.proy)}</div>
+          <div class="s num">${fmtN(PLAN.proy_pct,1)}% del plan</div>
+          <div class="b1-state ${onTrack?'ok':'warn'}">${ico(onTrack?'trendingUp':'trendingDown',19)} ${onTrack?'En ritmo':'Por debajo del ritmo'}</div>
+        </div>
+      </div>
+      <div class="b1-stat panel"><div class="l">Venta del Día · MSPA</div><div class="v num">${fmtK(VENTA.val)}</div><div class="s num">${fmtN(VENTA.ords)} pedidos facturados</div></div>
+      <div class="b1-stat panel"><div class="l">Pedidos Informados</div><div class="v num">${fmtN(PEDIDOS.v)}</div>
+        <span class="b1-delta ${up?'up':'down'}">${ico(up?'arrowUp':'arrowDown',22)} ${fmtN(Math.abs(PEDIDOS.delta),1)}% <span style="color:var(--text-3);font-weight:400">vs. mismo día hábil mes anterior</span></span></div>
+      <div class="b1-flow panel">
+        ${flowCell('tk-blue','Informado',fmtK(FLOW.informado.val),fmtN(FLOW.informado.v)+' pedidos')}
+        ${flowCell('tk-amber','Retenido',fmtK(FLOW.retenido.val),fmtN(FLOW.retenido.v)+' ped · '+fmtN(FLOW.retenido.pct,1)+'%')}
+        ${flowCell('tk-red','Anulado',fmtK(FLOW.anulado.val),fmtN(FLOW.anulado.v)+' ped · '+fmtN(FLOW.anulado.pct,1)+'%')}
+        ${flowCell('tk-green','Facturado',fmtK(FLOW.facturado.val),fmtN(FLOW.facturado.v)+' pedidos')}
+      </div>
+      <div class="b1-live">
+        <div class="b1-live-head">
+          <span class="b1-live-badge"><span class="pdot"></span>En vivo · parcial</span>
+          <span class="b1-live-ttl">Así viene hoy · carga en curso</span>
+        </div>
+        <div class="b1-live-items">
+          ${liveItem('Pedidos',fmtN(HOY.pedidos))}
+          ${liveItem('Monto informado',fmtK(HOY.monto))}
+          ${liveItem('Ticket promedio',fmtK(HOY.ticket))}
+          ${liveItem('Ped / Vendedor',fmtN(HOY.ped_vend,1))}
+          ${liveItem('Líneas / Pedido',fmtN(HOY.lineas,1))}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+function board2(){
+  const mspaRow=(r)=>{
+    const sem=r.venta?'mspa-sem':'mspa-sem'+(r.sev!=='ok'?' '+r.sev:'');
+    return `<div class="mspa-row${r.venta?' venta':''}"><span class="mspa-l"><span class="${sem}"></span><span class="mspa-lbl">${r.k}</span></span><span class="mspa-val num">${fmtK(r.val)}<div class="sub num">${fmtN(r.ords)} ord · ${fmtN(r.pos)} pos</div></span></div>`;
+  };
+  return `<div class="kt-board top1 active">
+    <div class="b2-grid">
+      <div class="panel b2-chart">
+        <div class="kt-eyebrow">${ico('trendingUp')} Tendencia mensual · pedidos &amp; valor por día hábil</div>
+        <div class="b2-chart-wrap"><canvas id="kt-chart"></canvas></div>
+      </div>
+      <div class="panel b2-mspa">
+        <div class="kt-eyebrow">${ico('layers')} MSPA · Estado actual</div>
+        ${MSPA.map(mspaRow).join('')}
+      </div>
+      <div class="panel b2-ritmo">
+        <div class="kt-eyebrow">${ico('activity')} Ritmo mensual · pedidos vs. mes anterior</div>
+        <div class="b2-ritmo-row">
+          <span class="b2-ritmo-fig num">${fmtN(RITMO.curr)} <small>/ ${fmtN(RITMO.last)}</small></span>
+          <div class="b2-ritmo-bar"><div class="b2-ritmo-fill" style="width:${Math.min(RITMO.pct,100)}%"></div><div class="b2-ritmo-pace" style="left:${Math.min(RITMO.pace,100)}%"></div></div>
+          <span class="b2-ritmo-tag ${RITMO.onTrack?'ok':'warn'} num">${RITMO.onTrack?'+'+fmtN(RITMO.sobre)+' sobre ritmo':fmtN(Math.abs(RITMO.sobre))+' bajo ritmo'}</span>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+let chartInst=null;
+function drawChart(){
+  const cv=document.getElementById('kt-chart');
+  if(!cv||!window.Chart||!TREND.length)return;
+  if(chartInst){chartInst.destroy();chartInst=null;}
+  chartInst=new Chart(cv.getContext('2d'),{
+    data:{labels:TREND.map(t=>t[0]),datasets:[
+      {type:'bar',label:'Pedidos / día hábil',data:TREND.map(t=>+(t[1]/t[3]).toFixed(1)),backgroundColor:'rgba(148,163,184,.22)',borderColor:'#334155',borderWidth:1,yAxisID:'y1',order:2},
+      {type:'line',label:'M$ / día hábil',data:TREND.map(t=>+(t[2]/t[3]).toFixed(2)),borderColor:'#ef4444',backgroundColor:'rgba(239,68,68,.08)',borderWidth:3,pointRadius:3,pointBackgroundColor:'#ef4444',tension:.35,yAxisID:'y2',order:1,fill:true},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,
+      plugins:{legend:{labels:{color:'#a9b6c9',font:{size:16},boxWidth:16,padding:22,usePointStyle:true}},
+        tooltip:{callbacks:{label:(c)=>c.dataset.label+': '+Number(c.parsed.y).toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1})}}},
+      scales:{x:{ticks:{color:'#6b7a91',font:{size:14}},grid:{display:false}},
+        y1:{position:'left',ticks:{color:'#6b7a91',font:{size:13}},grid:{color:'#1f2937'}},
+        y2:{position:'right',ticks:{color:'#ef4444',font:{size:13},callback:v=>v.toFixed(1).replace('.',',')},grid:{drawOnChartArea:false}}}}
+  });
+}
+function tickClock(){
+  const now=new Date();
+  const t=document.getElementById('kt-time'),d=document.getElementById('kt-date');
+  if(t)t.textContent=now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  if(d)d.textContent=now.toLocaleDateString('es-AR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+}
+const ROTATE_MS=18000;
+let board=0;
+const stage=document.getElementById('stage');
+function render(){
+  stage.innerHTML=topBar()+alertRibbon()+(board===0?board1():board2())+
+    `<div class="kt-rot"><div class="kt-rot-track"><div class="kt-rot-fill" id="kt-fill"></div></div></div>
+     <div class="kt-dots"><span class="kt-pg${board===0?' on':''}"></span><span class="kt-pg${board===1?' on':''}"></span></div>`;
+  tickClock();
+  if(board===1)drawChart();
+}
+function fitStage(){
+  const s=Math.min(window.innerWidth/1920,window.innerHeight/1080);
+  stage.style.transform='scale('+s+')';
+}
+async function refrescar(){
+  try{
+    const res=await fetch('/api/data',{cache:'no-store'});
+    const d=await res.json();
+    mapData(d);
+    render();
+  }catch(e){ DATOS_AL.mspaOk=false; DATOS_AL.reactorOk=false; render(); }
+}
+fitStage();
+window.addEventListener('resize',fitStage);
+render();
+refrescar();
+setInterval(tickClock,1000);
+setInterval(refrescar,60000);
+let rotStart=Date.now();
+setInterval(()=>{const fill=document.getElementById('kt-fill');if(fill)fill.style.width=Math.min((Date.now()-rotStart)/ROTATE_MS*100,100)+'%';},100);
+setInterval(()=>{board=(board+1)%2;rotStart=Date.now();render();},ROTATE_MS);
+</script>
+</body>
+</html>
+"""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2043,6 +2359,8 @@ class Handler(BaseHTTPRequestHandler):
         qs     = parse_qs(parsed.query)
         if parsed.path in ("/", "/index.html"):
             self.send_html(HTML_PAGE)
+        elif parsed.path in ("/kiosk", "/kiosk.html"):
+            self.send_html(KIOSK_PAGE)
         elif parsed.path == "/api/data":
             override = qs.get("date", [None])[0]
             self.send_json(get_cached_data(override_date=override))
