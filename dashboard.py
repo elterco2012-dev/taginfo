@@ -333,7 +333,7 @@ def fetch_reactor(target_date=None):
                    "cnt": int(r[1] or 0), "val": float(r[2] or 0)} for r in an_rows]
 
     # Sparklines — últimos 14 días hábiles (reusa wd_log ya consultado)
-    sparklines = {"pedidos": [], "ventas": [], "ped_vend": [], "avg_lin": []}
+    sparklines = {"pedidos": [], "ventas": [], "ped_vend": [], "avg_lin": [], "ticket": [], "dates": []}
     try:
         if wd_log:
             spark_dates = sorted(d for d in wd_log if d <= target_str)[-14:]
@@ -372,6 +372,14 @@ def fetch_reactor(target_date=None):
                     sparklines["ventas"].append(round(val / 1e6, 3))
                     sparklines["ped_vend"].append(round(ped / vend, 2) if vend else 0)
                     sparklines["avg_lin"].append(round(lin / lped, 2) if lped else 0)
+                    sparklines["ticket"].append(round(val / ped) if ped else 0)
+                    # fecha legible dd/mm para tooltip
+                    try:
+                        from datetime import date as _date
+                        parts = fd.split("-")
+                        sparklines["dates"].append(f"{parts[2]}/{parts[1]}")
+                    except Exception:
+                        sparklines["dates"].append(fd)
     except Exception as e:
         print(f"  sparklines error: {e}")
 
@@ -849,7 +857,7 @@ body.dark .date-pop input{color-scheme:dark}
 .plan-bar-pace{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text);z-index:2}
 .plan-bar-pace::after{content:'';position:absolute;top:-3px;left:-2px;border-left:3px solid transparent;border-right:3px solid transparent;border-top:4px solid var(--text)}
 .hero-foot{display:flex;justify-content:space-between;font-size:11px;color:var(--text-3);margin-top:4px;font-variant-numeric:tabular-nums}
-.hero-proy{display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text-2);font-variant-numeric:tabular-nums}
+.hero-proy{display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:14px;color:var(--text-2);font-variant-numeric:tabular-nums}
 .state-tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 9px;border-radius:6px;font-weight:600;white-space:nowrap;flex-shrink:0}
 .state-ok{background:var(--pos-bg);color:var(--pos-fg)}
 .state-warn{background:var(--amber-bg);color:var(--amber)}
@@ -871,7 +879,7 @@ body.dark .state-neutral{background:#334155;color:var(--text-3)}
 .kpi-val{font-size:25px;font-weight:700;line-height:1;color:var(--text);font-variant-numeric:tabular-nums}
 .spark{width:74px;height:30px;flex-shrink:0;opacity:.9}
 .kpi-foot{display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap}
-.delta{display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
+.delta{display:inline-flex;align-items:center;gap:2px;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
 .delta .ico{width:13px;height:13px}
 .delta.up{color:var(--pos-fg)}.delta.down{color:var(--neg-fg)}.delta.flat{color:var(--text-3)}
 .meta-chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--text-3);font-variant-numeric:tabular-nums}
@@ -895,7 +903,7 @@ body.dark .state-neutral{background:#334155;color:var(--text-3)}
 .tk-blue{background:var(--blue)}.tk-amber{background:var(--amber)}.tk-red{background:var(--red)}.tk-green{background:var(--green)}
 .flow-label{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text-2)}
 .flow-val{font-size:24px;font-weight:700;line-height:1;color:var(--text);font-variant-numeric:tabular-nums}
-.flow-sub{font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums}
+.flow-sub{font-size:13px;color:var(--text-3);font-variant-numeric:tabular-nums}
 .alert-icon{position:absolute;top:8px;right:10px;display:flex;align-items:center}
 .alert-icon .ico{width:14px;height:14px;color:var(--amber)}
 .flow-cell.pulse-warn{background:var(--amber-bg);animation:bgpulse 3s ease-in-out infinite}
@@ -990,18 +998,7 @@ body.tv .meta-curr{font-size:28px}
 }
 /* ── RESPONSIVE ── */
 @media(max-width:1080px){.hero{grid-template-columns:1fr}.bottom{grid-template-columns:1fr}.sellers-wrap{grid-template-columns:1fr}.kpi-grid{grid-template-columns:repeat(2,1fr)}}
-/* ── KIOSK ── */
-body.kiosk{overflow:hidden}
-body.kiosk .main{padding-bottom:74px}
-.kiosk-bar{display:none;position:fixed;bottom:0;left:0;right:0;height:52px;background:var(--card);border-top:1px solid var(--border);z-index:200;padding:0 18px;align-items:center;grid-template-columns:1fr auto 1fr}
-body.kiosk .kiosk-bar{display:grid}
-.kiosk-lbl{font-size:11px;color:var(--text3);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
-.kiosk-dots{display:flex;gap:8px;justify-content:center}
-.kiosk-dot{width:8px;height:8px;border-radius:50%;background:var(--border);border:none;cursor:pointer;padding:0;transition:background .2s,transform .2s}
-.kiosk-dot.active{background:var(--wurth-red);transform:scale(1.3)}
-.kiosk-right{display:flex;align-items:center;gap:8px;justify-content:flex-end}
-.kiosk-prog{flex:1;max-width:80px;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
-.kiosk-prog-fill{height:100%;background:var(--wurth-red);transition:width .3s linear}
+/* ── Chip días hábiles restantes ── */
 .rest-chip{display:inline-block;background:var(--bg2,#f1f5f9);color:var(--text3,#64748b);font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;margin-left:6px;vertical-align:middle;border:1px solid var(--border)}
 .rest-chip.urgent{background:#fef3c7;color:#92400e;border-color:#fde68a}
 </style>
@@ -1141,9 +1138,10 @@ body.kiosk .kiosk-bar{display:grid}
         <div class="kpi-foot" id="d-avg"></div>
       </div>
       <div class="kpi">
-        <div class="kpi-lbl">Ticket Promedio</div>
+        <div class="kpi-lbl">Pedido Promedio</div>
         <div class="kpi-top">
           <div class="kpi-val num" id="k-ticket">—</div>
+          <div id="spark-ticket"></div>
         </div>
         <div class="kpi-foot" id="d-ticket"></div>
       </div>
@@ -1206,7 +1204,7 @@ body.kiosk .kiosk-bar{display:grid}
         </div>
         <div class="flow-val num" id="fl-fact-val">—</div>
         <div class="flow-sub num" id="fl-fact-ped">—</div>
-        <div class="flow-sub num" id="fl-fact-mspa" style="font-size:9px;opacity:.7;margin-top:2px"></div>
+        <div class="flow-sub num" id="fl-fact-mspa" style="font-size:12px;opacity:.7;margin-top:2px"></div>
       </div>
     <div class="sk-overlay" style="flex-direction:row;gap:8px;padding:12px 16px">
       <div style="flex:1;display:flex;flex-direction:column;gap:7px">
@@ -1247,7 +1245,7 @@ body.kiosk .kiosk-bar{display:grid}
         <div class="hoy-val num" id="hoy-valor">—</div>
       </div>
       <div class="hoy-cell">
-        <div class="hoy-lbl">Ticket Promedio</div>
+        <div class="hoy-lbl">Pedido Promedio</div>
         <div class="hoy-val num" id="hoy-ticket">—</div>
       </div>
       <div class="hoy-cell">
@@ -1372,23 +1370,6 @@ body.kiosk .kiosk-bar{display:grid}
     </div>
   </div>
 
-  <!-- Kiosk bar -->
-  <div class="kiosk-bar">
-    <span class="kiosk-lbl" id="kiosk-lbl">Página 1 de 2</span>
-    <div class="kiosk-dots">
-      <button class="kiosk-dot active" onclick="kioskGoTo(0)" id="kdot-0"></button>
-      <button class="kiosk-dot" onclick="kioskGoTo(1)" id="kdot-1"></button>
-    </div>
-    <div class="kiosk-right">
-      <div class="kiosk-prog"><div class="kiosk-prog-fill" id="kiosk-prog-fill" style="width:0%"></div></div>
-      <button class="icon-btn" id="kiosk-pause-btn" onclick="kioskTogglePause()" title="Pausar/Reanudar">
-        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" id="kiosk-pause-ico"><path d="M10 15V9M14 15V9"/></svg>
-      </button>
-      <button class="icon-btn" onclick="kioskStop()" title="Salir del modo kiosk">
-        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
-      </button>
-    </div>
-  </div>
 
 </div>
 
@@ -1446,25 +1427,46 @@ function nextFmt(secs){
 
 function semaforo(v,w,d){return v>=d?'danger':v>=w?'warn':'ok'}
 
-function sparkSvg(data,w=74,h=30){
+function sparkSvg(data,w=74,h=30,dates,fmtFn){
   if(!data||data.length<2)return '';
   const mn=Math.min(...data),mx=Math.max(...data),rng=(mx-mn)||1;
   const pad=2,step=(w-pad*2)/(data.length-1);
   const pts=data.map((v,i)=>[pad+i*step, h-pad-((v-mn)/rng)*(h-pad*2)]);
   const d=pts.map(([x,y],i)=>`${i?'L':'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
   const area=`${d} L${pts[pts.length-1][0].toFixed(1)} ${h} L${pts[0][0].toFixed(1)} ${h} Z`;
-  const up=data[data.length-1]>=data[0];
+  // Tendencia reciente: promedio última mitad vs. primera mitad
+  const mid=Math.floor(data.length/2);
+  const avgFirst=data.slice(0,mid).reduce((a,v)=>a+v,0)/mid;
+  const avgLast=data.slice(mid).reduce((a,v)=>a+v,0)/(data.length-mid);
+  const up=avgLast>=avgFirst;
   const c=up?'var(--green)':'var(--red)';
   const gid='sg'+Math.abs(data.slice(0,3).reduce((a,v,i)=>a^(v*1000+i*7),0)).toString(36);
   const [lx,ly]=pts[pts.length-1];
-  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+  // hit areas para tooltip
+  const hits=pts.map(([x,y],i)=>{
+    const lbl=dates&&dates[i]?dates[i]:'';
+    const val=fmtFn?fmtFn(data[i]):fmtN(data[i],1);
+    return `<rect x="${(x-step/2).toFixed(1)}" y="0" width="${step.toFixed(1)}" height="${h}" fill="transparent"><title>${lbl}: ${val}</title></rect>`;
+  }).join('');
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="overflow:visible">
   <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0%" stop-color="${c}" stop-opacity=".18"/><stop offset="100%" stop-color="${c}" stop-opacity="0"/>
   </linearGradient></defs>
   <path d="${area}" fill="url(#${gid})"/>
   <path d="${d}" fill="none" stroke="${c}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
   <circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="2.2" fill="${c}"/>
+  ${hits}
 </svg>`;
+}
+
+function sparkWithAvg(data,dates,fmtFn){
+  if(!data||data.length<2)return '';
+  const avg=data.reduce((a,v)=>a+v,0)/data.length;
+  const avgStr=fmtFn?fmtFn(avg):fmtN(avg,1);
+  return `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+    ${sparkSvg(data,74,30,dates,fmtFn)}
+    <span style="font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums" title="Promedio 14 días hábiles">prom. ${avgStr}</span>
+  </div>`;
 }
 
 function deltaHtml(curr,prev,compLbl){
@@ -1472,7 +1474,7 @@ function deltaHtml(curr,prev,compLbl){
   const p=(curr-prev)/prev*100;
   const ico=p>0?ICO.arrowUp:ICO.arrowDown;
   const cls=p>0?'up':'down';
-  const lbl=compLbl?`<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`:'';
+  const lbl=compLbl?`<span style="font-size:11px;color:var(--text-3);display:block;margin-top:2px">${compLbl}</span>`:'';
   return `<span class="delta ${cls}">${ico} ${fmtN(Math.abs(p),1)}%</span>${lbl}`;
 }
 
@@ -1587,13 +1589,38 @@ function renderChart(trend){
   const barBorder=trend.map(t=>t.is_partial
     ?(dark?'#334155':'#e2e8f0')
     :(dark?'#475569':'#cbd5e1'));
-  if(chartObj){chartObj.destroy();chartObj=null;}
   chartObj=new Chart(ctx,{
+    plugins:[{
+      id:'dash-labels',
+      afterDatasetsDraw(chart){
+        const ctx2=chart.ctx;
+        chart.data.datasets.forEach((ds,di)=>{
+          const meta=chart.getDatasetMeta(di);
+          if(meta.hidden)return;
+          meta.data.forEach((el,i)=>{
+            const t=trend[i];
+            if(!t)return;
+            const isBars=(ds.type==='bar'||ds.yAxisID==='y1');
+            const lbl=isBars
+              ? Math.round(t.pedidos/(t.dias_hab||1)).toLocaleString('es-AR')
+              : '$'+Math.round((t.valor/1e6)/(t.dias_hab||1));
+            ctx2.save();
+            ctx2.font=isBars?'600 10px system-ui':'700 10px system-ui';
+            ctx2.fillStyle=isBars?txtColor:'#cc0000';
+            ctx2.textAlign='center';
+            ctx2.textBaseline='bottom';
+            ctx2.fillText(lbl, el.x, isBars?el.y-2:el.y-6);
+            ctx2.restore();
+          });
+        });
+      }
+    }],
     data:{labels,datasets:[
-      {type:'bar',label:'Pedidos / día hábil',data:barData,backgroundColor:barBg,borderColor:barBorder,borderWidth:1,yAxisID:'y1',borderRadius:3,order:2},
-      {type:'line',label:'M$ / día hábil',data:lineData,borderColor:'#cc0000',backgroundColor:'rgba(204,0,0,.06)',borderWidth:2.5,tension:.35,yAxisID:'y2',fill:true,pointRadius:2.5,pointBackgroundColor:'#cc0000',order:1},
+      {type:'bar',label:'Pedidos / día',data:barData,backgroundColor:barBg,borderColor:barBorder,borderWidth:1,yAxisID:'y1',borderRadius:3,order:2},
+      {type:'line',label:'Venta M$ / día',data:lineData,borderColor:'#cc0000',backgroundColor:'rgba(204,0,0,.06)',borderWidth:2.5,tension:.35,yAxisID:'y2',fill:true,pointRadius:2.5,pointBackgroundColor:'#cc0000',order:1},
     ]},
     options:{responsive:true,maintainAspectRatio:false,
+      layout:{padding:{top:24}},
       interaction:{mode:'index',intersect:false},
       plugins:{
         legend:{position:'bottom',labels:{boxWidth:12,padding:16,color:txtColor,font:{size:11},usePointStyle:true}},
@@ -1683,7 +1710,7 @@ function renderTodaySummary(ts){
   const dp=ts.date?ts.date.split('-').reverse().join('/'):new Date().toLocaleDateString('es-AR');
   document.getElementById('hoy-lbl').textContent='Hoy '+dp+' — Pedidos informados hoy (en tiempo real)';
   document.getElementById('hoy-pedidos').textContent=fmtN(ts.pedidos,0);
-  document.getElementById('hoy-vend').textContent=fmtN(ts.vendedores,0)+' vendedores activos';
+  document.getElementById('hoy-vend').textContent=fmtN(ts.vendedores,0)+' vendedores con pedidos hoy';
   document.getElementById('hoy-valor').textContent=fmtK(ts.valor||0);
   document.getElementById('hoy-ticket').textContent=fmtK(ts.ticket||0);
   document.getElementById('hoy-pedvend').textContent=fmtN(ts.avg_ped_vend,1);
@@ -1764,12 +1791,14 @@ function render(data){
   document.getElementById('k-avg').textContent=fmtN(r.avg_lineas,1);
   document.getElementById('d-avg').innerHTML=c&&c.avg_lineas?deltaHtml(r.avg_lineas,c.avg_lineas,compLbl):'';
 
-  // Sparklines
+  // Sparklines con promedio y tooltip de fecha
   const sp=r.sparklines||{};
-  document.getElementById('spark-ped').innerHTML=sparkSvg(sp.pedidos);
-  document.getElementById('spark-ventas').innerHTML=sparkSvg(sp.ventas);
-  document.getElementById('spark-vend').innerHTML=sparkSvg(sp.ped_vend);
-  document.getElementById('spark-avg').innerHTML=sparkSvg(sp.avg_lin);
+  const spd=sp.dates||[];
+  document.getElementById('spark-ped').innerHTML=sparkWithAvg(sp.pedidos,spd,v=>fmtN(v,0));
+  document.getElementById('spark-ventas').innerHTML=sparkWithAvg(sp.ventas,spd,v=>fmtK(v*1e6));
+  document.getElementById('spark-vend').innerHTML=sparkWithAvg(sp.ped_vend,spd,v=>fmtN(v,1));
+  document.getElementById('spark-avg').innerHTML=sparkWithAvg(sp.avg_lin,spd,v=>fmtN(v,1));
+  document.getElementById('spark-ticket').innerHTML=sparkWithAvg(sp.ticket,spd,v=>fmtK(v));
 
   // Flow bar
   const fact_cnt=(bs[13]?.cnt||0)+(bs[18]?.cnt||0);
@@ -1787,7 +1816,7 @@ function render(data){
   document.getElementById('fl-an-val').textContent=fmtK(bs[14]?.val||0);
   document.getElementById('fl-an-ped').textContent=fmtN(an,0)+' ped · '+pct(an,total);
   document.getElementById('fl-fact-val').textContent=fmtK(fact_val);
-  document.getElementById('fl-fact-ped').textContent=fmtN(fact_cnt,0)+' pedidos';
+  document.getElementById('fl-fact-ped').textContent=fmtN(fact_cnt,0)+' pedidos'+(total>0?' · '+pct(fact_cnt,total):'');
   const elMspaRef=document.getElementById('fl-fact-mspa');
   if(elMspaRef)elMspaRef.textContent=venta.val>0?'Cierre Reactor · MSPA día: '+fmtK(venta.val):'';
 
@@ -1948,69 +1977,590 @@ function gotoDate(clear){
 load();
 setInterval(tick,1000);
 
-// ── KIOSK (scroll-based, no rompe layout) ──
-const KIOSK_ANCHORS=[null,'kiosk-p2']; // null = top, id = scroll target
-const KIOSK_INTERVAL=20000;
-let _kioskPage=0, _kioskTimer=null, _kioskPaused=false, _kioskTick=0;
-
-function kioskGoTo(idx){
-  _kioskPage=idx;
-  _kioskTick=0;
-  const anchor=KIOSK_ANCHORS[idx];
-  if(anchor){
-    const el=document.getElementById(anchor);
-    if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
-  } else {
-    window.scrollTo({top:0,behavior:'smooth'});
-  }
-  document.querySelectorAll('.kiosk-dot').forEach((d,i)=>d.classList.toggle('active',i===idx));
-  document.getElementById('kiosk-lbl').textContent=`Página ${idx+1} de ${KIOSK_ANCHORS.length}`;
-  document.getElementById('kiosk-prog-fill').style.width='0%';
-}
-function kioskAdvance(){kioskGoTo((_kioskPage+1)%KIOSK_ANCHORS.length);}
-function kioskTick(){
-  if(_kioskPaused)return;
-  _kioskTick+=200;
-  const pct=Math.min(_kioskTick/KIOSK_INTERVAL*100,100);
-  const fill=document.getElementById('kiosk-prog-fill');
-  if(fill)fill.style.width=pct+'%';
-  if(_kioskTick>=KIOSK_INTERVAL)kioskAdvance();
-}
-function kioskTogglePause(){
-  _kioskPaused=!_kioskPaused;
-  const ico=document.getElementById('kiosk-pause-ico');
-  if(ico)ico.innerHTML=_kioskPaused
-    ?'<polygon points="5 3 19 12 5 21 5 3"/>'
-    :'<path d="M10 15V9M14 15V9"/>';
-}
-function kioskStart(){
-  _kioskPage=0; _kioskTick=0; _kioskPaused=false;
-  document.body.classList.add('kiosk','tv');
-  document.getElementById('kiosk-btn').classList.add('on');
-  window.scrollTo({top:0});
-  document.querySelectorAll('.kiosk-dot').forEach((d,i)=>d.classList.toggle('active',i===0));
-  document.getElementById('kiosk-lbl').textContent=`Página 1 de ${KIOSK_ANCHORS.length}`;
-  document.getElementById('kiosk-prog-fill').style.width='0%';
-  if(_kioskTimer)clearInterval(_kioskTimer);
-  _kioskTimer=setInterval(kioskTick,200);
-  if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{});
-  if(_lastTrend)renderChart(_lastTrend);
-}
-function kioskStop(){
-  if(_kioskTimer){clearInterval(_kioskTimer);_kioskTimer=null;}
-  document.body.classList.remove('kiosk','tv');
-  document.getElementById('kiosk-btn').classList.remove('on');
-  if(document.exitFullscreen&&document.fullscreenElement)document.exitFullscreen().catch(()=>{});
-  if(_lastTrend)renderChart(_lastTrend);
-}
+// ── KIOSK — abre el wallboard /kiosk (tablero fijo, rota solo, sin botones) ──
 function toggleKiosk(){
-  if(document.body.classList.contains('kiosk'))kioskStop();
-  else kioskStart();
+  // Pide fullscreen y navega al wallboard
+  try{ if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); }catch(e){}
+  window.location.href='/kiosk';
 }
+</script>
+</body>
+</html>
+""".replace("@@LOGO@@", LOGO_HTML)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# KIOSK / WALLBOARD — tablero fijo 1920×1080 escalado a la TV, sin scroll,
+# sin botones, rota en silencio entre 2 tableros. Consume /api/data (datos reales).
+# ─────────────────────────────────────────────────────────────────────────────
+KIOSK_PAGE = r"""<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Würth — Kiosk / Wallboard</title>
+<style>
+:root{
+  --wurth-red:#cc0000; --wurth-red-hover:#b00000;
+  --bg:#eef1f5; --panel:#ffffff; --panel-2:#f6f8fb;
+  --border:#e6eaf0; --border-2:#d3dae3;
+  --text:#0f172a; --text-2:#475569; --text-3:#8a97a8;
+  --blue:#2563eb; --green:#059669; --amber:#d97706; --red:#dc2626;
+  --green-bg:#ecfdf3; --amber-bg:#fff8eb; --red-bg:#fef2f2; --blue-bg:#eff5ff;
+  --font-sans:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  --shadow:0 1px 3px rgba(15,23,42,.06),0 1px 2px rgba(15,23,42,.04);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+html,body{height:100%;background:var(--bg);overflow:hidden;font-family:var(--font-sans)}
+.viewport{position:fixed;inset:0;background:var(--bg);overflow:hidden}
+.stage{width:1920px;height:1080px;background:var(--bg);position:absolute;left:0;top:0;transform-origin:top left;overflow:hidden;color:var(--text)}
+.kt-top{height:96px;display:flex;align-items:center;justify-content:space-between;padding:0 44px;border-bottom:3px solid var(--wurth-red);background:var(--panel)}
+.kt-brand{display:flex;align-items:center;gap:22px}
+.kt-logo{font-size:34px;font-weight:800;color:var(--wurth-red);letter-spacing:-1px}
+.kt-brand img{height:54px!important;width:auto!important}
+.kt-brand .logo-text-fallback{font-size:34px;font-weight:800;color:var(--wurth-red);letter-spacing:-1px}
+.kt-divider{width:2px;height:44px;background:var(--border-2)}
+.kt-title{font-size:30px;font-weight:700;letter-spacing:-.3px;line-height:1}
+.kt-sub{font-size:16px;color:var(--text-3);margin-top:5px;letter-spacing:.4px}
+.kt-right{display:flex;align-items:center;gap:40px}
+.kt-conn{display:flex;flex-direction:column;gap:7px;font-size:15px;color:var(--text-2)}
+.kt-conn-row{display:flex;align-items:center;gap:9px}
+.kt-dot{width:11px;height:11px;border-radius:50%}
+.kt-dot.ok{background:var(--green)}
+.kt-dot.slow{background:var(--amber)}
+.kt-dot.down{background:var(--red)}
+.kt-conn b{color:var(--text);font-weight:600}
+.kt-clock{text-align:right}
+.kt-time{font-size:42px;font-weight:700;line-height:1;letter-spacing:-.5px}
+.kt-date{font-size:17px;color:var(--text-3);margin-top:4px;text-transform:capitalize}
+.kt-alert{height:70px;display:flex;align-items:center;gap:18px;padding:0 44px;font-size:25px;font-weight:600}
+.kt-alert .ico{width:30px;height:30px;flex-shrink:0}
+.kt-alert b{font-weight:800}
+.kt-alert.warn{background:#fef3c7;color:#92400e;border-bottom:2px solid #f59e0b}
+.kt-alert.danger{background:#fee2e2;color:#991b1b;border-bottom:2px solid #dc2626}
+.kt-alert.ok{background:#d1fae5;color:#065f46;border-bottom:2px solid #059669}
+.kt-board{position:absolute;left:0;right:0;bottom:14px;padding:26px 44px 0;display:none}
+.kt-board.active{display:block}
+.kt-board.top1{top:166px}
+.kt-board.top0{top:96px}
+.kt-eyebrow{display:flex;align-items:center;gap:9px;font-size:16px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:var(--text-3);margin-bottom:14px}
+.kt-eyebrow .ico{width:18px;height:18px}
+.b1-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto auto;gap:20px;height:100%}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:26px 30px;box-shadow:var(--shadow)}
+.b1-plan{grid-column:1 / -1;display:flex;align-items:center;gap:54px;padding:30px 36px}
+.b1-plan-l{flex:1;min-width:0}
+.b1-plan-eyebrow{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:var(--text-3);margin-bottom:12px}
+.b1-plan-eyebrow .ico{width:18px;height:18px;color:var(--wurth-red)}
+.b1-figs{display:flex;align-items:baseline;gap:18px}
+.b1-curr{font-size:104px;font-weight:700;line-height:.92;letter-spacing:-3px}
+.b1-total{font-size:40px;color:var(--text-3);font-weight:600}
+.b1-bar-line{display:flex;align-items:center;gap:22px;margin-top:22px}
+.b1-pct{font-size:34px;font-weight:800;min-width:120px}
+.b1-bar-bg{flex:1;height:26px;background:var(--border);border-radius:13px;position:relative;overflow:hidden}
+.b1-bar-fill{height:100%;border-radius:13px}
+.b1-bar-pace{position:absolute;top:-6px;bottom:-6px;width:4px;background:var(--text)}
+.b1-plan-foot{display:flex;gap:0;margin-top:20px;font-size:20px;color:var(--text-2)}
+.b1-plan-foot b{color:var(--text);font-weight:700}
+.b1-plan-foot .pf-item{padding:10px 24px;border-radius:10px}
+.b1-plan-foot .pf-item:first-child{background:var(--blue-bg);color:#1e40af}
+.b1-plan-foot .pf-item:first-child b{color:#1d4ed8}
+.b1-plan-foot .pf-item:nth-child(2){background:var(--amber-bg);color:#92400e;margin:0 16px}
+.b1-plan-foot .pf-item:nth-child(2) b{color:#b45309}
+.b1-plan-foot .pf-item:last-child{background:var(--panel-2);color:var(--text-2)}
+.b1-plan-r{width:1px;align-self:stretch;background:var(--border)}
+.b1-proy{flex-shrink:0;text-align:right;min-width:300px}
+.b1-proy .l{font-size:17px;text-transform:uppercase;letter-spacing:1px;color:var(--text-3);margin-bottom:10px}
+.b1-proy .v{font-size:58px;font-weight:800;line-height:1;color:var(--wurth-red)}
+.b1-proy .s{font-size:24px;color:var(--text-2);margin-top:8px;font-weight:600}
+.b1-state{display:inline-flex;align-items:center;gap:8px;margin-top:16px;font-size:19px;font-weight:700;padding:7px 16px;border-radius:10px}
+.b1-state.warn{background:#fef3c7;color:#92400e;border:1px solid #f59e0b}
+.b1-state.ok{background:#d1fae5;color:#065f46;border:1px solid #059669}
+.b1-stat{display:flex;flex-direction:column;justify-content:center}
+.b1-stat .l{font-size:18px;text-transform:uppercase;letter-spacing:1px;color:var(--text-3);margin-bottom:12px}
+.b1-stat .v{font-size:72px;font-weight:700;line-height:1}
+.b1-stat .s{font-size:20px;color:var(--text-2);margin-top:10px}
+.b1-delta{display:inline-flex;align-items:center;gap:5px;font-size:22px;font-weight:700;margin-top:10px}
+.b1-delta .ico{width:22px;height:22px}
+.b1-delta.up{color:var(--green)}.b1-delta.down{color:var(--red)}
+.b1-flow{grid-column:1 / -1;display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding:0;overflow:hidden}
+.b1-flow-cell{padding:24px 28px;border-left:1px solid var(--border);display:flex;flex-direction:column;gap:9px}
+.b1-flow-cell:first-child{border-left:none}
+.b1-flow-top{display:flex;align-items:center;gap:11px}
+.b1-tick{width:14px;height:14px;border-radius:4px}
+.b1-flow-label{font-size:18px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--text-2)}
+.b1-flow-val{font-size:54px;font-weight:700;line-height:1}
+.b1-flow-sub{font-size:18px;color:var(--text-3)}
+.tk-blue{background:var(--blue)}.tk-amber{background:var(--amber)}.tk-red{background:var(--red)}.tk-green{background:var(--green)}
+.b1-live{grid-column:1 / -1;background:var(--panel-2);border:1px solid var(--border);border-radius:16px;padding:20px 30px;display:flex;align-items:center;gap:0}
+.b1-live-head{display:flex;flex-direction:column;gap:8px;padding-right:34px;border-right:1px solid var(--border);margin-right:6px}
+.b1-live-badge{display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:800;letter-spacing:.8px;color:var(--green);text-transform:uppercase}
+.b1-live-badge .pdot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 10px 1px rgba(34,197,94,.7)}
+.b1-live-ttl{font-size:17px;color:var(--text-3)}
+.b1-live-items{flex:1;display:grid;grid-template-columns:repeat(5,1fr);gap:0}
+.b1-live-item{padding:0 26px;border-left:1px solid var(--border)}
+.b1-live-item:first-child{border-left:none}
+.b1-live-item .l{font-size:14px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-3);margin-bottom:7px}
+.b1-live-item .v{font-size:34px;font-weight:700;color:var(--text-2);line-height:1}
+.b2-grid{display:grid;grid-template-columns:1.4fr 1fr;grid-template-rows:1fr auto;gap:20px;height:100%}
+.b2-chart{grid-row:1 / 2}
+.b2-mspa{grid-row:1 / 3}
+.b2-ritmo{grid-row:2 / 3}
+.b2-chart-wrap{position:relative;height:calc(100% - 46px)}
+.mspa-row{display:flex;align-items:center;justify-content:space-between;padding:15px 0;border-bottom:1px solid var(--border)}
+.mspa-row:last-child{border-bottom:none}
+.mspa-l{display:flex;align-items:center;gap:14px}
+.mspa-sem{width:12px;height:12px;border-radius:50%;background:var(--green)}
+.mspa-sem.warn{background:var(--amber);box-shadow:0 0 10px 1px rgba(245,158,11,.5)}
+.mspa-sem.danger{background:var(--red);box-shadow:0 0 10px 1px rgba(239,68,68,.6)}
+.mspa-lbl{font-size:22px;color:var(--text-2)}
+.mspa-val{font-size:26px;font-weight:700;text-align:right}
+.mspa-val .sub{font-size:15px;color:var(--text-3);font-weight:400;margin-top:2px}
+.mspa-row.venta{border-top:2px solid var(--border);margin-top:4px;padding-top:18px}
+.mspa-row.venta .mspa-lbl{color:var(--text);font-weight:700;font-size:24px}
+.mspa-row.venta .mspa-val{color:var(--green);font-size:38px}
+.b2-ritmo-row{display:flex;flex-direction:column;gap:16px}
+.b2-ritmo-head{display:flex;align-items:center;justify-content:space-between;gap:24px}
+.b2-ritmo-fig{font-size:46px;font-weight:800;color:var(--blue);white-space:nowrap}
+.b2-ritmo-fig small{font-size:22px;color:var(--text-3);font-weight:600}
+.b2-ritmo-bar{width:100%;height:26px;background:var(--border);border-radius:13px;position:relative;overflow:hidden}
+.b2-ritmo-fill{height:100%;border-radius:11px;background:var(--blue)}
+.b2-ritmo-pace{position:absolute;top:0;bottom:0;width:3px;background:var(--amber)}
+.b2-ritmo-tag{font-size:19px;font-weight:700;white-space:nowrap}
+.b2-ritmo-tag.ok{color:var(--green)}.b2-ritmo-tag.warn{color:var(--amber)}
+.kt-rot{position:absolute;bottom:0;left:0;right:0;height:6px;display:flex;gap:4px;padding:0 44px 0;align-items:flex-end}
+.kt-rot-track{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+.kt-rot-fill{height:100%;width:0;background:var(--wurth-red);border-radius:2px}
+.kt-dots{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:11px}
+.kt-pg{width:13px;height:13px;border-radius:50%;background:var(--border-2);cursor:pointer;transition:background .25s,transform .25s}
+.kt-pg:hover{transform:scale(1.25)}
+.kt-pg.on{background:var(--wurth-red)}
+/* ── Empty state del strip EN VIVO ── */
+.b1-live-empty{flex:1;font-size:24px;color:var(--text-3);font-weight:500;padding-left:8px}
+/* ── Barra de CONTROLES (fuera del stage, no escala) ── */
+.kt-ctrl{position:fixed;bottom:26px;right:30px;z-index:1000;display:flex;align-items:center;gap:10px;
+  background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border:1px solid var(--border-2);
+  border-radius:14px;padding:9px 12px;box-shadow:0 10px 30px rgba(15,23,42,.18);
+  opacity:0;pointer-events:none;transition:opacity .3s}
+.kt-ctrl.show{opacity:1;pointer-events:auto}
+.kt-ctrl button{width:42px;height:42px;border:none;border-radius:10px;background:transparent;color:var(--text-2);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s}
+.kt-ctrl button:hover{background:var(--bg);color:var(--text)}
+.kt-ctrl button.exit:hover{background:#fee2e2;color:var(--wurth-red)}
+.kt-ctrl button svg{width:22px;height:22px;stroke-width:1.9}
+.kt-ctrl .sep{width:1px;height:26px;background:var(--border-2);margin:0 2px}
+.kt-ctrl .pgnum{font-size:14px;font-weight:700;color:var(--text-3);padding:0 8px;min-width:46px;text-align:center;font-variant-numeric:tabular-nums}
+.kt-hint{position:fixed;bottom:80px;right:30px;z-index:1000;font-size:13px;color:var(--text-3);
+  background:rgba(255,255,255,.92);border:1px solid var(--border);border-radius:8px;padding:6px 11px;
+  opacity:0;pointer-events:none;transition:opacity .3s}
+.kt-hint.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="viewport"><div class="stage" id="stage"></div></div>
+<script>
+function fmtN(n,d=0){return Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:d,maximumFractionDigits:d});}
+function fmtK(n){
+  n=Number(n)||0;const neg=n<0;n=Math.abs(n);let s;
+  if(n>=1e9)s='$'+(n/1e9).toFixed(1).replace('.',',')+'B';
+  else if(n>=1e6)s='$'+(n/1e6).toFixed(1).replace('.',',')+'M';
+  else if(n>=1e3)s='$'+Math.round(n/1e3)+'K';
+  else s='$'+fmtN(n,0);
+  return (neg?'−':'')+s;
+}
+const ICONS={
+  target:'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+  trendingDown:'<path d="M16 17h6v-6"/><path d="m22 17-8.5-8.5-5 5L2 7"/>',
+  trendingUp:'<path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/>',
+  arrowDown:'<path d="M12 5v14M5 12l7 7 7-7"/>',
+  arrowUp:'<path d="M12 19V5M5 12l7-7 7 7"/>',
+  layers:'<path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65M22 12.65l-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
+  activity:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+};
+function ico(name,w=18){return `<svg class="ico" style="width:${w}px;height:${w}px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||''}</svg>`;}
+
+/* ── estado (se llena con /api/data) ── */
+const PLAN={fact_acum:0,plan_total:0,pct:0,pace:0,proy:0,proy_pct:0,dia_habil:0,dias_tot:0,dias_rest:0};
+const VENTA={val:0,ords:0};
+const PEDIDOS={v:0,delta:0};
+const FLOW={informado:{v:0,val:0},retenido:{v:0,val:0,pct:0},anulado:{v:0,val:0,pct:0},facturado:{v:0,val:0}};
+const HOY={pedidos:0,monto:0,ticket:0,ped_vend:0,lineas:0};
+const RITMO={curr:0,last:0,pct:0,pace:0,sobre:0,onTrack:true};
+let MSPA=[];
+let TREND=[];
+const DATOS_AL={mspa:'—',reactor:'—',mspaOk:true,reactorOk:true};
+const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const MSPA_DEF=[
+  {k:'backorders',l:'Backorders (Plazos viejos)'},
+  {k:'bloqueados',l:'Bloqueados por Límite Crédito'},
+  {k:'neg_status',l:'Bloqueados (Status < -1)'},
+  {k:'futuros',l:'Pedidos Abiertos (Futuros)'},
+  {k:'produccion',l:'Producción Abierta'},
+  {k:'remitos',l:'Remitos / Facturas Abiertas'},
+  {k:'venta',l:'Venta del Día',venta:true},
+];
+
+function mapData(d){
+  const r=d.reactor||{}, m=d.mspa||{}, ts=d.today_summary||{};
+  const pv=m.plan_ventas||{}, meta=r.meta||{}, bs=r.by_status||{};
+  // PLAN
+  PLAN.fact_acum=pv.fact_acum||0; PLAN.plan_total=pv.plan_total||0; PLAN.pct=pv.pct_plan||0;
+  PLAN.dia_habil=meta.dias_elapsed||0; PLAN.dias_tot=meta.curr_wd||0;
+  PLAN.dias_rest=Math.max(0,(meta.curr_wd||0)-(meta.dias_elapsed||0));
+  PLAN.pace=meta.curr_wd>0?(meta.dias_elapsed/meta.curr_wd*100):0;
+  PLAN.proy=PLAN.dia_habil>0?PLAN.fact_acum/PLAN.dia_habil*PLAN.dias_tot:0;
+  PLAN.proy_pct=PLAN.plan_total>0?PLAN.proy/PLAN.plan_total*100:0;
+  // VENTA
+  const v=m.venta||{}; VENTA.val=v.val||0; VENTA.ords=v.ords||0;
+  // PEDIDOS
+  PEDIDOS.v=r.pedidos||0;
+  const comp=r.comp||null;
+  PEDIDOS.delta=comp&&comp.pedidos?((r.pedidos-comp.pedidos)/comp.pedidos*100):0;
+  // FLOW
+  const total=r.pedidos||0;
+  const fcnt=(bs[13]?.cnt||0)+(bs[18]?.cnt||0), fval=(bs[13]?.val||0)+(bs[18]?.val||0);
+  FLOW.informado={v:total,val:r.valor||0};
+  FLOW.retenido={v:bs[15]?.cnt||0,val:bs[15]?.val||0,pct:total?(bs[15]?.cnt||0)/total*100:0};
+  FLOW.anulado={v:bs[14]?.cnt||0,val:bs[14]?.val||0,pct:total?(bs[14]?.cnt||0)/total*100:0};
+  FLOW.facturado={v:fcnt,val:fval};
+  // HOY (parcial en vivo)
+  HOY.pedidos=ts.pedidos||0; HOY.monto=ts.valor||0; HOY.ticket=ts.ticket||0;
+  HOY.ped_vend=ts.avg_ped_vend||0; HOY.lineas=ts.avg_lineas||0;
+  // MSPA
+  MSPA=MSPA_DEF.map(row=>{
+    const x=m[row.k]||{ords:0,pos:0,val:0};
+    return {k:row.l,val:x.val||0,ords:x.ords||0,pos:x.pos||0,venta:!!row.venta,sev:(!row.venta&&(x.val||0)>0)?'warn':'ok'};
+  });
+  // RITMO
+  RITMO.curr=meta.curr_pedidos||0; RITMO.last=meta.last_pedidos||0;
+  RITMO.pct=RITMO.last>0?Math.min(RITMO.curr/RITMO.last*100,120):0;
+  RITMO.pace=meta.curr_wd>0?(meta.dias_elapsed/meta.curr_wd*100):0;
+  const paceTarget=RITMO.last>0?(Math.min(RITMO.pace,100)/100)*RITMO.last:0;
+  RITMO.onTrack=RITMO.curr>=paceTarget;
+  RITMO.sobre=Math.round(RITMO.curr-paceTarget);
+  // TREND (solo meses con datos)
+  TREND=(r.trend||[]).map(t=>{
+    const[y,mo]=String(t.mes).split('-');
+    return [MESES[+mo-1]+' '+String(y).slice(2), t.pedidos||0, (t.valor||0)/1e6, t.dias_hab||1];
+  });
+  // datos al / conexión
+  DATOS_AL.mspaOk=!d.mspa_error; DATOS_AL.reactorOk=!d.reactor_error;
+  DATOS_AL.mspa=d.timestamp||'—'; DATOS_AL.reactor=d.timestamp||'—';
+}
+
+function topBar(){
+  return `<div class="kt-top">
+    <div class="kt-brand">
+      @@LOGO@@
+      <div class="kt-divider"></div>
+      <div><div class="kt-title">Operaciones · Tiempo Real</div>
+        <div class="kt-sub">Reactor · MSPA · Sala de control</div></div>
+    </div>
+    <div class="kt-right">
+      <div class="kt-conn">
+        <span class="kt-conn-row"><span class="kt-dot ${DATOS_AL.mspaOk?'ok':'down'}"></span>MSPA ${DATOS_AL.mspaOk?'OK':'sin datos'} · <b>${DATOS_AL.mspa}</b></span>
+        <span class="kt-conn-row"><span class="kt-dot ${DATOS_AL.reactorOk?'ok':'down'}"></span>Reactor ${DATOS_AL.reactorOk?'OK':'sin datos'}</span>
+      </div>
+      <div class="kt-clock"><div class="kt-time num" id="kt-time">--:--:--</div>
+        <div class="kt-date" id="kt-date"></div></div>
+    </div>
+  </div>`;
+}
+function alertRibbon(){
+  const onTrack=PLAN.pct>=PLAN.pace;
+  if(!PLAN.plan_total)return '';
+  if(onTrack){
+    return `<div class="kt-alert ok">${ico('trendingUp',30)}<span>Plan de ventas <b>en ritmo</b> — ${fmtN(PLAN.pct,1)}% acumulado vs ${fmtN(PLAN.pace,1)}% esperado a hoy</span></div>`;
+  }
+  const gap=fmtN(PLAN.pace-PLAN.pct,1);
+  const sev=(PLAN.pace-PLAN.pct)>10?'danger':'warn';
+  return `<div class="kt-alert ${sev}">${ico('trendingDown',30)}<span>Plan de ventas <b>${gap} pts por debajo del ritmo</b> esperado — ${fmtN(PLAN.pct,1)}% acumulado vs ${fmtN(PLAN.pace,1)}% esperado a hoy</span></div>`;
+}
+function board1(){
+  const onTrack=PLAN.pct>=PLAN.pace;
+  const fill=onTrack?'var(--green)':'var(--amber)';
+  const flowCell=(tick,label,val,sub)=>`<div class="b1-flow-cell"><div class="b1-flow-top"><span class="b1-tick ${tick}"></span><span class="b1-flow-label">${label}</span></div><div class="b1-flow-val num">${val}</div><div class="b1-flow-sub num">${sub}</div></div>`;
+  const liveItem=(l,v)=>`<div class="b1-live-item"><div class="l">${l}</div><div class="v num">${v}</div></div>`;
+  const up=PEDIDOS.delta>=0;
+  return `<div class="kt-board top1 active">
+    <div class="b1-grid">
+      <div class="b1-plan panel">
+        <div class="b1-plan-l">
+          <div class="b1-plan-eyebrow">${ico('target')} Plan de ventas · Facturación acumulada del mes</div>
+          <div class="b1-figs"><span class="b1-curr num">${fmtK(PLAN.fact_acum)}</span><span class="b1-total num">/ ${fmtK(PLAN.plan_total)}</span></div>
+          <div class="b1-bar-line">
+            <span class="b1-pct num" style="color:${fill}">${fmtN(PLAN.pct,1)}%</span>
+            <div class="b1-bar-bg"><div class="b1-bar-fill" style="width:${Math.min(PLAN.pct,100)}%;background:${fill}"></div><div class="b1-bar-pace" style="left:${Math.min(PLAN.pace,100)}%"></div></div>
+          </div>
+          <div class="b1-plan-foot">
+            <span class="pf-item">📅 Día hábil <b class="num">${PLAN.dia_habil} de ${PLAN.dias_tot}</b></span>
+            <span class="pf-item">⏳ <b class="num">${PLAN.dias_rest}</b> días hábiles restantes</span>
+            <span class="pf-item">💰 Restante: <b class="num">${fmtK(PLAN.plan_total-PLAN.fact_acum)}</b></span>
+          </div>
+        </div>
+        <div class="b1-plan-r"></div>
+        <div class="b1-proy">
+          <div class="l">Proyección de cierre</div>
+          <div class="v num">${fmtK(PLAN.proy)}</div>
+          <div class="s num">${fmtN(PLAN.proy_pct,1)}% del plan</div>
+          <div class="b1-state ${onTrack?'ok':'warn'}">${ico(onTrack?'trendingUp':'trendingDown',19)} ${onTrack?'En ritmo':'Por debajo del ritmo'}</div>
+        </div>
+      </div>
+      <div class="b1-stat panel"><div class="l">Venta del Día · MSPA</div><div class="v num">${fmtK(VENTA.val)}</div><div class="s num">${fmtN(VENTA.ords)} pedidos facturados</div></div>
+      <div class="b1-stat panel"><div class="l">Pedidos Informados</div><div class="v num">${fmtN(PEDIDOS.v)}</div>
+        <span class="b1-delta ${up?'up':'down'}">${ico(up?'arrowUp':'arrowDown',22)} ${fmtN(Math.abs(PEDIDOS.delta),1)}% <span style="color:var(--text-3);font-weight:400">vs. mismo día hábil mes anterior</span></span></div>
+      <div class="b1-flow panel">
+        ${flowCell('tk-blue','Informado',fmtK(FLOW.informado.val),fmtN(FLOW.informado.v)+' pedidos')}
+        ${flowCell('tk-amber','Retenido',fmtK(FLOW.retenido.val),fmtN(FLOW.retenido.v)+' ped · '+fmtN(FLOW.retenido.pct,1)+'%')}
+        ${flowCell('tk-red','Anulado',fmtK(FLOW.anulado.val),fmtN(FLOW.anulado.v)+' ped · '+fmtN(FLOW.anulado.pct,1)+'%')}
+        ${flowCell('tk-green','Facturado',fmtK(FLOW.facturado.val),fmtN(FLOW.facturado.v)+' pedidos')}
+      </div>
+      <div class="b1-live">
+        <div class="b1-live-head">
+          <span class="b1-live-badge"><span class="pdot"></span>En vivo · parcial</span>
+          <span class="b1-live-ttl">Así viene hoy · carga en curso</span>
+        </div>
+        ${HOY.pedidos===0
+          ? `<div class="b1-live-empty">Aún sin movimiento hoy · primeros pedidos en breve</div>`
+          : `<div class="b1-live-items">
+          ${liveItem('Pedidos',fmtN(HOY.pedidos))}
+          ${liveItem('Monto informado',fmtK(HOY.monto))}
+          ${liveItem('Ticket promedio',fmtK(HOY.ticket))}
+          ${liveItem('Ped / Vendedor',fmtN(HOY.ped_vend,1))}
+          ${liveItem('Líneas / Pedido',fmtN(HOY.lineas,1))}
+        </div>`}
+      </div>
+    </div>
+  </div>`;
+}
+function board2(){
+  const mspaRow=(r)=>{
+    const sem=r.venta?'mspa-sem':'mspa-sem'+(r.sev!=='ok'?' '+r.sev:'');
+    return `<div class="mspa-row${r.venta?' venta':''}"><span class="mspa-l"><span class="${sem}"></span><span class="mspa-lbl">${r.k}</span></span><span class="mspa-val num">${fmtK(r.val)}<div class="sub num">${fmtN(r.ords)} ord · ${fmtN(r.pos)} pos</div></span></div>`;
+  };
+  return `<div class="kt-board top1 active">
+    <div class="b2-grid">
+      <div class="panel b2-chart">
+        <div class="kt-eyebrow">${ico('trendingUp')} Tendencia mensual · pedidos &amp; valor por día hábil</div>
+        <div class="b2-chart-wrap"><canvas id="kt-chart"></canvas></div>
+      </div>
+      <div class="panel b2-mspa">
+        <div class="kt-eyebrow">${ico('layers')} MSPA · Estado actual</div>
+        ${MSPA.map(mspaRow).join('')}
+      </div>
+      <div class="panel b2-ritmo">
+        <div class="kt-eyebrow">${ico('activity')} Ritmo mensual · pedidos vs. mes anterior</div>
+        <div class="b2-ritmo-row">
+          <div class="b2-ritmo-head">
+            <span class="b2-ritmo-fig num">${fmtN(RITMO.curr)} <small>/ ${fmtN(RITMO.last)} pedidos</small></span>
+            <span class="b2-ritmo-tag ${RITMO.onTrack?'ok':'warn'} num">${RITMO.onTrack?'+'+fmtN(RITMO.sobre)+' sobre ritmo':fmtN(Math.abs(RITMO.sobre))+' bajo ritmo'}</span>
+          </div>
+          <div class="b2-ritmo-bar"><div class="b2-ritmo-fill" style="width:${Math.min(RITMO.pct,100)}%"></div><div class="b2-ritmo-pace" style="left:${Math.min(RITMO.pace,100)}%"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+let chartInst=null, chartJsLoading=false;
+function ensureChartJs(cb){
+  if(window.Chart){cb();return;}
+  if(chartJsLoading)return;
+  chartJsLoading=true;
+  const s=document.createElement('script');
+  s.src='/static/chart.min.js';
+  s.onload=()=>{chartJsLoading=false;cb();};
+  s.onerror=()=>{chartJsLoading=false;const w=document.getElementById('kt-chart');if(w&&w.closest('.b2-chart-wrap'))w.closest('.b2-chart-wrap').innerHTML='<div style="display:flex;height:100%;align-items:center;justify-content:center;color:var(--text-3);font-size:18px">No se pudo cargar el gráfico</div>';};
+  document.head.appendChild(s);
+}
+function drawChart(){
+  const cv=document.getElementById('kt-chart');
+  if(!cv||!TREND.length)return;
+  if(!window.Chart){ensureChartJs(drawChart);return;}
+  if(chartInst){chartInst.destroy();chartInst=null;}
+  // Plugin inline: etiquetas sobre las barras (ped) y sobre los puntos (M$)
+  const labelPlugin={
+    id:'kiosk-labels',
+    afterDatasetsDraw(chart){
+      const ctx=chart.ctx;
+      chart.data.datasets.forEach((ds,di)=>{
+        const meta=chart.getDatasetMeta(di);
+        if(meta.hidden)return;
+        meta.data.forEach((el,i)=>{
+          const v=ds.data[i];
+          if(v==null)return;
+          const raw=TREND[i];
+          let lbl;
+          if(ds.type==='bar'||ds.yAxisID==='y1'){
+            // Promedio pedidos / día hábil sobre la barra
+            lbl=Math.round(raw[1]/raw[3]).toLocaleString('es-AR');
+          } else {
+            // M$ / día hábil sobre el punto — sin decimales ni "M" (se entiende por contexto)
+            lbl='$'+Math.round(raw[2]/raw[3]);
+          }
+          ctx.save();
+          ctx.font=ds.type==='bar'?'600 13px system-ui':'700 12px system-ui';
+          ctx.fillStyle=ds.type==='bar'?'#64748b':'#cc0000';
+          ctx.textAlign='center';
+          ctx.textBaseline=ds.type==='bar'?'bottom':'bottom';
+          const x=el.x, y=ds.type==='bar'?el.y-3:el.y-8;
+          ctx.fillText(lbl,x,y);
+          ctx.restore();
+        });
+      });
+    }
+  };
+  chartInst=new Chart(cv.getContext('2d'),{
+    plugins:[labelPlugin],
+    data:{labels:TREND.map(t=>t[0]),datasets:[
+      {type:'bar',label:'Pedidos / día',data:TREND.map(t=>+(t[1]/t[3]).toFixed(1)),backgroundColor:'rgba(203,213,225,.75)',borderColor:'#cbd5e1',borderWidth:1,yAxisID:'y1',order:2},
+      {type:'line',label:'Venta M$ / día',data:TREND.map(t=>+(t[2]/t[3]).toFixed(2)),borderColor:'#cc0000',backgroundColor:'rgba(204,0,0,.06)',borderWidth:3,pointRadius:4,pointBackgroundColor:'#cc0000',tension:.35,yAxisID:'y2',order:1,fill:true},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,
+      layout:{padding:{top:28}},
+      plugins:{legend:{labels:{color:'#475569',font:{size:16},boxWidth:16,padding:22,usePointStyle:true}},
+        tooltip:{callbacks:{label:(c)=>c.dataset.label+': '+Number(c.parsed.y).toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1})}}},
+      scales:{x:{ticks:{color:'#64748b',font:{size:14}},grid:{display:false}},
+        y1:{position:'left',ticks:{color:'#64748b',font:{size:13}},grid:{color:'#eef2f7'}},
+        y2:{position:'right',ticks:{color:'#cc0000',font:{size:13},callback:v=>v.toFixed(1).replace('.',',')},grid:{drawOnChartArea:false}}}}
+  });
+}
+function tickClock(){
+  const now=new Date();
+  const t=document.getElementById('kt-time'),d=document.getElementById('kt-date');
+  if(t)t.textContent=now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  if(d)d.textContent=now.toLocaleDateString('es-AR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+}
+const ROTATE_MS=20000;
+const NBOARDS=2;
+let board=0;
+let paused=false;
+let rotStart=Date.now();
+const stage=document.getElementById('stage');
+function render(){
+  stage.innerHTML=topBar()+alertRibbon()+(board===0?board1():board2())+
+    `<div class="kt-rot"><div class="kt-rot-track"><div class="kt-rot-fill" id="kt-fill"></div></div></div>
+     <div class="kt-dots" id="kt-dots">${Array.from({length:NBOARDS},(_,i)=>
+        `<span class="kt-pg${board===i?' on':''}" data-go="${i}"></span>`).join('')}</div>`;
+  tickClock();
+  if(board===1)drawChart();
+}
+function fitStage(){
+  // Estira a todo el viewport (sin barras). En TV 16:9 la distorsion es imperceptible.
+  const sx=window.innerWidth/1920, sy=window.innerHeight/1080;
+  stage.style.transform='scale('+sx+','+sy+')';
+}
+function goTo(n){board=(n+NBOARDS)%NBOARDS;rotStart=Date.now();render();syncCtrl();}
+function next(){goTo(board+1);}
+function prev(){goTo(board-1);}
+function togglePause(){paused=!paused;rotStart=Date.now();syncCtrl();}
+function toggleFull(){
+  if(document.fullscreenElement)document.exitFullscreen();
+  else if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen();
+}
+let _exitingKiosk=false;
+function exitKiosk(){
+  _exitingKiosk=true;
+  if(document.fullscreenElement)document.exitFullscreen();
+  window.location.href='/';
+}
+// Cuando Chrome sale del fullscreen con Esc (lo intercepta antes que nuestro JS),
+// detectamos el cambio y navegamos al dashboard si no fue el botón salir.
 document.addEventListener('fullscreenchange',()=>{
-  if(!document.fullscreenElement&&document.body.classList.contains('kiosk'))kioskStop();
+  if(!document.fullscreenElement && !_exitingKiosk){
+    // Pequeño delay para que el Esc del overlay no dispare esto prematuramente
+    setTimeout(()=>{ if(!document.fullscreenElement) window.location.href='/'; }, 200);
+  }
 });
-if(new URLSearchParams(location.search).get('kiosk')==='1')setTimeout(kioskStart,400);
+async function refrescar(){
+  try{
+    const res=await fetch('/api/data',{cache:'no-store'});
+    const d=await res.json();
+    mapData(d);
+    render();
+  }catch(e){ DATOS_AL.mspaOk=false; DATOS_AL.reactorOk=false; render(); }
+}
+/* ── barra de controles (fuera del stage → no escala, siempre clickeable) ── */
+const CTRL_ICONS={
+  prev:'<path d="M15 18l-6-6 6-6"/>', next:'<path d="M9 18l6-6-6-6"/>',
+  pause:'<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>',
+  play:'<path d="M6 4l14 8-14 8V4z"/>',
+  full:'<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>',
+  exit:'<path d="M18 6 6 18M6 6l12 12"/>',
+};
+function ctrlBtn(action,name,title,cls){
+  return `<button class="${cls||''}" data-act="${action}" title="${title}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${CTRL_ICONS[name]}</svg></button>`;
+}
+const ctrl=document.createElement('div');
+ctrl.className='kt-ctrl'; ctrl.id='kt-ctrl';
+document.body.appendChild(ctrl);
+function syncCtrl(){
+  ctrl.innerHTML=
+    ctrlBtn('prev','prev','Anterior (←)')+
+    ctrlBtn('pause',paused?'play':'pause',paused?'Reanudar (espacio)':'Pausar (espacio)')+
+    ctrlBtn('next','next','Siguiente (→)')+
+    `<span class="pgnum">${board+1} / ${NBOARDS}</span>`+
+    `<span class="sep"></span>`+
+    ctrlBtn('full','full','Pantalla completa (F)')+
+    ctrlBtn('exit','exit','Salir del modo kiosk (Esc)','exit');
+}
+ctrl.addEventListener('click',(e)=>{
+  const b=e.target.closest('button');if(!b)return;
+  ({prev,next,pause:togglePause,full:toggleFull,exit:exitKiosk})[b.dataset.act]?.();
+});
+stage.addEventListener('click',(e)=>{
+  const d=e.target.closest('[data-go]');if(d)goTo(+d.dataset.go);
+});
+/* mostrar controles al mover el mouse, ocultar tras 3s */
+let hideT;
+const hint=document.createElement('div');
+hint.className='kt-hint'; hint.textContent='← → cambiar · espacio pausar · F pantalla · Esc salir';
+document.body.appendChild(hint);
+function poke(){
+  ctrl.classList.add('show');hint.classList.add('show');
+  clearTimeout(hideT);
+  hideT=setTimeout(()=>{ctrl.classList.remove('show');hint.classList.remove('show');},3000);
+}
+window.addEventListener('mousemove',poke);
+window.addEventListener('touchstart',poke);
+document.addEventListener('keydown',(e)=>{
+  if(e.key==='ArrowRight')next();
+  else if(e.key==='ArrowLeft')prev();
+  else if(e.key===' '){e.preventDefault();togglePause();}
+  else if(e.key==='f'||e.key==='F')toggleFull();
+  else if(e.key==='Escape')exitKiosk();
+  poke();
+});
+fitStage();
+window.addEventListener('resize',fitStage);
+// Fullscreen: intento silencioso primero; si Chrome lo bloquea, muestra overlay bloqueante
+(function(){
+  function showOverlay(){
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(3px)';
+    ov.innerHTML='<div style="background:#fff;border-radius:16px;padding:32px 48px;text-align:center;font-family:system-ui,sans-serif"><div style="font-size:22px;font-weight:700;color:#0f172a;margin-bottom:8px">Click para entrar en pantalla completa</div><div style="font-size:14px;color:#64748b">o presioná F en cualquier momento</div></div>';
+    function enterFs(){ov.remove();if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{});fitStage();}
+    ov.addEventListener('click',enterFs);
+    document.addEventListener('keydown',function h(e){if(e.key==='f'||e.key==='F'||e.key==='Enter'){document.removeEventListener('keydown',h);enterFs();}},true);
+    document.body.appendChild(ov);
+  }
+  if(document.documentElement.requestFullscreen){
+    document.documentElement.requestFullscreen().then(()=>fitStage()).catch(()=>showOverlay());
+  } else { showOverlay(); }
+})();
+render();
+syncCtrl();
+refrescar();
+setInterval(tickClock,1000);
+setInterval(refrescar,60000);
+setInterval(()=>{
+  const fill=document.getElementById('kt-fill');
+  const pct=paused?0:Math.min((Date.now()-rotStart)/ROTATE_MS*100,100);
+  if(fill)fill.style.width=pct+'%';
+},100);
+setInterval(()=>{
+  if(paused){rotStart=Date.now();return;}
+  if(Date.now()-rotStart>=ROTATE_MS)next();
+},500);
 </script>
 </body>
 </html>
@@ -2043,10 +2593,29 @@ class Handler(BaseHTTPRequestHandler):
         qs     = parse_qs(parsed.query)
         if parsed.path in ("/", "/index.html"):
             self.send_html(HTML_PAGE)
+        elif parsed.path in ("/kiosk", "/kiosk.html"):
+            self.send_html(KIOSK_PAGE)
         elif parsed.path == "/api/data":
             override = qs.get("date", [None])[0]
             self.send_json(get_cached_data(override_date=override))
+        elif parsed.path == "/static/chart.min.js":
+            self.send_static("chart.min.js", "application/javascript; charset=utf-8")
         else: self.send_response(404); self.end_headers()
+
+    def send_static(self, name, ctype):
+        import os
+        base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+        path = os.path.normpath(os.path.join(base, os.path.basename(name)))
+        if not path.startswith(base) or not os.path.isfile(path):
+            self.send_response(404); self.end_headers(); return
+        with open(path, "rb") as f:
+            body = f.read()
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", len(body))
+        self.send_header("Cache-Control", "public, max-age=86400")
+        self.end_headers()
+        self.wfile.write(body)
 
 
 def main():
