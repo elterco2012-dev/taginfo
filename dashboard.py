@@ -1956,11 +1956,13 @@ KIOSK_PAGE = r"""<!DOCTYPE html>
 *{margin:0;padding:0;box-sizing:border-box}
 .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
 html,body{height:100%;background:var(--bg);overflow:hidden;font-family:var(--font-sans)}
-.viewport{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center}
-.stage{width:1920px;height:1080px;background:var(--bg);position:relative;transform-origin:center center;overflow:hidden;color:var(--text)}
+.viewport{position:fixed;inset:0;background:var(--bg);overflow:hidden}
+.stage{width:1920px;height:1080px;background:var(--bg);position:absolute;left:0;top:0;transform-origin:top left;overflow:hidden;color:var(--text)}
 .kt-top{height:96px;display:flex;align-items:center;justify-content:space-between;padding:0 44px;border-bottom:3px solid var(--wurth-red);background:var(--panel)}
 .kt-brand{display:flex;align-items:center;gap:22px}
 .kt-logo{font-size:34px;font-weight:800;color:var(--wurth-red);letter-spacing:-1px}
+.kt-brand img{height:54px!important;width:auto!important}
+.kt-brand .logo-text-fallback{font-size:34px;font-weight:800;color:var(--wurth-red);letter-spacing:-1px}
 .kt-divider{width:2px;height:44px;background:var(--border-2)}
 .kt-title{font-size:30px;font-weight:700;letter-spacing:-.3px;line-height:1}
 .kt-sub{font-size:16px;color:var(--text-3);margin-top:5px;letter-spacing:.4px}
@@ -1978,9 +1980,9 @@ html,body{height:100%;background:var(--bg);overflow:hidden;font-family:var(--fon
 .kt-alert{height:70px;display:flex;align-items:center;gap:18px;padding:0 44px;font-size:25px;font-weight:600}
 .kt-alert .ico{width:30px;height:30px;flex-shrink:0}
 .kt-alert b{font-weight:800}
-.kt-alert.warn{background:var(--amber-bg);color:#fcd34d;border-bottom:1px solid #4a3a0e}
-.kt-alert.danger{background:var(--red-bg);color:#fca5a5;border-bottom:1px solid #4a1418}
-.kt-alert.ok{background:var(--green-bg);color:#86efac;border-bottom:1px solid #143a26}
+.kt-alert.warn{background:#fef3c7;color:#92400e;border-bottom:2px solid #f59e0b}
+.kt-alert.danger{background:#fee2e2;color:#991b1b;border-bottom:2px solid #dc2626}
+.kt-alert.ok{background:#d1fae5;color:#065f46;border-bottom:2px solid #059669}
 .kt-board{position:absolute;left:0;right:0;bottom:14px;padding:26px 44px 0;display:none}
 .kt-board.active{display:block}
 .kt-board.top1{top:166px}
@@ -2009,8 +2011,8 @@ html,body{height:100%;background:var(--bg);overflow:hidden;font-family:var(--fon
 .b1-proy .v{font-size:58px;font-weight:800;line-height:1;color:var(--wurth-red)}
 .b1-proy .s{font-size:24px;color:var(--text-2);margin-top:8px;font-weight:600}
 .b1-state{display:inline-flex;align-items:center;gap:8px;margin-top:16px;font-size:19px;font-weight:700;padding:7px 16px;border-radius:10px}
-.b1-state.warn{background:var(--amber-bg);color:#fcd34d}
-.b1-state.ok{background:var(--green-bg);color:#86efac}
+.b1-state.warn{background:#fef3c7;color:#92400e;border:1px solid #f59e0b}
+.b1-state.ok{background:#d1fae5;color:#065f46;border:1px solid #059669}
 .b1-stat{display:flex;flex-direction:column;justify-content:center}
 .b1-stat .l{font-size:18px;text-transform:uppercase;letter-spacing:1px;color:var(--text-3);margin-bottom:12px}
 .b1-stat .v{font-size:72px;font-weight:700;line-height:1}
@@ -2185,7 +2187,7 @@ function mapData(d){
 function topBar(){
   return `<div class="kt-top">
     <div class="kt-brand">
-      <span class="kt-logo">WÜRTH</span>
+      @@LOGO@@
       <div class="kt-divider"></div>
       <div><div class="kt-title">Operaciones · Tiempo Real</div>
         <div class="kt-sub">Reactor · MSPA · Sala de control</div></div>
@@ -2343,8 +2345,9 @@ function render(){
   if(board===1)drawChart();
 }
 function fitStage(){
-  const s=Math.min(window.innerWidth/1920,window.innerHeight/1080);
-  stage.style.transform='scale('+s+')';
+  // Estira a todo el viewport (sin barras). En TV 16:9 la distorsion es imperceptible.
+  const sx=window.innerWidth/1920, sy=window.innerHeight/1080;
+  stage.style.transform='scale('+sx+','+sy+')';
 }
 function goTo(n){board=(n+NBOARDS)%NBOARDS;rotStart=Date.now();render();syncCtrl();}
 function next(){goTo(board+1);}
@@ -2436,7 +2439,7 @@ setInterval(()=>{
 </script>
 </body>
 </html>
-"""
+""".replace("@@LOGO@@", LOGO_HTML)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
