@@ -923,7 +923,7 @@ body.dark .state-neutral{background:#334155;color:var(--text-3)}
 .meta-bar-pace{position:absolute;top:0;bottom:0;width:2px;background:var(--amber)}
 .meta-bar-labels{font-size:10px;color:var(--text-3);margin-top:3px;font-variant-numeric:tabular-nums}
 .meta-tags{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.meta-tag{font-size:10px;padding:2px 8px;border-radius:12px;font-weight:600}
+.meta-tag{font-size:13px;padding:3px 10px;border-radius:12px;font-weight:700}
 .tag-ok{background:var(--pos-bg);color:var(--pos-fg)}.tag-warn{background:var(--amber-bg);color:var(--amber)}
 .tag-danger{background:var(--neg-bg);color:var(--neg-fg)}.tag-neutral{background:#f1f5f9;color:var(--text-3)}
 body.dark .tag-neutral{background:#334155}
@@ -1859,7 +1859,7 @@ function render(data){
     }
     mhtml+=`<div class="mspa-row ${row.cls}">
       <span class="mspa-l">${sem}<span class="mspa-lbl">${row.l}</span></span>
-      <span class="mspa-val">${fmtK(d.val)}<span class="mspa-sub-txt">${fmtN(d.ords)} ord · ${fmtN(d.pos)} pos</span></span>
+      <span class="mspa-val">${fmtK(d.val)}<span class="mspa-sub-txt">${fmtN(d.ords)} ped · ${fmtN(d.pos)} lin</span></span>
     </div>`;
   });
   document.getElementById('mspa-body').innerHTML=mhtml;
@@ -2345,7 +2345,7 @@ function board1(){
           : `<div class="b1-live-items">
           ${liveItem('Pedidos',fmtN(HOY.pedidos))}
           ${liveItem('Monto informado',fmtK(HOY.monto))}
-          ${liveItem('Ticket promedio',fmtK(HOY.ticket))}
+          ${liveItem('Pedido promedio',fmtK(HOY.ticket))}
           ${liveItem('Ped / Vendedor',fmtN(HOY.ped_vend,1))}
           ${liveItem('Líneas / Pedido',fmtN(HOY.lineas,1))}
         </div>`}
@@ -2356,7 +2356,7 @@ function board1(){
 function board2(){
   const mspaRow=(r)=>{
     const sem=r.venta?'mspa-sem':'mspa-sem'+(r.sev!=='ok'?' '+r.sev:'');
-    return `<div class="mspa-row${r.venta?' venta':''}"><span class="mspa-l"><span class="${sem}"></span><span class="mspa-lbl">${r.k}</span></span><span class="mspa-val num">${fmtK(r.val)}<div class="sub num">${fmtN(r.ords)} ord · ${fmtN(r.pos)} pos</div></span></div>`;
+    return `<div class="mspa-row${r.venta?' venta':''}"><span class="mspa-l"><span class="${sem}"></span><span class="mspa-lbl">${r.k}</span></span><span class="mspa-val num">${fmtK(r.val)}<div class="sub num">${fmtN(r.ords)} ped · ${fmtN(r.pos)} lin</div></span></div>`;
   };
   return `<div class="kt-board top1 active">
     <div class="b2-grid">
