@@ -16,7 +16,7 @@ FTP_ENABLED  = os.environ.get("FTP_ENABLED", "0") == "1"
 FTP_AUTH_USER = os.environ.get("FTP_AUTH_USER", "wurth")
 FTP_AUTH_PASS = os.environ.get("FTP_AUTH_PASS", "")
 
-# ── HTML del viewer móvil (PWA Fortune-500) ─────────────────────────────────
+# ── HTML del viewer móvil (PWA v2 — vista gerencial) ────────────────────────
 _VIEWER_HTML = r"""<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -31,70 +31,102 @@ _VIEWER_HTML = r"""<!DOCTYPE html>
 <title>Ventas Würth</title>
 <style>
 :root{
-  --red:#c8102e;--dark:#111;--card:#1a1a1a;--border:#2a2a2a;
-  --text:#f0f0f0;--muted:#888;--green:#22c55e;--amber:#f59e0b;
-  --blue:#3b82f6;--spark:#c8102e;
+  --red:#c8102e;--red-soft:#ff4d6d;
+  --bg:#0c0d10;--card:#16181d;--card2:#1b1e24;--line:#23262e;
+  --text:#f4f6fa;--text2:#aab2c0;--text3:#6c7480;
+  --green:#22c55e;--amber:#f5a623;--amber-bg:rgba(245,166,35,.12);--amber-border:rgba(245,166,35,.28);
+  --green-bg:rgba(34,197,94,.1);--green-border:rgba(34,197,94,.25);
+  --spark-color:#7c8593;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;background:#0d0d0d;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;overscroll-behavior:none}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Inter',sans-serif;overscroll-behavior:none;font-variant-numeric:tabular-nums}
 body{display:flex;flex-direction:column;max-width:430px;margin:0 auto;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
 
-/* Header */
-.hdr{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 8px;gap:8px}
+/* ── Header ── */
+.hdr{display:flex;align-items:flex-start;justify-content:space-between;padding:18px 20px 8px;gap:10px}
 .hdr-left{display:flex;flex-direction:column;gap:2px}
-.greeting{font-size:13px;color:var(--muted);font-weight:400}
-.hdr-title{font-size:20px;font-weight:700;letter-spacing:-.3px}
-.logo{width:36px;height:36px;background:var(--red);border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#fff;letter-spacing:-.5px;flex-shrink:0}
+.greeting{font-size:14px;color:var(--text3);font-weight:400}
+.hdr-title{font-size:22px;font-weight:800;letter-spacing:-.4px;color:var(--text)}
+.logo{width:44px;height:44px;background:var(--red);border-radius:11px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;font-style:italic;color:#fff;flex-shrink:0;box-shadow:0 4px 14px rgba(200,16,46,.35)}
 
-/* Refresh btn */
-.refresh-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:20px;padding:6px 14px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .2s}
+/* ── Refresh btn ── */
+.refresh-btn{background:none;border:1px solid var(--line);color:var(--text3);border-radius:20px;padding:7px 14px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .2s}
 .refresh-btn:active{transform:scale(.96)}
 .refresh-btn.spinning svg{animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* Timestamp */
-.ts-bar{padding:2px 20px 10px;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:8px}
-.ts-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0}
-.ts-dot.stale{background:var(--amber)}
-.ts-dot.old{background:#666}
+/* ── Timestamp ── */
+.ts-bar{padding:2px 20px 12px;font-size:11px;color:var(--text3);display:flex;align-items:center;gap:7px}
+.ts-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0;box-shadow:0 0 7px rgba(34,197,94,.5)}
+.ts-dot.stale{background:var(--amber);box-shadow:0 0 7px rgba(245,166,35,.4)}
+.ts-dot.old{background:#555;box-shadow:none}
 
-/* Quota hero */
-.quota-hero{margin:4px 16px 12px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px 18px}
-.quota-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
-.quota-label{font-size:12px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.5px}
-.quota-pct{font-size:36px;font-weight:800;letter-spacing:-1px;line-height:1}
-.quota-pct span{font-size:16px;font-weight:500;color:var(--muted)}
-.quota-sub{font-size:12px;color:var(--muted);margin-top:2px}
-.quota-bar-wrap{height:8px;background:#222;border-radius:4px;overflow:hidden}
-.quota-bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#c8102e,#ff4d6d);transition:width 1.2s cubic-bezier(.4,0,.2,1)}
-.quota-bar-fill.done{background:linear-gradient(90deg,#16a34a,#22c55e)}
+/* ── Alert banner ── */
+.alert-bar{margin:0 16px 12px;display:flex;align-items:flex-start;gap:10px;border-radius:14px;padding:12px 14px;border:1px solid}
+.alert-bar.warn{background:var(--amber-bg);border-color:var(--amber-border)}
+.alert-bar.ok{background:var(--green-bg);border-color:var(--green-border)}
+.alert-bar svg{width:18px;height:18px;flex-shrink:0;margin-top:1px}
+.alert-bar.warn svg{color:var(--amber)}
+.alert-bar.ok svg{color:var(--green)}
+.alert-txt{font-size:13px;line-height:1.4}
+.alert-bar.warn .alert-txt{color:#f5c97a}
+.alert-bar.warn .alert-txt b{color:var(--amber);font-weight:700}
+.alert-bar.ok .alert-txt{color:#86efac}
+.alert-bar.ok .alert-txt b{color:var(--green);font-weight:700}
 
-/* Sparkline */
-.spark-row{display:flex;gap:10px;margin:4px 16px 12px}
-.spark-card{flex:1;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;min-width:0}
-.spark-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
-.spark-val{font-size:19px;font-weight:700;letter-spacing:-.4px;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.spark-svg{width:100%;height:32px;display:block}
+/* ── Hero plan ── */
+.hero{margin:0 16px 12px;background:linear-gradient(155deg,#1c1f26,#141519);border:1px solid var(--line);border-radius:20px;padding:20px}
+.hero-lbl{font-size:11px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;color:var(--text3);margin-bottom:12px}
+.hero-figs{display:flex;align-items:baseline;gap:10px;margin-bottom:16px}
+.hero-curr{font-size:42px;font-weight:800;color:var(--text);line-height:.95;letter-spacing:-1.5px}
+.hero-total{font-size:18px;color:var(--text3);font-weight:500}
+.hero-bar-row{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.hero-pct{font-size:17px;font-weight:800;color:var(--amber);min-width:52px}
+.hero-pct.ok-color{color:var(--green)}
+.bar-bg{flex:1;height:12px;background:#0a0b0e;border-radius:6px;position:relative;overflow:visible;border:1px solid #1e2128}
+.bar-fill{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--red),var(--red-soft));transition:width 1.2s cubic-bezier(.4,0,.2,1)}
+.bar-fill.done{background:linear-gradient(90deg,#16a34a,var(--green))}
+.bar-pace{position:absolute;top:-4px;bottom:-4px;width:2px;background:rgba(255,255,255,.5);border-radius:2px}
+.hero-sep{border:none;border-top:1px solid var(--line);margin:16px 0}
+.hero-proy{display:flex;align-items:flex-start;justify-content:space-between}
+.proy-l{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
+.proy-s{font-size:11px;color:var(--text3);margin-top:4px}
+.proy-v{font-size:24px;font-weight:800;color:var(--red-soft);letter-spacing:-.5px}
+.proy-pct{font-size:12px;color:var(--text3);text-align:right;margin-top:2px}
 
-/* KPI grid */
-.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px 10px}
-.kpi{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px}
-.kpi-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
-.kpi-val{font-size:22px;font-weight:700;letter-spacing:-.5px;line-height:1.1}
-.kpi-val.mono{font-variant-numeric:tabular-nums}
-.kpi-sub{font-size:11px;color:var(--muted);margin-top:4px}
+/* ── Live 2-col grid ── */
+.live-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 16px 12px}
+.live-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px 16px}
+.lc-badge{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:800;letter-spacing:.5px;color:var(--green);text-transform:uppercase;margin-bottom:8px}
+.pdot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px rgba(34,197,94,.6);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.lc-lbl{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;font-weight:600;margin-bottom:6px}
+.lc-val{font-size:28px;font-weight:800;color:var(--text);line-height:1;letter-spacing:-.5px}
+.lc-sub{font-size:11px;color:var(--text3);margin-top:6px}
+.spark-svg{width:100%;height:28px;display:block;margin-top:10px}
 
-/* Delta badge */
-.delta{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:20px;margin-left:6px;vertical-align:middle}
-.delta.up{background:rgba(34,197,94,.15);color:#22c55e}
-.delta.down{background:rgba(239,68,68,.15);color:#ef4444}
-.delta.neutral{background:rgba(156,163,175,.1);color:#9ca3af}
+/* ── Detalle operativo (colapsable) ── */
+.detail{margin:0 16px 12px;background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.detail-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer;user-select:none;-webkit-user-select:none}
+.detail-head-txt{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.6px}
+.detail-chev{color:var(--text3);transition:transform .25s;flex-shrink:0}
+.detail.open .detail-chev{transform:rotate(180deg)}
+.detail-body{display:none;padding:0 16px 6px}
+.detail.open .detail-body{display:block}
+.detail-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-top:1px solid var(--line)}
+.detail-row .k{font-size:13px;color:var(--text2);display:flex;align-items:center;gap:7px}
+.detail-row .v{font-size:15px;font-weight:700;color:var(--text)}
+.sem{display:inline-block;width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.sem.ok{background:var(--green)}.sem.warn{background:var(--amber)}
 
-/* Toast */
+/* ── Footer ── */
+.app-foot{text-align:center;font-size:11px;color:var(--text3);padding:6px 16px 20px;line-height:1.5}
+
+/* ── Toast ── */
 .toast{position:fixed;bottom:calc(env(safe-area-inset-bottom)+24px);left:50%;transform:translateX(-50%) translateY(20px);background:#333;color:#fff;padding:10px 20px;border-radius:24px;font-size:13px;opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap;z-index:999}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
-/* Celebration overlay */
+/* ── Celeb overlay ── */
 .celeb{position:fixed;inset:0;z-index:9999;pointer-events:none;display:none}
 .celeb.active{display:block}
 .celeb-msg{position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);text-align:center;animation:popIn .5s cubic-bezier(.34,1.56,.64,1) forwards}
@@ -102,15 +134,9 @@ body{display:flex;flex-direction:column;max-width:430px;margin:0 auto;padding:en
 .celeb-text{font-size:22px;font-weight:800;color:#ffd700;text-shadow:0 2px 20px rgba(0,0,0,.8)}
 .celeb-sub{font-size:14px;color:#fff;opacity:.8;margin-top:4px}
 @keyframes popIn{from{opacity:0;transform:translate(-50%,-60%) scale(.5)}to{opacity:1;transform:translate(-50%,-60%) scale(1)}}
-.confetti-piece{position:absolute;width:8px;height:8px;border-radius:2px;animation:fall linear forwards}
-@keyframes fall{0%{transform:translateY(-20px) rotate(0deg);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}
 
-/* Pull-to-refresh indicator */
-.ptr-indicator{text-align:center;padding:8px;font-size:12px;color:var(--muted);height:0;overflow:hidden;transition:height .2s}
-.ptr-indicator.visible{height:32px}
-
-/* Scrollable content */
-.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:24px}
+/* ── Scroll ── */
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px}
 </style>
 </head>
 <body>
@@ -135,67 +161,71 @@ body{display:flex;flex-direction:column;max-width:430px;margin:0 auto;padding:en
 </div>
 
 <div class="scroll" id="scrollArea">
-  <!-- Quota hero -->
-  <div class="quota-hero" id="quotaHero" style="display:none">
-    <div class="quota-top">
+
+  <!-- Alerta de ritmo -->
+  <div class="alert-bar" id="alertBar" style="display:none">
+    <svg id="alertIco" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+    <div class="alert-txt" id="alertTxt"></div>
+  </div>
+
+  <!-- Hero: plan del mes -->
+  <div class="hero" id="heroBlock" style="display:none">
+    <div class="hero-lbl">Plan del mes · facturación acumulada</div>
+    <div class="hero-figs">
+      <span class="hero-curr" id="hCurr">—</span>
+      <span class="hero-total" id="hTotal"></span>
+    </div>
+    <div class="hero-bar-row">
+      <span class="hero-pct" id="hPct">—</span>
+      <div class="bar-bg">
+        <div class="bar-fill" id="hBar" style="width:0%"></div>
+        <div class="bar-pace" id="hPace" style="left:0%;display:none"></div>
+      </div>
+    </div>
+    <hr class="hero-sep">
+    <div class="hero-proy">
       <div>
-        <div class="quota-label">Plan del mes</div>
-        <div class="quota-sub" id="quotaSub"></div>
+        <div class="proy-l">Proyección de cierre</div>
+        <div class="proy-s" id="hProySub"></div>
       </div>
       <div style="text-align:right">
-        <div class="quota-pct"><span id="quotaPct">0</span><span>%</span></div>
+        <div class="proy-v" id="hProyV">—</div>
+        <div class="proy-pct" id="hProyPct"></div>
       </div>
     </div>
-    <div class="quota-bar-wrap"><div class="quota-bar-fill" id="quotaBar" style="width:0%"></div></div>
   </div>
 
-  <!-- Sparklines row -->
-  <div class="spark-row" id="sparkRow" style="display:none">
-    <div class="spark-card">
-      <div class="spark-label">Pedidos / día</div>
-      <div class="spark-val" id="sparkPedVal">—</div>
-      <svg class="spark-svg" id="sparkPed" viewBox="0 0 100 32" preserveAspectRatio="none"></svg>
+  <!-- Live: venta hoy + pedidos hoy -->
+  <div class="live-grid" id="liveGrid" style="display:none">
+    <div class="live-card">
+      <div class="lc-badge"><span class="pdot"></span>Hoy</div>
+      <div class="lc-lbl">Venta del día</div>
+      <div class="lc-val" id="lVenta">—</div>
+      <svg class="spark-svg" id="sparkVen" viewBox="0 0 100 28" preserveAspectRatio="none"></svg>
     </div>
-    <div class="spark-card">
-      <div class="spark-label">Ventas / día</div>
-      <div class="spark-val" id="sparkVenVal">—</div>
-      <svg class="spark-svg" id="sparkVen" viewBox="0 0 100 32" preserveAspectRatio="none"></svg>
+    <div class="live-card">
+      <div class="lc-badge"><span class="pdot"></span>Hoy</div>
+      <div class="lc-lbl">Pedidos hoy</div>
+      <div class="lc-val" id="lPedidos">—</div>
+      <svg class="spark-svg" id="sparkPed" viewBox="0 0 100 28" preserveAspectRatio="none"></svg>
     </div>
   </div>
 
-  <!-- KPI grid -->
-  <div class="kpi-grid" id="kpiGrid" style="display:none">
-    <div class="kpi">
-      <div class="kpi-label">Venta hoy</div>
-      <div class="kpi-val mono" id="kVenta">—</div>
-      <div class="kpi-sub" id="kVentaDelta"></div>
+  <!-- Detalle operativo (colapsable) -->
+  <div class="detail" id="detailBlock" style="display:none">
+    <div class="detail-head" onclick="document.getElementById('detailBlock').classList.toggle('open')">
+      <span class="detail-head-txt">Detalle operativo</span>
+      <svg class="detail-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
     </div>
-    <div class="kpi">
-      <div class="kpi-label">Pedidos hoy</div>
-      <div class="kpi-val" id="kPedidos">—</div>
-      <div class="kpi-sub" id="kPedidosDelta"></div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">Vendedores</div>
-      <div class="kpi-val" id="kVendedores">—</div>
-      <div class="kpi-sub" id="kVendedoresDelta"></div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">Líns / pedido</div>
-      <div class="kpi-val" id="kLineas">—</div>
-      <div class="kpi-sub"></div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">Backorders</div>
-      <div class="kpi-val" id="kBack">—</div>
-      <div class="kpi-sub"></div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">Remitos</div>
-      <div class="kpi-val" id="kRemitos">—</div>
-      <div class="kpi-sub"></div>
+    <div class="detail-body">
+      <div class="detail-row"><span class="k">Vendedores activos</span><span class="v" id="dVend">—</span></div>
+      <div class="detail-row"><span class="k">Líneas / pedido</span><span class="v" id="dLin">—</span></div>
+      <div class="detail-row"><span class="k"><span class="sem warn"></span>Backorders</span><span class="v" id="dBack">—</span></div>
+      <div class="detail-row"><span class="k"><span class="sem" id="dRemSem"></span>Remitos abiertos</span><span class="v" id="dRem">—</span></div>
     </div>
   </div>
+
+  <div class="app-foot">Datos en tiempo real · Reactor · MSPA</div>
 </div>
 
 <!-- Toast -->
@@ -213,87 +243,59 @@ body{display:flex;flex-direction:column;max-width:430px;margin:0 auto;padding:en
 
 <script>
 const INTERVAL = __INTERVAL__;
-let _data = null;
-let _prevData = null;
-let _refreshTimer = null;
+let _data = null, _prevData = null, _refreshTimer = null;
 
-// ── Greeting ──────────────────────────────────────────────────────────────
+// ── Greeting ─────────────────────────────────────────────────────────────
 function setGreeting(){
-  const h = new Date().getHours();
-  const g = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
-  document.getElementById('greeting').textContent = g + ', Daniel';
+  const h=new Date().getHours();
+  const g=h<12?'Buenos días':h<19?'Buenas tardes':'Buenas noches';
+  document.getElementById('greeting').textContent=g+', Daniel';
 }
 setGreeting();
 
 // ── Format helpers ────────────────────────────────────────────────────────
-function fmtARS(v){
-  if(v===null||v===undefined) return '—';
-  return '$' + Number(v).toLocaleString('es-AR',{maximumFractionDigits:0});
+function fmtK(v){
+  if(v==null) return '—';
+  const n=Number(v);
+  if(n>=1e9) return '$'+(n/1e9).toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1})+'B';
+  if(n>=1e6) return '$'+(n/1e6).toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1})+'M';
+  if(n>=1e3) return '$'+(n/1e3).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0})+'K';
+  return '$'+n.toLocaleString('es-AR',{maximumFractionDigits:0});
 }
-function fmtNum(v){
-  if(v===null||v===undefined) return '—';
-  return Number(v).toLocaleString('es-AR');
-}
-function deltaHtml(cur, prev, isMoney){
-  if(prev===null||prev===undefined||cur===null||cur===undefined) return '';
-  const diff = cur - prev;
-  if(diff===0) return '';
-  const sign = diff>0?'▲':'▼';
-  const cls = diff>0?'up':'down';
-  const val = isMoney ? fmtARS(Math.abs(diff)) : fmtNum(Math.abs(diff));
-  return `<span class="delta ${cls}">${sign} ${val} vs ayer</span>`;
-}
-
-// ── Count-up animation ────────────────────────────────────────────────────
-function countUp(el, target, duration, fmt){
-  const start = performance.now();
-  const from = 0;
-  function step(now){
-    const p = Math.min((now-start)/duration, 1);
-    const ease = 1-Math.pow(1-p,3);
-    const cur = from + (target-from)*ease;
-    el.textContent = fmt(cur);
-    if(p<1) requestAnimationFrame(step);
-  }
-  requestAnimationFrame(step);
+function fmtN(v,dec){
+  if(v==null) return '—';
+  return Number(v).toLocaleString('es-AR',{minimumFractionDigits:dec||0,maximumFractionDigits:dec||0});
 }
 
 // ── Sparkline SVG ─────────────────────────────────────────────────────────
-function drawSpark(svgEl, values){
+function drawSpark(svgEl,values){
   if(!values||values.length<2){svgEl.innerHTML='';return;}
-  const mn=Math.min(...values), mx=Math.max(...values);
-  const range=mx-mn||1;
-  const w=100, h=32, pad=2;
+  const mn=Math.min(...values),mx=Math.max(...values),range=mx-mn||1;
+  const w=100,h=28,pad=2;
   const pts=values.map((v,i)=>{
     const x=pad+(w-2*pad)*i/(values.length-1);
     const y=pad+(h-2*pad)*(1-(v-mn)/range);
-    return `${x},${y}`;
+    return x.toFixed(1)+','+y.toFixed(1);
   });
-  const last=pts[pts.length-1].split(',');
-  svgEl.innerHTML=
-    `<polyline points="${pts.join(' ')}" fill="none" stroke="var(--spark)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>` +
-    `<circle cx="${last[0]}" cy="${last[1]}" r="2.5" fill="var(--spark)"/>`;
+  const lp=pts[pts.length-1].split(',');
+  const c='var(--spark-color)';
+  svgEl.innerHTML=`<polyline points="${pts.join(' ')}" fill="none" stroke="${c}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${lp[0]}" cy="${lp[1]}" r="2.5" fill="${c}"/>`;
 }
 
 // ── Relative time ─────────────────────────────────────────────────────────
 function relTime(ts){
   if(!ts) return '';
-  const d=new Date(ts), now=new Date();
-  const diff=Math.round((now-d)/1000);
+  const diff=Math.round((Date.now()-new Date(ts).getTime())/1000);
   if(diff<5) return 'ahora mismo';
   if(diff<60) return `hace ${diff}s`;
   const m=Math.round(diff/60);
-  if(m<60) return `hace ${m} min`;
-  const hr=Math.round(m/60);
-  return `hace ${hr}h`;
+  return m<60?`hace ${m} min`:`hace ${Math.round(m/60)}h`;
 }
-
-// ── Freshness dot ─────────────────────────────────────────────────────────
 function freshnessClass(ts){
   if(!ts) return 'old';
   const age=(Date.now()-new Date(ts).getTime())/1000;
-  if(age < INTERVAL*1.5) return '';
-  if(age < INTERVAL*3) return 'stale';
+  if(age<INTERVAL*1.5) return '';
+  if(age<INTERVAL*3) return 'stale';
   return 'old';
 }
 
@@ -305,170 +307,133 @@ function maybeCelebrate(pct){
   localStorage.setItem(key,'1');
   const overlay=document.getElementById('celeb');
   overlay.classList.add('active');
-  launchConfetti();
-  setTimeout(()=>overlay.classList.remove('active'), 4000);
-}
-function launchConfetti(){
   const canvas=document.getElementById('confettiCanvas');
   const ctx=canvas.getContext('2d');
   canvas.width=window.innerWidth; canvas.height=window.innerHeight;
   const colors=['#ffd700','#ff4d6d','#22c55e','#3b82f6','#f59e0b','#c8102e'];
-  const pieces=Array.from({length:80},()=>({
-    x:Math.random()*canvas.width, y:-10,
-    r:Math.random()*4+3,
-    c:colors[Math.floor(Math.random()*colors.length)],
-    sp:Math.random()*4+2,
-    ang:Math.random()*360,
-    rot:Math.random()*6-3
-  }));
+  const pieces=Array.from({length:80},()=>({x:Math.random()*canvas.width,y:-10,r:Math.random()*4+3,c:colors[Math.floor(Math.random()*colors.length)],sp:Math.random()*4+2,ang:Math.random()*360,rot:Math.random()*6-3}));
   let frame=0;
-  function draw(){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    pieces.forEach(p=>{
-      p.y+=p.sp; p.ang+=p.rot;
-      ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.ang*Math.PI/180);
-      ctx.fillStyle=p.c;ctx.fillRect(-p.r,-p.r,p.r*2,p.r*2);
-      ctx.restore();
-    });
-    frame++;
-    if(frame<120) requestAnimationFrame(draw);
-  }
-  draw();
+  (function draw(){ctx.clearRect(0,0,canvas.width,canvas.height);pieces.forEach(p=>{p.y+=p.sp;p.ang+=p.rot;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.ang*Math.PI/180);ctx.fillStyle=p.c;ctx.fillRect(-p.r,-p.r,p.r*2,p.r*2);ctx.restore();});if(++frame<120)requestAnimationFrame(draw);})();
+  setTimeout(()=>overlay.classList.remove('active'),4000);
 }
 
 // ── Render ────────────────────────────────────────────────────────────────
-function render(d, prev){
+function render(d){
   if(!d) return;
 
   // Timestamp
-  const dot=document.getElementById('tsDot');
-  const tsText=document.getElementById('tsText');
-  dot.className='ts-dot '+freshnessClass(d.ts);
-  tsText.textContent=(d.ts?relTime(d.ts):'—') + (d.comp_date?' · '+d.comp_date:'');
+  document.getElementById('tsDot').className='ts-dot '+freshnessClass(d.ts);
+  document.getElementById('tsText').textContent=(d.ts?relTime(d.ts):'—')+(d.comp_date?' · '+d.comp_date:'');
 
-  // Quota hero
+  // Alerta de ritmo
+  const alertBar=document.getElementById('alertBar');
   const pct=parseFloat(d.plan_pct)||0;
-  const hero=document.getElementById('quotaHero');
-  hero.style.display='';
-  document.getElementById('quotaSub').textContent=
-    (d.plan_fact?fmtARS(d.plan_fact):'')+' / '+(d.plan_total?fmtARS(d.plan_total):'');
-  const bar=document.getElementById('quotaBar');
-  const pctEl=document.getElementById('quotaPct');
-  bar.className='quota-bar-fill'+(pct>=100?' done':'');
-  // Animate bar + count-up
-  requestAnimationFrame(()=>{
-    bar.style.width=Math.min(pct,100)+'%';
-  });
-  countUp(pctEl, pct, 1200, v=>v.toFixed(1));
-  maybeCelebrate(pct);
-
-  // Sparklines
-  const sparkRow=document.getElementById('sparkRow');
-  if(d.spark_pedidos||d.spark_ventas){
-    sparkRow.style.display='';
-    drawSpark(document.getElementById('sparkPed'), d.spark_pedidos);
-    drawSpark(document.getElementById('sparkVen'), d.spark_ventas);
-    // Last values
-    const lp=(d.spark_pedidos||[]).slice(-1)[0];
-    const lv=(d.spark_ventas||[]).slice(-1)[0];
-    const spv=document.getElementById('sparkPedVal');
-    const svv=document.getElementById('sparkVenVal');
-    if(lp!=null) countUp(spv,lp,900,v=>Math.round(v).toLocaleString('es-AR'));
-    if(lv!=null) countUp(svv,lv,900,v=>fmtARS(v));
+  const pace=parseFloat(d.plan_pace)||0;
+  if(d.plan_total&&pace>0){
+    alertBar.style.display='';
+    const onTrack=pct>=pace;
+    const gap=Math.abs(pace-pct).toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1});
+    alertBar.className='alert-bar '+(onTrack?'ok':'warn');
+    const icoPaths=onTrack
+      ?'<path d="M22 7 13.5 15.5 8.5 10.5 2 17"/><path d="M16 7h6v6"/>'
+      :'<path d="M16 17h6v-6"/><path d="m22 17-8.5-8.5-5 5L2 7"/>';
+    document.getElementById('alertIco').innerHTML=icoPaths;
+    document.getElementById('alertTxt').innerHTML=onTrack
+      ?`Plan <b>en ritmo</b> · ${fmtN(pct,1)}% vs ${fmtN(pace,1)}% esperado · proyección ${fmtK(d.proy)}`
+      :`Plan <b>${gap} pts por debajo del ritmo</b> · ${fmtN(pct,1)}% vs ${fmtN(pace,1)}% esperado · proyección ${fmtK(d.proy)}`;
   } else {
-    sparkRow.style.display='none';
+    alertBar.style.display='none';
   }
 
-  // KPI grid
-  document.getElementById('kpiGrid').style.display='';
-  // Venta hoy
-  const vEl=document.getElementById('kVenta');
-  if(d.venta_dia!=null) countUp(vEl,d.venta_dia,1000,fmtARS);
-  else vEl.textContent='—';
-  document.getElementById('kVentaDelta').innerHTML=
-    prev?deltaHtml(d.venta_dia,prev.venta_dia,true):'';
-  // Pedidos
-  const pEl=document.getElementById('kPedidos');
-  if(d.pedidos!=null) countUp(pEl,d.pedidos,800,v=>Math.round(v).toString());
-  else pEl.textContent='—';
-  document.getElementById('kPedidosDelta').innerHTML=
-    prev?deltaHtml(d.pedidos,prev.pedidos,false):'';
-  // Vendedores
-  const vdEl=document.getElementById('kVendedores');
-  if(d.vendedores!=null) countUp(vdEl,d.vendedores,700,v=>Math.round(v).toString());
-  else vdEl.textContent='—';
-  document.getElementById('kVendedoresDelta').innerHTML=
-    prev?deltaHtml(d.vendedores,prev.vendedores,false):'';
-  // Líneas
-  const lEl=document.getElementById('kLineas');
-  if(d.avg_lineas!=null) countUp(lEl,d.avg_lineas,700,v=>v.toFixed(1));
-  else lEl.textContent='—';
-  // Backorders
-  document.getElementById('kBack').textContent=d.backorders!=null?fmtNum(d.backorders):'—';
-  // Remitos
-  document.getElementById('kRemitos').textContent=d.remitos!=null?fmtNum(d.remitos):'—';
+  // Hero plan
+  const heroBlock=document.getElementById('heroBlock');
+  if(d.plan_total){
+    heroBlock.style.display='';
+    document.getElementById('hCurr').textContent=fmtK(d.plan_fact);
+    document.getElementById('hTotal').textContent='/ '+fmtK(d.plan_total);
+    const pctEl=document.getElementById('hPct');
+    pctEl.textContent=fmtN(pct,1)+'%';
+    pctEl.className='hero-pct'+(pct>=pace?' ok-color':'');
+    const bar=document.getElementById('hBar');
+    bar.className='quota-bar-fill'+(pct>=100?' done':'');
+    requestAnimationFrame(()=>{ bar.style.width=Math.min(pct,100)+'%'; });
+    // Marcador de ritmo esperado
+    const paceEl=document.getElementById('hPace');
+    if(pace>0&&pace<100){
+      paceEl.style.display='';
+      paceEl.style.left=pace.toFixed(1)+'%';
+    } else { paceEl.style.display='none'; }
+    // Proyección
+    document.getElementById('hProyV').textContent=fmtK(d.proy);
+    document.getElementById('hProyPct').textContent=d.proy_pct?fmtN(d.proy_pct,1)+'% del plan':'';
+    const subParts=[];
+    if(d.dia_habil&&d.dias_tot) subParts.push(`Día hábil ${d.dia_habil} de ${d.dias_tot}`);
+    if(d.plan_fact&&d.plan_total) subParts.push(`Restante ${fmtK(d.plan_total-d.plan_fact)}`);
+    document.getElementById('hProySub').textContent=subParts.join(' · ');
+    maybeCelebrate(pct);
+  } else {
+    heroBlock.style.display='none';
+  }
+
+  // Live cards
+  const liveGrid=document.getElementById('liveGrid');
+  liveGrid.style.display='';
+  document.getElementById('lVenta').textContent=fmtK(d.venta_dia);
+  document.getElementById('lPedidos').textContent=d.pedidos!=null?fmtN(d.pedidos):'—';
+  drawSpark(document.getElementById('sparkVen'), d.spark_ventas);
+  drawSpark(document.getElementById('sparkPed'), d.spark_pedidos);
+
+  // Detalle operativo
+  const detailBlock=document.getElementById('detailBlock');
+  detailBlock.style.display='';
+  document.getElementById('dVend').textContent=d.vendedores!=null?fmtN(d.vendedores):'—';
+  document.getElementById('dLin').textContent=d.avg_lineas!=null?fmtN(d.avg_lineas,1):'—';
+  document.getElementById('dBack').textContent=d.backorders!=null?fmtN(d.backorders):'—';
+  document.getElementById('dRem').textContent=d.remitos!=null?fmtN(d.remitos):'—';
+  const remSem=document.getElementById('dRemSem');
+  const remVal=parseInt(d.remitos)||0;
+  remSem.className='sem '+(remVal>0?'warn':'ok');
 }
 
 // ── Fetch & load ──────────────────────────────────────────────────────────
 async function loadData(){
-  const tsEl=document.getElementById('tsText');
-  if(tsEl) tsEl.textContent='Actualizando…';
+  document.getElementById('tsText').textContent='Actualizando…';
   try{
     const r=await fetch('snapshot.json?_='+Date.now());
     if(!r.ok) throw new Error('HTTP '+r.status);
     const d=await r.json();
-    _prevData=_data;
     _data=d;
-    render(_data,_prevData);
+    render(_data);
   }catch(e){
     showToast('Error al actualizar: '+e.message);
   }
 }
-
 function showToast(msg){
   const t=document.getElementById('toast');
   t.textContent=msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),3000);
 }
-
 function doRefresh(){
   const btn=document.getElementById('refreshBtn');
   btn.classList.add('spinning');
-  loadData().then(()=>{
-    btn.classList.remove('spinning');
-    showToast('Actualizado');
-  }).catch(()=>btn.classList.remove('spinning'));
+  loadData().then(()=>{ btn.classList.remove('spinning'); showToast('Actualizado'); }).catch(()=>btn.classList.remove('spinning'));
 }
 
 // ── Pull-to-refresh ───────────────────────────────────────────────────────
 let _ptStart=0, _ptActive=false;
 const scrollArea=document.getElementById('scrollArea');
-scrollArea.addEventListener('touchstart',e=>{
-  if(scrollArea.scrollTop===0) _ptStart=e.touches[0].clientY;
-},{ passive:true });
-scrollArea.addEventListener('touchmove',e=>{
-  if(!_ptStart) return;
-  const dy=e.touches[0].clientY-_ptStart;
-  if(dy>50&&!_ptActive){ _ptActive=true; }
-},{ passive:true });
-scrollArea.addEventListener('touchend',()=>{
-  if(_ptActive){ _ptActive=false; doRefresh(); }
-  _ptStart=0;
-},{ passive:true });
+scrollArea.addEventListener('touchstart',e=>{ if(scrollArea.scrollTop===0) _ptStart=e.touches[0].clientY; },{passive:true});
+scrollArea.addEventListener('touchmove',e=>{ if(!_ptStart) return; if(e.touches[0].clientY-_ptStart>50&&!_ptActive) _ptActive=true; },{passive:true});
+scrollArea.addEventListener('touchend',()=>{ if(_ptActive){ _ptActive=false; doRefresh(); } _ptStart=0; },{passive:true});
 
-// ── Auto-refresh timer ────────────────────────────────────────────────────
+// ── Auto-refresh ──────────────────────────────────────────────────────────
 function scheduleRefresh(){
   clearTimeout(_refreshTimer);
-  _refreshTimer=setTimeout(()=>{ loadData().then(scheduleRefresh); }, INTERVAL*1000);
+  _refreshTimer=setTimeout(()=>loadData().then(scheduleRefresh), INTERVAL*1000);
 }
-
-// ── Boot ──────────────────────────────────────────────────────────────────
 loadData().then(scheduleRefresh);
 
-// Service Worker
-if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('sw.js').catch(()=>{});
-}
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
 </html>
@@ -623,6 +588,19 @@ def _build_snapshot_json(data, interval):
         snap["plan_pct"]   = plan.get("pct_plan")
         snap["plan_fact"]  = plan.get("fact_acum")
         snap["plan_total"] = plan.get("plan_total")
+
+        # ── Ritmo esperado y proyección ────────────────────────────────
+        meta = reactor.get("meta") or {}
+        dias_elapsed = meta.get("dias_elapsed") or 0
+        curr_wd      = meta.get("curr_wd") or 0
+        fact_acum    = plan.get("fact_acum") or 0
+        plan_total   = plan.get("plan_total") or 0
+        snap["plan_pace"]  = round(dias_elapsed / curr_wd * 100, 2) if curr_wd else None
+        snap["dia_habil"]  = dias_elapsed
+        snap["dias_tot"]   = curr_wd
+        proy = round(fact_acum / dias_elapsed * curr_wd) if dias_elapsed else None
+        snap["proy"]       = proy
+        snap["proy_pct"]   = round(proy / plan_total * 100, 2) if (proy and plan_total) else None
 
         # ── KPIs del día (today_summary = dato vivo de hoy) ────────────
         snap["venta_dia"]  = hoy.get("valor")
