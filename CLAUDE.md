@@ -144,8 +144,11 @@ Abrir browser en `http://localhost:8765`
 set FTP_HOST=www.wurth.com.ar
 set FTP_USER=wurth_demotel
 set FTP_PASS=TuContraseñaReal
-set FTP_PATH=/public_html/
+set FTP_PATH=/download/w20260609a01/
+set FTP_PATH_WEB=/download/w20260611a01/
 ```
+
+`FTP_PATH` = app móvil (Daniel). `FTP_PATH_WEB` = dashboard web completo (opcional, dejar vacío para no subir).
 
 ---
 

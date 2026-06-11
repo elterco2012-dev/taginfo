@@ -7,12 +7,13 @@ import os, json, time, ftplib, threading, hashlib, hmac, datetime, zlib, struct,
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FuturesTimeout
 
 # ── Configuración por variables de entorno ──────────────────────────────────
-FTP_HOST     = os.environ.get("FTP_HOST", "")
-FTP_USER     = os.environ.get("FTP_USER", "")
-FTP_PASS     = os.environ.get("FTP_PASS", "")
-FTP_PATH     = os.environ.get("FTP_PATH", "/")
-FTP_INTERVAL = int(os.environ.get("FTP_INTERVAL", "300"))
-FTP_ENABLED  = os.environ.get("FTP_ENABLED", "0") == "1"
+FTP_HOST      = os.environ.get("FTP_HOST", "")
+FTP_USER      = os.environ.get("FTP_USER", "")
+FTP_PASS      = os.environ.get("FTP_PASS", "")
+FTP_PATH      = os.environ.get("FTP_PATH", "/")          # app móvil
+FTP_PATH_WEB  = os.environ.get("FTP_PATH_WEB", "")       # dashboard web (vacío = no subir)
+FTP_INTERVAL  = int(os.environ.get("FTP_INTERVAL", "300"))
+FTP_ENABLED   = os.environ.get("FTP_ENABLED", "0") == "1"
 FTP_AUTH_USER = os.environ.get("FTP_AUTH_USER", "wurth")
 FTP_AUTH_PASS = os.environ.get("FTP_AUTH_PASS", "")
 
@@ -672,9 +673,53 @@ def _ensure_dir(ftp, path):
 
 _DATA_TIMEOUT = 90  # segundos máximos esperando datos de la BD
 
-def _snapshot_loop(get_data_fn, interval):
+def _upload_mobile(ftp, snap_json, interval):
+    """Sube la app móvil a FTP_PATH."""
+    _ensure_dir(ftp, FTP_PATH)
+    ftp.cwd(FTP_PATH)
+    _ftp_upload_text(ftp, "snapshot.json", snap_json)
+    cache_ver = datetime.datetime.now().strftime("%Y%m%d%H%M")
+    logo_html = _load_logo_html()
+    viewer = (_VIEWER_HTML
+              .replace("__INTERVAL__", str(interval))
+              .replace("@@LOGO@@", logo_html))
+    _ftp_upload_text(ftp, "index.html", viewer)
+    sw = _SW_JS.replace("__CACHE_VER__", cache_ver)
+    _ftp_upload_text(ftp, "sw.js", sw)
+    _ftp_upload_text(ftp, ".htaccess", _HTACCESS)
+    if FTP_AUTH_PASS:
+        _ftp_upload_text(ftp, "index.php", _INDEX_PHP)
+    _ftp_upload_text(ftp, "manifest.json", _MANIFEST)
+    existing = ftp.nlst()
+    if "icon-192.png" not in existing:
+        _ftp_upload_bytes(ftp, "icon-192.png", _make_png(192))
+    if "icon-512.png" not in existing:
+        _ftp_upload_bytes(ftp, "icon-512.png", _make_png(512))
+
+
+def _upload_web_dashboard(ftp, raw_data_json, get_web_html_fn):
+    """Sube el dashboard web completo a FTP_PATH_WEB."""
+    if not FTP_PATH_WEB:
+        return
+    _ensure_dir(ftp, FTP_PATH_WEB)
+    ftp.cwd(FTP_PATH_WEB)
+    # snapshot completo (mismo formato que /api/data)
+    _ftp_upload_text(ftp, "snapshot.json", raw_data_json)
+    # HTML del dashboard y del kiosk
+    try:
+        dash_html, kiosk_html = get_web_html_fn()
+        _ftp_upload_text(ftp, "index.html", dash_html)
+        _ftp_upload_text(ftp, "kiosk.html", kiosk_html)
+    except Exception as e:
+        print(f"[FTP-WEB] Error generando HTML: {e}", flush=True)
+    _ftp_upload_text(ftp, ".htaccess", _HTACCESS)
+
+
+def _snapshot_loop(get_data_fn, interval, get_web_html_fn=None):
     """Main loop: build snapshot and upload every `interval` seconds."""
     print(f"[FTP] Job activo — host={FTP_HOST}  cada {interval}s", flush=True)
+    if FTP_PATH_WEB:
+        print(f"[FTP] Dashboard web → {FTP_PATH_WEB}", flush=True)
     _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ftp-data")
     while True:
         try:
@@ -685,45 +730,19 @@ def _snapshot_loop(get_data_fn, interval):
                 print(f"[FTP] Timeout obteniendo datos ({_DATA_TIMEOUT}s) — siguiente ciclo en {interval}s", flush=True)
                 time.sleep(interval)
                 continue
+
+            # Snapshot para app móvil
             snap = _build_snapshot_json(data, interval)
             snap_json = json.dumps(snap, ensure_ascii=False, default=str)
 
+            # Snapshot completo para dashboard web (mismo formato que /api/data)
+            raw_data_json = json.dumps(data, ensure_ascii=False, default=str)
+
             with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS, timeout=30) as ftp:
                 ftp.set_pasv(True)
-                _ensure_dir(ftp, FTP_PATH)
-                ftp.cwd(FTP_PATH)
-
-                # snapshot.json
-                _ftp_upload_text(ftp, "snapshot.json", snap_json)
-
-                # viewer HTML — inyectar intervalo, versión de caché y logo
-                cache_ver = datetime.datetime.now().strftime("%Y%m%d%H%M")
-                logo_html = _load_logo_html()
-                viewer = (_VIEWER_HTML
-                          .replace("__INTERVAL__", str(interval))
-                          .replace("@@LOGO@@", logo_html))
-                _ftp_upload_text(ftp, "index.html", viewer)
-
-                # SW con versión única para forzar actualización en cliente
-                sw = _SW_JS.replace("__CACHE_VER__", cache_ver)
-                _ftp_upload_text(ftp, "sw.js", sw)
-
-                # .htaccess SIEMPRE — pisa cualquier versión vieja que bloquee snapshot.json
-                _ftp_upload_text(ftp, ".htaccess", _HTACCESS)
-
-                # PHP proxy solo si hay auth configurada
-                if FTP_AUTH_PASS:
-                    _ftp_upload_text(ftp, "index.php", _INDEX_PHP)
-
-                # manifest
-                _ftp_upload_text(ftp, "manifest.json", _MANIFEST)
-
-                # icons (only upload if they don't exist yet — save bandwidth)
-                existing = ftp.nlst()
-                if "icon-192.png" not in existing:
-                    _ftp_upload_bytes(ftp, "icon-192.png", _make_png(192))
-                if "icon-512.png" not in existing:
-                    _ftp_upload_bytes(ftp, "icon-512.png", _make_png(512))
+                _upload_mobile(ftp, snap_json, interval)
+                if get_web_html_fn and FTP_PATH_WEB:
+                    _upload_web_dashboard(ftp, raw_data_json, get_web_html_fn)
 
             now = datetime.datetime.now().strftime("%H:%M:%S")
             print(f"[FTP] OK — {now}", flush=True)
@@ -733,10 +752,12 @@ def _snapshot_loop(get_data_fn, interval):
         time.sleep(interval)
 
 # ── Public API ────────────────────────────────────────────────────────────────
-def start_snapshot_job(get_data_fn):
+def start_snapshot_job(get_data_fn, get_web_html_fn=None):
     """
     Inicia el daemon thread FTP.
-    get_data_fn: callable que retorna el dict de datos (get_cached_data en dashboard.py).
+    get_data_fn:      callable → dict de datos (get_cached_data en dashboard.py).
+    get_web_html_fn:  callable → (dash_html, kiosk_html) para el dashboard web estático.
+                      Si es None o FTP_PATH_WEB está vacío, no sube el dashboard web.
     Si FTP_ENABLED=0 o FTP_HOST vacío, imprime aviso y retorna sin iniciar.
     """
     if not FTP_ENABLED:
@@ -747,7 +768,7 @@ def start_snapshot_job(get_data_fn):
         return
     t = threading.Thread(
         target=_snapshot_loop,
-        args=(get_data_fn, FTP_INTERVAL),
+        args=(get_data_fn, FTP_INTERVAL, get_web_html_fn),
         daemon=True,
         name="ftp-snapshot"
     )

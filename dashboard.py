@@ -2587,6 +2587,44 @@ setInterval(()=>{
 """.replace("@@LOGO@@", LOGO_HTML)
 
 
+def get_web_html():
+    """Genera el HTML estático del dashboard web (para FTP).
+    Idéntico al dashboard local pero lee snapshot.json en vez de /api/data.
+    """
+    # ── Dashboard principal ──────────────────────────────────────────────
+    dash = HTML_PAGE.replace(
+        "fetch(url)",
+        "fetch('snapshot.json?_='+Date.now())"
+    ).replace(
+        "const url='/api/data'+(_customDate?'?date='+_customDate:'');",
+        "const url='snapshot.json?_='+Date.now();"
+    ).replace(
+        # Auto-refresh cada 60s en la versión estática (reemplaza el tick basado en TTL)
+        "if(_mspaNext<=0){load();_mspaNext=60;}",
+        "if(_mspaNext<=0){load();_mspaNext=60;} // static: refresca snapshot.json"
+    ).replace(
+        # Ocultar date picker (requiere servidor)
+        'id="date-badge-btn"',
+        'id="date-badge-btn" style="display:none"'
+    ).replace(
+        # Kiosk apunta a kiosk.html
+        "window.location.href='/kiosk'",
+        "window.location.href='kiosk.html'"
+    )
+    # ── Kiosk ────────────────────────────────────────────────────────────
+    kiosk = KIOSK_PAGE.replace(
+        "fetch('/api/data',{cache:'no-store'})",
+        "fetch('snapshot.json?_='+Date.now(),{cache:'no-store'})"
+    ).replace(
+        "window.location.href='/'",
+        "window.location.href='index.html'"
+    ).replace(
+        "window.location.href='/kiosk'",
+        "window.location.href='kiosk.html'"
+    )
+    return dash, kiosk
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args): pass
@@ -2646,7 +2684,7 @@ def main():
     print("Ctrl+C para detener\n")
     try:
         from ftp_snapshot import start_snapshot_job
-        start_snapshot_job(get_cached_data)
+        start_snapshot_job(get_cached_data, get_web_html)
     except Exception as e:
         print(f"[FTP] No se pudo iniciar el job: {e}")
     server=HTTPServer(("0.0.0.0",PORT),Handler)
