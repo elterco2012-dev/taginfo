@@ -1149,6 +1149,7 @@ body.tv .meta-curr{font-size:28px}
         <div class="kpi-lbl">% Facturado del Día</div>
         <div class="kpi-top">
           <div class="kpi-val num" id="k-factpct">—</div>
+          <div style="width:74px;height:30px;flex-shrink:0"></div>
         </div>
         <div class="kpi-foot" id="d-factpct"></div>
       </div>
@@ -1600,7 +1601,7 @@ function renderChart(trend){
               ? Math.round(t.pedidos/(t.dias_hab||1)).toLocaleString('es-AR')
               : '$'+Math.round((t.valor/1e6)/(t.dias_hab||1));
             ctx2.save();
-            ctx2.font=isBars?'600 10px system-ui':'700 10px system-ui';
+            ctx2.font=isBars?'600 13px system-ui':'700 13px system-ui';
             ctx2.fillStyle=isBars?txtColor:'#cc0000';
             ctx2.textAlign='center';
             ctx2.textBaseline='bottom';
@@ -2284,13 +2285,13 @@ function ctxBar(){
   const gap=fmtN(Math.abs(PLAN.pace-PLAN.pct),1);
   const alertTxt=onTrack
     ?`Plan de ventas <b>en ritmo</b> — ${fmtN(PLAN.pct,1)}% vs ${fmtN(PLAN.pace,1)}% esperado a hoy`
-    :`Plan de ventas <b>${gap} pts por debajo del ritmo</b> — ${fmtN(PLAN.pct,1)}% vs ${fmtN(PLAN.pace,1)}% esperado a hoy`;
+    :`Plan de ventas <b>por debajo del ritmo</b> — ${fmtN(PLAN.pct,1)}% vs ${fmtN(PLAN.pace,1)}% esperado a hoy`;
   const tagTxt=onTrack?'En ritmo':`${gap} pts bajo ritmo`;
   return `<div class="kt-ctxbar ${sev}">
     ${ico(onTrack?'trendingUp':'trendingDown',30)}
     <span class="ctx-alert">${alertTxt}</span>
     <span class="ctx-sep">·</span>
-    <span class="ctx-metric">PROYECCIÓN <b class="num">${fmtK(PLAN.proy)}</b></span>
+    <span class="ctx-metric">FALTA <b class="num">${fmtK(PLAN.plan_total-PLAN.fact_acum)}</b></span>
     <span class="ctx-sep">·</span>
     <span class="ctx-metric">VENTA HOY <b class="num">${fmtK(VENTA.val)}</b></span>
     <span class="ctx-tag">${tagTxt}</span>
@@ -2332,7 +2333,7 @@ function board1(){
         ${flowCell('tk-blue','Informado',fmtK(FLOW.informado.val),fmtN(FLOW.informado.v)+' pedidos')}
         ${flowCell('tk-amber','Retenido',fmtK(FLOW.retenido.val),fmtN(FLOW.retenido.v)+' ped · '+fmtN(FLOW.retenido.pct,1)+'%')}
         ${flowCell('tk-red','Anulado',fmtK(FLOW.anulado.val),fmtN(FLOW.anulado.v)+' ped · '+fmtN(FLOW.anulado.pct,1)+'%')}
-        ${flowCell('tk-green','Facturado',fmtK(FLOW.facturado.val),fmtN(FLOW.facturado.v)+' pedidos')}
+        ${flowCell('tk-green','Facturado',fmtK(FLOW.facturado.val),fmtN(FLOW.facturado.v)+' pedidos'+(FLOW.informado.v>0?' · '+fmtN(FLOW.facturado.v/FLOW.informado.v*100,1)+'%':''))}
       </div>
       <div class="b1-live">
         <div class="b1-live-head">
