@@ -2592,21 +2592,8 @@ def get_web_html():
     Idéntico al dashboard local pero lee snapshot.json en vez de /api/data.
     En celular redirige automáticamente a la app móvil.
     """
-    mobile_redirect = """<script>
-(function(){
-  var ua=navigator.userAgent||'';
-  var isMobile=/Android|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-  var isTablet=/iPad|Tablet/i.test(ua)||(navigator.maxTouchPoints>1&&/Macintosh/i.test(ua));
-  if(isMobile&&!isTablet){
-    window.location.replace('https://www.wurth.com.ar/download/w20260609a01/');
-  }
-})();
-</script>"""
     # ── Dashboard principal ──────────────────────────────────────────────
     dash = HTML_PAGE.replace(
-        "<head>",
-        "<head>" + mobile_redirect
-    ).replace(
         "fetch(url)",
         "fetch('snapshot.json?_='+Date.now())"
     ).replace(
