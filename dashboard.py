@@ -2056,10 +2056,11 @@ html,body{height:100%;background:var(--bg);overflow:hidden;font-family:var(--fon
 .mspa-row.venta{border-top:2px solid var(--border);margin-top:4px;padding-top:18px}
 .mspa-row.venta .mspa-lbl{color:var(--text);font-weight:700;font-size:24px}
 .mspa-row.venta .mspa-val{color:var(--green);font-size:38px}
-.b2-ritmo-row{display:flex;align-items:center;gap:24px}
+.b2-ritmo-row{display:flex;flex-direction:column;gap:16px}
+.b2-ritmo-head{display:flex;align-items:center;justify-content:space-between;gap:24px}
 .b2-ritmo-fig{font-size:46px;font-weight:800;color:var(--blue);white-space:nowrap}
 .b2-ritmo-fig small{font-size:22px;color:var(--text-3);font-weight:600}
-.b2-ritmo-bar{flex:1;height:22px;background:var(--border);border-radius:11px;position:relative;overflow:hidden}
+.b2-ritmo-bar{width:100%;height:26px;background:var(--border);border-radius:13px;position:relative;overflow:hidden}
 .b2-ritmo-fill{height:100%;border-radius:11px;background:var(--blue)}
 .b2-ritmo-pace{position:absolute;top:0;bottom:0;width:3px;background:var(--amber)}
 .b2-ritmo-tag{font-size:19px;font-weight:700;white-space:nowrap}
@@ -2287,9 +2288,11 @@ function board2(){
       <div class="panel b2-ritmo">
         <div class="kt-eyebrow">${ico('activity')} Ritmo mensual · pedidos vs. mes anterior</div>
         <div class="b2-ritmo-row">
-          <span class="b2-ritmo-fig num">${fmtN(RITMO.curr)} <small>/ ${fmtN(RITMO.last)}</small></span>
+          <div class="b2-ritmo-head">
+            <span class="b2-ritmo-fig num">${fmtN(RITMO.curr)} <small>/ ${fmtN(RITMO.last)} pedidos</small></span>
+            <span class="b2-ritmo-tag ${RITMO.onTrack?'ok':'warn'} num">${RITMO.onTrack?'+'+fmtN(RITMO.sobre)+' sobre ritmo':fmtN(Math.abs(RITMO.sobre))+' bajo ritmo'}</span>
+          </div>
           <div class="b2-ritmo-bar"><div class="b2-ritmo-fill" style="width:${Math.min(RITMO.pct,100)}%"></div><div class="b2-ritmo-pace" style="left:${Math.min(RITMO.pace,100)}%"></div></div>
-          <span class="b2-ritmo-tag ${RITMO.onTrack?'ok':'warn'} num">${RITMO.onTrack?'+'+fmtN(RITMO.sobre)+' sobre ritmo':fmtN(Math.abs(RITMO.sobre))+' bajo ritmo'}</span>
         </div>
       </div>
     </div>
