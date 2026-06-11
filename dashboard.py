@@ -875,9 +875,9 @@ body.dark .state-neutral{background:#334155;color:var(--text-3)}
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r-card);overflow:hidden;min-width:0}
 .kpi{background:var(--surface);padding:15px 18px;display:flex;flex-direction:column}
 .kpi-lbl{font-size:10px;color:var(--text-3);margin-bottom:7px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
-.kpi-top{display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
+.kpi-top{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;height:44px}
 .kpi-val{font-size:25px;font-weight:700;line-height:1;color:var(--text);font-variant-numeric:tabular-nums}
-.kpi-foot{display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap;min-height:36px}
+.kpi-foot{display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap}
 .spark{width:74px;height:30px;flex-shrink:0;opacity:.9}
 .delta{display:inline-flex;align-items:center;gap:2px;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
 .delta .ico{width:13px;height:13px}
