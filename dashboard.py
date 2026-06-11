@@ -2029,19 +2029,23 @@ html,body{height:100%;background:var(--bg);overflow:hidden;font-family:var(--fon
 .kt-clock{text-align:right}
 .kt-time{font-size:42px;font-weight:700;line-height:1;letter-spacing:-.5px}
 .kt-date{font-size:17px;color:var(--text-3);margin-top:4px;text-transform:capitalize}
-.kt-alert{height:70px;display:flex;align-items:center;gap:18px;padding:0 44px;font-size:25px;font-weight:600}
-.kt-alert .ico{width:30px;height:30px;flex-shrink:0}
-.kt-alert b{font-weight:800}
-.kt-alert.warn{background:#fef3c7;color:#92400e;border-bottom:2px solid #f59e0b}
-.kt-alert.danger{background:#fee2e2;color:#991b1b;border-bottom:2px solid #dc2626}
-.kt-alert.ok{background:#d1fae5;color:#065f46;border-bottom:2px solid #059669}
+.kt-ctxbar{display:flex;align-items:center;gap:16px;height:72px;padding:0 44px;font-size:23px;font-weight:600;border-bottom:1px solid}
+.kt-ctxbar .ico{width:30px;height:30px;flex-shrink:0}
+.kt-ctxbar b{font-weight:800}
+.kt-ctxbar .ctx-sep{color:currentColor;opacity:.4}
+.kt-ctxbar .ctx-metric{font-size:20px;font-weight:600;opacity:.92}
+.kt-ctxbar .ctx-metric b{margin-left:6px}
+.kt-ctxbar .ctx-tag{margin-left:auto;font-size:16px;font-weight:800;padding:5px 14px;border-radius:8px;white-space:nowrap}
+.kt-ctxbar.warn{background:var(--amber-bg);color:#b45309;border-color:#fcd9a4}
+.kt-ctxbar.warn .ctx-tag{background:#fff;color:#b45309}
+.kt-ctxbar.danger{background:var(--red-bg);color:#b91c1c;border-color:#fbcdcd}
+.kt-ctxbar.danger .ctx-tag{background:#fff;color:#b91c1c}
+.kt-ctxbar.ok{background:var(--green-bg);color:#15803d;border-color:#b7ecca}
+.kt-ctxbar.ok .ctx-tag{background:#fff;color:#15803d}
 .kt-board{position:absolute;left:0;right:0;bottom:14px;padding:26px 44px 0;display:none}
 .kt-board.active{display:block}
-.kt-board.top1{top:220px}
+.kt-board.top1{top:168px}
 .kt-board.top0{top:150px}
-.kt-north{display:flex;align-items:center;gap:16px;font-size:19px;color:var(--text-2);padding:0 44px;height:54px;background:var(--panel-2);border-bottom:1px solid var(--border)}
-.kt-north b{color:var(--text);font-weight:800;margin-left:4px}
-.kt-north .sep{color:var(--border-2)}
 .north-tag{margin-left:auto;font-size:15px;font-weight:700;padding:4px 12px;border-radius:8px}
 .north-tag.ok{background:var(--green-bg);color:#065f46}
 .north-tag.warn{background:#fef3c7;color:#92400e}
@@ -2273,27 +2277,23 @@ function topBar(){
     </div>
   </div>`;
 }
-function alertRibbon(){
-  const onTrack=PLAN.pct>=PLAN.pace;
-  if(!PLAN.plan_total)return '';
-  if(onTrack){
-    return `<div class="kt-alert ok">${ico('trendingUp',30)}<span>Plan de ventas <b>en ritmo</b> — ${fmtN(PLAN.pct,1)}% acumulado vs ${fmtN(PLAN.pace,1)}% esperado a hoy</span></div>`;
-  }
-  const gap=fmtN(PLAN.pace-PLAN.pct,1);
-  const sev=(PLAN.pace-PLAN.pct)>10?'danger':'warn';
-  return `<div class="kt-alert ${sev}">${ico('trendingDown',30)}<span>Plan de ventas <b>${gap} pts por debajo del ritmo</b> esperado — ${fmtN(PLAN.pct,1)}% acumulado vs ${fmtN(PLAN.pace,1)}% esperado a hoy</span></div>`;
-}
-function northStrip(){
+function ctxBar(){
   if(!PLAN.plan_total) return '';
   const onTrack=PLAN.pct>=PLAN.pace;
-  const gap=Math.abs(PLAN.pace-PLAN.pct).toFixed(1).replace('.',',');
-  const tagCls=onTrack?'ok':(PLAN.pace-PLAN.pct)>10?'danger':'warn';
+  const sev=onTrack?'ok':(PLAN.pace-PLAN.pct)>10?'danger':'warn';
+  const gap=fmtN(Math.abs(PLAN.pace-PLAN.pct),1);
+  const alertTxt=onTrack
+    ?`Plan de ventas <b>en ritmo</b> — ${fmtN(PLAN.pct,1)}% vs ${fmtN(PLAN.pace,1)}% esperado a hoy`
+    :`Plan de ventas <b>${gap} pts por debajo del ritmo</b> — ${fmtN(PLAN.pct,1)}% vs ${fmtN(PLAN.pace,1)}% esperado a hoy`;
   const tagTxt=onTrack?'En ritmo':`${gap} pts bajo ritmo`;
-  return `<div class="kt-north">
-    <span>PLAN <b class="num">${fmtN(PLAN.pct,1)}%</b></span><span class="sep">·</span>
-    <span>PROYECCIÓN <b class="num">${fmtK(PLAN.proy)}</b></span><span class="sep">·</span>
-    <span>VENTA HOY <b class="num">${fmtK(VENTA.val)}</b></span>
-    <span class="north-tag ${tagCls}">${tagTxt}</span>
+  return `<div class="kt-ctxbar ${sev}">
+    ${ico(onTrack?'trendingUp':'trendingDown',30)}
+    <span class="ctx-alert">${alertTxt}</span>
+    <span class="ctx-sep">·</span>
+    <span class="ctx-metric">PROYECCIÓN <b class="num">${fmtK(PLAN.proy)}</b></span>
+    <span class="ctx-sep">·</span>
+    <span class="ctx-metric">VENTA HOY <b class="num">${fmtK(VENTA.val)}</b></span>
+    <span class="ctx-tag">${tagTxt}</span>
   </div>`;
 }
 function board1(){
@@ -2456,7 +2456,7 @@ let paused=false;
 let rotStart=Date.now();
 const stage=document.getElementById('stage');
 function render(){
-  stage.innerHTML=topBar()+alertRibbon()+northStrip()+(board===0?board1():board2())+
+  stage.innerHTML=topBar()+ctxBar()+(board===0?board1():board2())+
     `<div class="kt-rot"><div class="kt-rot-track"><div class="kt-rot-fill" id="kt-fill"></div></div></div>
      <div class="kt-dots" id="kt-dots">${Array.from({length:NBOARDS},(_,i)=>
         `<span class="kt-pg${board===i?' on':''}" data-go="${i}"></span>`).join('')}</div>`;
