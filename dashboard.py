@@ -2616,6 +2616,9 @@ def get_web_html():
         "fetch('/api/data',{cache:'no-store'})",
         "fetch('snapshot.json?_='+Date.now(),{cache:'no-store'})"
     ).replace(
+        "s.src='/static/chart.min.js';",
+        "s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';"
+    ).replace(
         "window.location.href='/'",
         "window.location.href='index.html'"
     ).replace(
