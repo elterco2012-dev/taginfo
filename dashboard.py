@@ -2420,6 +2420,10 @@ document.addEventListener('keydown',(e)=>{
   else if(e.key==='Escape')exitKiosk();
   poke();
 });
+// Auto fullscreen al entrar (el click del usuario fue el gesto que disparó la navegación)
+if(!document.fullscreenElement && document.documentElement.requestFullscreen){
+  document.documentElement.requestFullscreen().catch(()=>{});
+}
 fitStage();
 window.addEventListener('resize',fitStage);
 render();
