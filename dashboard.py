@@ -2271,7 +2271,7 @@ function topBar(){
     <div class="kt-right">
       <div class="kt-conn">
         <span class="kt-conn-row"><span class="kt-dot ${DATOS_AL.mspaOk?'ok':'down'}"></span>MSPA ${DATOS_AL.mspaOk?'OK':'sin datos'} · <b>${DATOS_AL.mspa}</b></span>
-        <span class="kt-conn-row"><span class="kt-dot ${DATOS_AL.reactorOk?'ok':'down'}"></span>Reactor ${DATOS_AL.reactorOk?'OK':'sin datos'}</span>
+        <span class="kt-conn-row"><span class="kt-dot ${DATOS_AL.reactorOk?'ok':'down'}"></span>Reactor ${DATOS_AL.reactorOk?'OK':'sin datos'} · <b>${DATOS_AL.reactor}</b></span>
       </div>
       <div class="kt-clock"><div class="kt-time num" id="kt-time">--:--:--</div>
         <div class="kt-date" id="kt-date"></div></div>
@@ -2285,16 +2285,16 @@ function ctxBar(){
   const gap=fmtN(Math.abs(PLAN.pace-PLAN.pct),1);
   const alertTxt=onTrack
     ?`Plan de ventas <b>en ritmo</b> — ${fmtN(PLAN.pct,1)}% vs ${fmtN(PLAN.pace,1)}% esperado a hoy`
-    :`Plan de ventas <b>por debajo del ritmo</b> — ${fmtN(PLAN.pct,1)}% vs ${fmtN(PLAN.pace,1)}% esperado a hoy`;
-  const tagTxt=onTrack?'En ritmo':`${gap} pts bajo ritmo`;
+    :`Plan de ventas <b>${gap} pts por debajo del ritmo</b> — ${fmtN(PLAN.pct,1)}% vs ${fmtN(PLAN.pace,1)}% esperado a hoy`;
+  const tagTxt=onTrack?'En ritmo':null;
   return `<div class="kt-ctxbar ${sev}">
     ${ico(onTrack?'trendingUp':'trendingDown',30)}
     <span class="ctx-alert">${alertTxt}</span>
     <span class="ctx-sep">·</span>
-    <span class="ctx-metric">FALTA <b class="num">${fmtK(PLAN.plan_total-PLAN.fact_acum)}</b></span>
+    <span class="ctx-metric">Falta <b class="num">${fmtK(PLAN.plan_total-PLAN.fact_acum)}</b></span>
     <span class="ctx-sep">·</span>
-    <span class="ctx-metric">VENTA HOY <b class="num">${fmtK(VENTA.val)}</b></span>
-    <span class="ctx-tag">${tagTxt}</span>
+    <span class="ctx-metric">Venta hoy <b class="num">${fmtK(VENTA.val)}</b></span>
+    ${tagTxt?`<span class="ctx-tag">${tagTxt}</span>`:''}
   </div>`;
 }
 function board1(){
@@ -2418,7 +2418,7 @@ function drawChart(){
             lbl='$'+Math.round(raw[2]/raw[3]);
           }
           ctx.save();
-          ctx.font=ds.type==='bar'?'600 13px system-ui':'700 12px system-ui';
+          ctx.font=ds.type==='bar'?'600 16px system-ui':'700 15px system-ui';
           ctx.fillStyle=ds.type==='bar'?'#64748b':'#cc0000';
           ctx.textAlign='center';
           ctx.textBaseline=ds.type==='bar'?'bottom':'bottom';
