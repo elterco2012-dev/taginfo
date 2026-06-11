@@ -1465,7 +1465,7 @@ function sparkWithAvg(data,dates,fmtFn){
   const avgStr=fmtFn?fmtFn(avg):fmtN(avg,1);
   return `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
     ${sparkSvg(data,74,30,dates,fmtFn)}
-    <span style="font-size:9px;color:var(--text-3);font-variant-numeric:tabular-nums" title="Promedio 14 días hábiles">x̄ ${avgStr}</span>
+    <span style="font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums" title="Promedio 14 días hábiles">prom. ${avgStr}</span>
   </div>`;
 }
 
@@ -2035,8 +2035,14 @@ html,body{height:100%;background:var(--bg);overflow:hidden;font-family:var(--fon
 .b1-bar-bg{flex:1;height:26px;background:var(--border);border-radius:13px;position:relative;overflow:hidden}
 .b1-bar-fill{height:100%;border-radius:13px}
 .b1-bar-pace{position:absolute;top:-6px;bottom:-6px;width:4px;background:var(--text)}
-.b1-plan-foot{display:flex;gap:40px;margin-top:20px;font-size:20px;color:var(--text-2)}
+.b1-plan-foot{display:flex;gap:0;margin-top:20px;font-size:20px;color:var(--text-2)}
 .b1-plan-foot b{color:var(--text);font-weight:700}
+.b1-plan-foot .pf-item{padding:10px 24px;border-radius:10px}
+.b1-plan-foot .pf-item:first-child{background:var(--blue-bg);color:#1e40af}
+.b1-plan-foot .pf-item:first-child b{color:#1d4ed8}
+.b1-plan-foot .pf-item:nth-child(2){background:var(--amber-bg);color:#92400e;margin:0 16px}
+.b1-plan-foot .pf-item:nth-child(2) b{color:#b45309}
+.b1-plan-foot .pf-item:last-child{background:var(--panel-2);color:var(--text-2)}
 .b1-plan-r{width:1px;align-self:stretch;background:var(--border)}
 .b1-proy{flex-shrink:0;text-align:right;min-width:300px}
 .b1-proy .l{font-size:17px;text-transform:uppercase;letter-spacing:1px;color:var(--text-3);margin-bottom:10px}
@@ -2262,9 +2268,9 @@ function board1(){
             <div class="b1-bar-bg"><div class="b1-bar-fill" style="width:${Math.min(PLAN.pct,100)}%;background:${fill}"></div><div class="b1-bar-pace" style="left:${Math.min(PLAN.pace,100)}%"></div></div>
           </div>
           <div class="b1-plan-foot">
-            <span>Día hábil <b class="num">${PLAN.dia_habil} de ${PLAN.dias_tot}</b></span>
-            <span><b class="num">${PLAN.dias_rest}</b> días hábiles restantes</span>
-            <span>Restante: <b class="num">${fmtK(PLAN.plan_total-PLAN.fact_acum)}</b></span>
+            <span class="pf-item">📅 Día hábil <b class="num">${PLAN.dia_habil} de ${PLAN.dias_tot}</b></span>
+            <span class="pf-item">⏳ <b class="num">${PLAN.dias_rest}</b> días hábiles restantes</span>
+            <span class="pf-item">💰 Restante: <b class="num">${fmtK(PLAN.plan_total-PLAN.fact_acum)}</b></span>
           </div>
         </div>
         <div class="b1-plan-r"></div>
@@ -2346,12 +2352,46 @@ function drawChart(){
   if(!cv||!TREND.length)return;
   if(!window.Chart){ensureChartJs(drawChart);return;}
   if(chartInst){chartInst.destroy();chartInst=null;}
+  // Plugin inline: etiquetas sobre las barras (ped) y sobre los puntos (M$)
+  const labelPlugin={
+    id:'kiosk-labels',
+    afterDatasetsDraw(chart){
+      const ctx=chart.ctx;
+      chart.data.datasets.forEach((ds,di)=>{
+        const meta=chart.getDatasetMeta(di);
+        if(meta.hidden)return;
+        meta.data.forEach((el,i)=>{
+          const v=ds.data[i];
+          if(v==null)return;
+          const raw=TREND[i];
+          let lbl;
+          if(ds.type==='bar'||ds.yAxisID==='y1'){
+            // Pedidos totales del mes (no por día) sobre la barra
+            lbl=Math.round(raw[1]).toLocaleString('es-AR');
+          } else {
+            // M$ total del mes sobre el punto de la línea
+            lbl='$'+(raw[2]/raw[3]).toFixed(1).replace('.',',')+' M';
+          }
+          ctx.save();
+          ctx.font=ds.type==='bar'?'600 13px system-ui':'700 12px system-ui';
+          ctx.fillStyle=ds.type==='bar'?'#64748b':'#cc0000';
+          ctx.textAlign='center';
+          ctx.textBaseline=ds.type==='bar'?'bottom':'bottom';
+          const x=el.x, y=ds.type==='bar'?el.y-3:el.y-8;
+          ctx.fillText(lbl,x,y);
+          ctx.restore();
+        });
+      });
+    }
+  };
   chartInst=new Chart(cv.getContext('2d'),{
+    plugins:[labelPlugin],
     data:{labels:TREND.map(t=>t[0]),datasets:[
       {type:'bar',label:'Pedidos / día hábil',data:TREND.map(t=>+(t[1]/t[3]).toFixed(1)),backgroundColor:'rgba(203,213,225,.75)',borderColor:'#cbd5e1',borderWidth:1,yAxisID:'y1',order:2},
-      {type:'line',label:'M$ / día hábil',data:TREND.map(t=>+(t[2]/t[3]).toFixed(2)),borderColor:'#cc0000',backgroundColor:'rgba(204,0,0,.06)',borderWidth:3,pointRadius:3,pointBackgroundColor:'#cc0000',tension:.35,yAxisID:'y2',order:1,fill:true},
+      {type:'line',label:'M$ / día hábil',data:TREND.map(t=>+(t[2]/t[3]).toFixed(2)),borderColor:'#cc0000',backgroundColor:'rgba(204,0,0,.06)',borderWidth:3,pointRadius:4,pointBackgroundColor:'#cc0000',tension:.35,yAxisID:'y2',order:1,fill:true},
     ]},
     options:{responsive:true,maintainAspectRatio:false,animation:false,
+      layout:{padding:{top:28}},
       plugins:{legend:{labels:{color:'#475569',font:{size:16},boxWidth:16,padding:22,usePointStyle:true}},
         tooltip:{callbacks:{label:(c)=>c.dataset.label+': '+Number(c.parsed.y).toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1})}}},
       scales:{x:{ticks:{color:'#64748b',font:{size:14}},grid:{display:false}},
@@ -2365,7 +2405,7 @@ function tickClock(){
   if(t)t.textContent=now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
   if(d)d.textContent=now.toLocaleDateString('es-AR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
 }
-const ROTATE_MS=18000;
+const ROTATE_MS=20000;
 const NBOARDS=2;
 let board=0;
 let paused=false;
@@ -2457,24 +2497,20 @@ document.addEventListener('keydown',(e)=>{
 });
 fitStage();
 window.addEventListener('resize',fitStage);
-// Fullscreen: intento silencioso primero; si Chrome lo bloquea, muestra botón chico flotante
+// Fullscreen: intento silencioso primero; si Chrome lo bloquea, muestra overlay bloqueante
 (function(){
-  function showFsBtn(){
-    if(document.getElementById('fs-btn'))return;
-    const btn=document.createElement('button');
-    btn.id='fs-btn';
-    btn.textContent='⛶ Pantalla completa';
-    btn.style.cssText='position:fixed;top:12px;right:12px;z-index:9999;padding:8px 14px;background:rgba(0,0,0,.65);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;backdrop-filter:blur(6px)';
-    btn.onclick=function(){
-      if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().then(()=>{btn.remove();fitStage();}).catch(()=>{});
-    };
-    document.body.appendChild(btn);
-    // Se oculta solo si el usuario entra en fullscreen de otra forma (F, controles)
-    document.addEventListener('fullscreenchange',()=>{if(document.fullscreenElement)btn.remove();});
+  function showOverlay(){
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(3px)';
+    ov.innerHTML='<div style="background:#fff;border-radius:16px;padding:32px 48px;text-align:center;font-family:system-ui,sans-serif"><div style="font-size:22px;font-weight:700;color:#0f172a;margin-bottom:8px">Click para entrar en pantalla completa</div><div style="font-size:14px;color:#64748b">o presioná F en cualquier momento</div></div>';
+    function enterFs(){ov.remove();if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{});fitStage();}
+    ov.addEventListener('click',enterFs);
+    document.addEventListener('keydown',function h(e){if(e.key==='f'||e.key==='F'||e.key==='Enter'){document.removeEventListener('keydown',h);enterFs();}},true);
+    document.body.appendChild(ov);
   }
   if(document.documentElement.requestFullscreen){
-    document.documentElement.requestFullscreen().then(()=>fitStage()).catch(()=>showFsBtn());
-  }
+    document.documentElement.requestFullscreen().then(()=>fitStage()).catch(()=>showOverlay());
+  } else { showOverlay(); }
 })();
 render();
 syncCtrl();
