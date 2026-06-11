@@ -1589,13 +1589,38 @@ function renderChart(trend){
   const barBorder=trend.map(t=>t.is_partial
     ?(dark?'#334155':'#e2e8f0')
     :(dark?'#475569':'#cbd5e1'));
-  if(chartObj){chartObj.destroy();chartObj=null;}
   chartObj=new Chart(ctx,{
+    plugins:[{
+      id:'dash-labels',
+      afterDatasetsDraw(chart){
+        const ctx2=chart.ctx;
+        chart.data.datasets.forEach((ds,di)=>{
+          const meta=chart.getDatasetMeta(di);
+          if(meta.hidden)return;
+          meta.data.forEach((el,i)=>{
+            const t=trend[i];
+            if(!t)return;
+            const isBars=(ds.type==='bar'||ds.yAxisID==='y1');
+            const lbl=isBars
+              ? Math.round(t.pedidos/(t.dias_hab||1)).toLocaleString('es-AR')
+              : '$'+Math.round((t.valor/1e6)/(t.dias_hab||1));
+            ctx2.save();
+            ctx2.font=isBars?'600 10px system-ui':'700 10px system-ui';
+            ctx2.fillStyle=isBars?txtColor:'#cc0000';
+            ctx2.textAlign='center';
+            ctx2.textBaseline='bottom';
+            ctx2.fillText(lbl, el.x, isBars?el.y-2:el.y-6);
+            ctx2.restore();
+          });
+        });
+      }
+    }],
     data:{labels,datasets:[
-      {type:'bar',label:'Pedidos / día hábil',data:barData,backgroundColor:barBg,borderColor:barBorder,borderWidth:1,yAxisID:'y1',borderRadius:3,order:2},
-      {type:'line',label:'M$ / día hábil',data:lineData,borderColor:'#cc0000',backgroundColor:'rgba(204,0,0,.06)',borderWidth:2.5,tension:.35,yAxisID:'y2',fill:true,pointRadius:2.5,pointBackgroundColor:'#cc0000',order:1},
+      {type:'bar',label:'Pedidos / día',data:barData,backgroundColor:barBg,borderColor:barBorder,borderWidth:1,yAxisID:'y1',borderRadius:3,order:2},
+      {type:'line',label:'Venta M$ / día',data:lineData,borderColor:'#cc0000',backgroundColor:'rgba(204,0,0,.06)',borderWidth:2.5,tension:.35,yAxisID:'y2',fill:true,pointRadius:2.5,pointBackgroundColor:'#cc0000',order:1},
     ]},
     options:{responsive:true,maintainAspectRatio:false,
+      layout:{padding:{top:24}},
       interaction:{mode:'index',intersect:false},
       plugins:{
         legend:{position:'bottom',labels:{boxWidth:12,padding:16,color:txtColor,font:{size:11},usePointStyle:true}},
@@ -2387,7 +2412,7 @@ function drawChart(){
   chartInst=new Chart(cv.getContext('2d'),{
     plugins:[labelPlugin],
     data:{labels:TREND.map(t=>t[0]),datasets:[
-      {type:'bar',label:'Pedidos / día hábil',data:TREND.map(t=>+(t[1]/t[3]).toFixed(1)),backgroundColor:'rgba(203,213,225,.75)',borderColor:'#cbd5e1',borderWidth:1,yAxisID:'y1',order:2},
+      {type:'bar',label:'Pedidos / día',data:TREND.map(t=>+(t[1]/t[3]).toFixed(1)),backgroundColor:'rgba(203,213,225,.75)',borderColor:'#cbd5e1',borderWidth:1,yAxisID:'y1',order:2},
       {type:'line',label:'Venta M$ / día',data:TREND.map(t=>+(t[2]/t[3]).toFixed(2)),borderColor:'#cc0000',backgroundColor:'rgba(204,0,0,.06)',borderWidth:3,pointRadius:4,pointBackgroundColor:'#cc0000',tension:.35,yAxisID:'y2',order:1,fill:true},
     ]},
     options:{responsive:true,maintainAspectRatio:false,animation:false,
@@ -2432,10 +2457,20 @@ function toggleFull(){
   if(document.fullscreenElement)document.exitFullscreen();
   else if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen();
 }
+let _exitingKiosk=false;
 function exitKiosk(){
+  _exitingKiosk=true;
   if(document.fullscreenElement)document.exitFullscreen();
   window.location.href='/';
 }
+// Cuando Chrome sale del fullscreen con Esc (lo intercepta antes que nuestro JS),
+// detectamos el cambio y navegamos al dashboard si no fue el botón salir.
+document.addEventListener('fullscreenchange',()=>{
+  if(!document.fullscreenElement && !_exitingKiosk){
+    // Pequeño delay para que el Esc del overlay no dispare esto prematuramente
+    setTimeout(()=>{ if(!document.fullscreenElement) window.location.href='/'; }, 200);
+  }
+});
 async function refrescar(){
   try{
     const res=await fetch('/api/data',{cache:'no-store'});
