@@ -1011,7 +1011,7 @@ body.tv .meta-curr{font-size:28px}
     <div class="div-v"></div>
     <div>
       <div class="hdr-title">Operations Dashboard</div>
-      <div class="hdr-sub">Reactor · MSPA · Tiempo Real</div>
+      <div class="hdr-sub">Reactor · MSPA · Actualización automática</div>
     </div>
   </div>
   <div class="hdr-right">
