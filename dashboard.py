@@ -2291,7 +2291,7 @@ function ctxBar(){
     ${ico(onTrack?'trendingUp':'trendingDown',30)}
     <span class="ctx-alert">${alertTxt}</span>
     <span class="ctx-sep">·</span>
-    <span class="ctx-metric">Falta <b class="num">${fmtK(PLAN.plan_total-PLAN.fact_acum)}</b></span>
+    <span class="ctx-metric">Restante <b class="num">${fmtK(PLAN.plan_total-PLAN.fact_acum)}</b></span>
     <span class="ctx-sep">·</span>
     <span class="ctx-metric">Venta hoy <b class="num">${fmtK(VENTA.val)}</b></span>
     ${tagTxt?`<span class="ctx-tag">${tagTxt}</span>`:''}
