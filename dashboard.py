@@ -1434,12 +1434,7 @@ function sparkSvg(data,w=74,h=30,dates,fmtFn){
   const pts=data.map((v,i)=>[pad+i*step, h-pad-((v-mn)/rng)*(h-pad*2)]);
   const d=pts.map(([x,y],i)=>`${i?'L':'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
   const area=`${d} L${pts[pts.length-1][0].toFixed(1)} ${h} L${pts[0][0].toFixed(1)} ${h} Z`;
-  // Tendencia reciente: promedio última mitad vs. primera mitad
-  const mid=Math.floor(data.length/2);
-  const avgFirst=data.slice(0,mid).reduce((a,v)=>a+v,0)/mid;
-  const avgLast=data.slice(mid).reduce((a,v)=>a+v,0)/(data.length-mid);
-  const up=avgLast>=avgFirst;
-  const c=up?'var(--green)':'var(--red)';
+  const c='var(--text-3)';
   const gid='sg'+Math.abs(data.slice(0,3).reduce((a,v,i)=>a^(v*1000+i*7),0)).toString(36);
   const [lx,ly]=pts[pts.length-1];
   // hit areas para tooltip
@@ -2042,8 +2037,15 @@ html,body{height:100%;background:var(--bg);overflow:hidden;font-family:var(--fon
 .kt-alert.ok{background:#d1fae5;color:#065f46;border-bottom:2px solid #059669}
 .kt-board{position:absolute;left:0;right:0;bottom:14px;padding:26px 44px 0;display:none}
 .kt-board.active{display:block}
-.kt-board.top1{top:166px}
-.kt-board.top0{top:96px}
+.kt-board.top1{top:220px}
+.kt-board.top0{top:150px}
+.kt-north{display:flex;align-items:center;gap:16px;font-size:19px;color:var(--text-2);padding:0 44px;height:54px;background:var(--panel-2);border-bottom:1px solid var(--border)}
+.kt-north b{color:var(--text);font-weight:800;margin-left:4px}
+.kt-north .sep{color:var(--border-2)}
+.north-tag{margin-left:auto;font-size:15px;font-weight:700;padding:4px 12px;border-radius:8px}
+.north-tag.ok{background:var(--green-bg);color:#065f46}
+.north-tag.warn{background:#fef3c7;color:#92400e}
+.north-tag.danger{background:#fee2e2;color:#991b1b}
 .kt-eyebrow{display:flex;align-items:center;gap:9px;font-size:16px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:var(--text-3);margin-bottom:14px}
 .kt-eyebrow .ico{width:18px;height:18px}
 .b1-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto auto;gap:20px;height:100%}
@@ -2077,6 +2079,12 @@ html,body{height:100%;background:var(--bg);overflow:hidden;font-family:var(--fon
 .b1-state.warn{background:#fef3c7;color:#92400e;border:1px solid #f59e0b}
 .b1-state.ok{background:#d1fae5;color:#065f46;border:1px solid #059669}
 .b1-stat{display:flex;flex-direction:column;justify-content:center}
+.b1-top5{display:flex;flex-direction:column;justify-content:center}
+.b1-top5-row{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--border)}
+.b1-top5-row:last-child{border-bottom:none}
+.b1-top5-rank{font-size:18px;font-weight:800;color:var(--text-3);width:24px;text-align:center;flex-shrink:0}
+.b1-top5-name{flex:1;font-size:20px;color:var(--text-2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.b1-top5-val{font-size:24px;font-weight:700;color:var(--text);white-space:nowrap}
 .b1-stat .l{font-size:18px;text-transform:uppercase;letter-spacing:1px;color:var(--text-3);margin-bottom:12px}
 .b1-stat .v{font-size:72px;font-weight:700;line-height:1}
 .b1-stat .s{font-size:20px;color:var(--text-2);margin-top:10px}
@@ -2095,7 +2103,8 @@ html,body{height:100%;background:var(--bg);overflow:hidden;font-family:var(--fon
 .b1-live{grid-column:1 / -1;background:var(--panel-2);border:1px solid var(--border);border-radius:16px;padding:20px 30px;display:flex;align-items:center;gap:0}
 .b1-live-head{display:flex;flex-direction:column;gap:8px;padding-right:34px;border-right:1px solid var(--border);margin-right:6px}
 .b1-live-badge{display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:800;letter-spacing:.8px;color:var(--green);text-transform:uppercase}
-.b1-live-badge .pdot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 10px 1px rgba(34,197,94,.7)}
+.b1-live-badge .pdot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 10px 1px rgba(34,197,94,.7);animation:pulse-dot 2s ease-in-out infinite}
+@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.85)}}
 .b1-live-ttl{font-size:17px;color:var(--text-3)}
 .b1-live-items{flex:1;display:grid;grid-template-columns:repeat(5,1fr);gap:0}
 .b1-live-item{padding:0 26px;border-left:1px solid var(--border)}
@@ -2187,6 +2196,7 @@ const FLOW={informado:{v:0,val:0},retenido:{v:0,val:0,pct:0},anulado:{v:0,val:0,
 const HOY={pedidos:0,monto:0,ticket:0,ped_vend:0,lineas:0};
 const RITMO={curr:0,last:0,pct:0,pace:0,sobre:0,onTrack:true};
 let MSPA=[];
+let TOP5=[];
 let TREND=[];
 const DATOS_AL={mspa:'—',reactor:'—',mspaOk:true,reactorOk:true};
 const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -2238,6 +2248,8 @@ function mapData(d){
   const paceTarget=RITMO.last>0?(Math.min(RITMO.pace,100)/100)*RITMO.last:0;
   RITMO.onTrack=RITMO.curr>=paceTarget;
   RITMO.sobre=Math.round(RITMO.curr-paceTarget);
+  // Top 5 facturación del día (de MSPA)
+  TOP5=(m.sellers_fact_top||[]).map(s=>({n:s.nombre||'',v:s.val||0,p:s.ped||0}));
   // TREND (solo meses con datos)
   TREND=(r.trend||[]).map(t=>{
     const[y,mo]=String(t.mes).split('-');
@@ -2276,6 +2288,19 @@ function alertRibbon(){
   const sev=(PLAN.pace-PLAN.pct)>10?'danger':'warn';
   return `<div class="kt-alert ${sev}">${ico('trendingDown',30)}<span>Plan de ventas <b>${gap} pts por debajo del ritmo</b> esperado — ${fmtN(PLAN.pct,1)}% acumulado vs ${fmtN(PLAN.pace,1)}% esperado a hoy</span></div>`;
 }
+function northStrip(){
+  if(!PLAN.plan_total) return '';
+  const onTrack=PLAN.pct>=PLAN.pace;
+  const gap=Math.abs(PLAN.pace-PLAN.pct).toFixed(1).replace('.',',');
+  const tagCls=onTrack?'ok':(PLAN.pace-PLAN.pct)>10?'danger':'warn';
+  const tagTxt=onTrack?'En ritmo':`${gap} pts bajo ritmo`;
+  return `<div class="kt-north">
+    <span>PLAN <b class="num">${fmtN(PLAN.pct,1)}%</b></span><span class="sep">·</span>
+    <span>PROYECCIÓN <b class="num">${fmtK(PLAN.proy)}</b></span><span class="sep">·</span>
+    <span>VENTA HOY <b class="num">${fmtK(VENTA.val)}</b></span>
+    <span class="north-tag ${tagCls}">${tagTxt}</span>
+  </div>`;
+}
 function board1(){
   const onTrack=PLAN.pct>=PLAN.pace;
   const fill=onTrack?'var(--green)':'var(--amber)';
@@ -2307,8 +2332,10 @@ function board1(){
         </div>
       </div>
       <div class="b1-stat panel"><div class="l">Venta del Día · MSPA</div><div class="v num">${fmtK(VENTA.val)}</div><div class="s num">${fmtN(VENTA.ords)} pedidos facturados</div></div>
-      <div class="b1-stat panel"><div class="l">Pedidos Informados</div><div class="v num">${fmtN(PEDIDOS.v)}</div>
-        <span class="b1-delta ${up?'up':'down'}">${ico(up?'arrowUp':'arrowDown',22)} ${fmtN(Math.abs(PEDIDOS.delta),1)}% <span style="color:var(--text-3);font-weight:400">vs. mismo día hábil mes anterior</span></span></div>
+      <div class="panel b1-top5">
+        <div class="kt-eyebrow" style="margin-bottom:10px">🏆 Top facturación · hoy</div>
+        ${TOP5.length?TOP5.map((s,i)=>`<div class="b1-top5-row"><span class="b1-top5-rank">${i+1}</span><span class="b1-top5-name">${s.n}</span><span class="b1-top5-val num">${fmtK(s.v)}</span></div>`).join(''):'<div style="color:var(--text-3);font-size:18px;padding:8px 0">Sin datos</div>'}
+      </div>
       <div class="b1-flow panel">
         ${flowCell('tk-blue','Informado',fmtK(FLOW.informado.val),fmtN(FLOW.informado.v)+' pedidos')}
         ${flowCell('tk-amber','Retenido',fmtK(FLOW.retenido.val),fmtN(FLOW.retenido.v)+' ped · '+fmtN(FLOW.retenido.pct,1)+'%')}
@@ -2412,7 +2439,7 @@ function drawChart(){
   chartInst=new Chart(cv.getContext('2d'),{
     plugins:[labelPlugin],
     data:{labels:TREND.map(t=>t[0]),datasets:[
-      {type:'bar',label:'Pedidos / día',data:TREND.map(t=>+(t[1]/t[3]).toFixed(1)),backgroundColor:'rgba(203,213,225,.75)',borderColor:'#cbd5e1',borderWidth:1,yAxisID:'y1',order:2},
+      {type:'bar',label:'Pedidos / día',data:TREND.map(t=>+(t[1]/t[3]).toFixed(1)),backgroundColor:'rgba(203,213,225,.30)',borderColor:'rgba(203,213,225,.4)',borderWidth:0,yAxisID:'y1',order:2},
       {type:'line',label:'Venta M$ / día',data:TREND.map(t=>+(t[2]/t[3]).toFixed(2)),borderColor:'#cc0000',backgroundColor:'rgba(204,0,0,.06)',borderWidth:3,pointRadius:4,pointBackgroundColor:'#cc0000',tension:.35,yAxisID:'y2',order:1,fill:true},
     ]},
     options:{responsive:true,maintainAspectRatio:false,animation:false,
@@ -2437,7 +2464,7 @@ let paused=false;
 let rotStart=Date.now();
 const stage=document.getElementById('stage');
 function render(){
-  stage.innerHTML=topBar()+alertRibbon()+(board===0?board1():board2())+
+  stage.innerHTML=topBar()+alertRibbon()+northStrip()+(board===0?board1():board2())+
     `<div class="kt-rot"><div class="kt-rot-track"><div class="kt-rot-fill" id="kt-fill"></div></div></div>
      <div class="kt-dots" id="kt-dots">${Array.from({length:NBOARDS},(_,i)=>
         `<span class="kt-pg${board===i?' on':''}" data-go="${i}"></span>`).join('')}</div>`;
