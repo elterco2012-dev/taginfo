@@ -3,7 +3,7 @@ ftp_snapshot.py — Sube un snapshot JSON + viewer HTML al servidor FTP.
 Corre como daemon thread iniciado por dashboard.py.
 SOLO LECTURA: nunca modifica la base de datos.
 """
-import os, json, time, ftplib, threading, hashlib, hmac, datetime, zlib, struct, io
+import os, json, time, ftplib, threading, hashlib, hmac, datetime, zlib, struct, io, base64
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FuturesTimeout
 
 # ── Configuración por variables de entorno ──────────────────────────────────
@@ -15,6 +15,21 @@ FTP_INTERVAL = int(os.environ.get("FTP_INTERVAL", "300"))
 FTP_ENABLED  = os.environ.get("FTP_ENABLED", "0") == "1"
 FTP_AUTH_USER = os.environ.get("FTP_AUTH_USER", "wurth")
 FTP_AUTH_PASS = os.environ.get("FTP_AUTH_PASS", "")
+
+# ── Logo loader ──────────────────────────────────────────────────────────────
+def _load_logo_html():
+    here = os.path.dirname(os.path.abspath(__file__))
+    for name in ["og-image.png", "wurth_logo.png", "logo.png", "wurth.png",
+                 "wurth_logo.jpg", "logo.jpg", "wurth_logo.svg", "logo.svg"]:
+        path = os.path.join(here, name)
+        if os.path.exists(path):
+            ext  = name.rsplit(".", 1)[-1]
+            mime = "image/svg+xml" if ext == "svg" else f"image/{ext}"
+            with open(path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode()
+            return f'<img src="data:{mime};base64,{b64}" style="height:32px;width:auto;display:block" alt="Würth">'
+    # Fallback: texto
+    return '<span style="color:#fff;font-weight:900;font-size:18px;font-style:italic">W</span>'
 
 # ── HTML del viewer móvil (PWA v2 — vista gerencial) ────────────────────────
 _VIEWER_HTML = r"""<!DOCTYPE html>
@@ -47,7 +62,7 @@ body{display:flex;flex-direction:column;max-width:430px;margin:0 auto;padding:en
 .hdr-left{display:flex;flex-direction:column;gap:2px}
 .greeting{font-size:14px;color:var(--text3);font-weight:400}
 .hdr-title{font-size:22px;font-weight:800;letter-spacing:-.4px;color:var(--text)}
-.logo{width:44px;height:44px;background:var(--red);border-radius:11px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;font-style:italic;color:#fff;flex-shrink:0;box-shadow:0 4px 14px rgba(200,16,46,.35)}
+.logo{width:44px;height:44px;background:transparent;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden}
 
 /* ── Refresh btn ── */
 .refresh-btn{background:none;border:1px solid var(--line);color:var(--text3);border-radius:20px;padding:7px 14px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .2s}
@@ -151,7 +166,7 @@ body{display:flex;flex-direction:column;max-width:430px;margin:0 auto;padding:en
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
       Actualizar
     </button>
-    <div class="logo">W</div>
+    <div class="logo">@@LOGO@@</div>
   </div>
 </div>
 
@@ -488,7 +503,7 @@ _MANIFEST = json.dumps({
     ]
 }, ensure_ascii=False, indent=2)
 
-_SW_JS = r"""const CACHE='wurth-v3';
+_SW_JS = r"""const CACHE='wurth-__CACHE_VER__';
 const ASSETS=['./','./manifest.json','./icon-192.png'];
 self.addEventListener('install',e=>e.waitUntil(
   caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())
@@ -681,9 +696,17 @@ def _snapshot_loop(get_data_fn, interval):
                 # snapshot.json
                 _ftp_upload_text(ftp, "snapshot.json", snap_json)
 
-                # viewer HTML (replace interval placeholder)
-                viewer = _VIEWER_HTML.replace("__INTERVAL__", str(interval))
+                # viewer HTML — inyectar intervalo, versión de caché y logo
+                cache_ver = datetime.datetime.now().strftime("%Y%m%d%H%M")
+                logo_html = _load_logo_html()
+                viewer = (_VIEWER_HTML
+                          .replace("__INTERVAL__", str(interval))
+                          .replace("@@LOGO@@", logo_html))
                 _ftp_upload_text(ftp, "index.html", viewer)
+
+                # SW con versión única para forzar actualización en cliente
+                sw = _SW_JS.replace("__CACHE_VER__", cache_ver)
+                _ftp_upload_text(ftp, "sw.js", sw)
 
                 # .htaccess SIEMPRE — pisa cualquier versión vieja que bloquee snapshot.json
                 _ftp_upload_text(ftp, ".htaccess", _HTACCESS)
@@ -692,9 +715,8 @@ def _snapshot_loop(get_data_fn, interval):
                 if FTP_AUTH_PASS:
                     _ftp_upload_text(ftp, "index.php", _INDEX_PHP)
 
-                # manifest + sw
+                # manifest
                 _ftp_upload_text(ftp, "manifest.json", _MANIFEST)
-                _ftp_upload_text(ftp, "sw.js", _SW_JS)
 
                 # icons (only upload if they don't exist yet — save bandwidth)
                 existing = ftp.nlst()
