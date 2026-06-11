@@ -333,7 +333,7 @@ def fetch_reactor(target_date=None):
                    "cnt": int(r[1] or 0), "val": float(r[2] or 0)} for r in an_rows]
 
     # Sparklines — últimos 14 días hábiles (reusa wd_log ya consultado)
-    sparklines = {"pedidos": [], "ventas": [], "ped_vend": [], "avg_lin": []}
+    sparklines = {"pedidos": [], "ventas": [], "ped_vend": [], "avg_lin": [], "ticket": [], "dates": []}
     try:
         if wd_log:
             spark_dates = sorted(d for d in wd_log if d <= target_str)[-14:]
@@ -372,6 +372,14 @@ def fetch_reactor(target_date=None):
                     sparklines["ventas"].append(round(val / 1e6, 3))
                     sparklines["ped_vend"].append(round(ped / vend, 2) if vend else 0)
                     sparklines["avg_lin"].append(round(lin / lped, 2) if lped else 0)
+                    sparklines["ticket"].append(round(val / ped) if ped else 0)
+                    # fecha legible dd/mm para tooltip
+                    try:
+                        from datetime import date as _date
+                        parts = fd.split("-")
+                        sparklines["dates"].append(f"{parts[2]}/{parts[1]}")
+                    except Exception:
+                        sparklines["dates"].append(fd)
     except Exception as e:
         print(f"  sparklines error: {e}")
 
@@ -1133,6 +1141,7 @@ body.tv .meta-curr{font-size:28px}
         <div class="kpi-lbl">Pedido Promedio</div>
         <div class="kpi-top">
           <div class="kpi-val num" id="k-ticket">—</div>
+          <div id="spark-ticket"></div>
         </div>
         <div class="kpi-foot" id="d-ticket"></div>
       </div>
@@ -1418,7 +1427,7 @@ function nextFmt(secs){
 
 function semaforo(v,w,d){return v>=d?'danger':v>=w?'warn':'ok'}
 
-function sparkSvg(data,w=74,h=30){
+function sparkSvg(data,w=74,h=30,dates,fmtFn){
   if(!data||data.length<2)return '';
   const mn=Math.min(...data),mx=Math.max(...data),rng=(mx-mn)||1;
   const pad=2,step=(w-pad*2)/(data.length-1);
@@ -1433,14 +1442,31 @@ function sparkSvg(data,w=74,h=30){
   const c=up?'var(--green)':'var(--red)';
   const gid='sg'+Math.abs(data.slice(0,3).reduce((a,v,i)=>a^(v*1000+i*7),0)).toString(36);
   const [lx,ly]=pts[pts.length-1];
-  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+  // hit areas para tooltip
+  const hits=pts.map(([x,y],i)=>{
+    const lbl=dates&&dates[i]?dates[i]:'';
+    const val=fmtFn?fmtFn(data[i]):fmtN(data[i],1);
+    return `<rect x="${(x-step/2).toFixed(1)}" y="0" width="${step.toFixed(1)}" height="${h}" fill="transparent"><title>${lbl}: ${val}</title></rect>`;
+  }).join('');
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="overflow:visible">
   <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0%" stop-color="${c}" stop-opacity=".18"/><stop offset="100%" stop-color="${c}" stop-opacity="0"/>
   </linearGradient></defs>
   <path d="${area}" fill="url(#${gid})"/>
   <path d="${d}" fill="none" stroke="${c}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
   <circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="2.2" fill="${c}"/>
+  ${hits}
 </svg>`;
+}
+
+function sparkWithAvg(data,dates,fmtFn){
+  if(!data||data.length<2)return '';
+  const avg=data.reduce((a,v)=>a+v,0)/data.length;
+  const avgStr=fmtFn?fmtFn(avg):fmtN(avg,1);
+  return `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+    ${sparkSvg(data,74,30,dates,fmtFn)}
+    <span style="font-size:9px;color:var(--text-3);font-variant-numeric:tabular-nums" title="Promedio 14 días hábiles">x̄ ${avgStr}</span>
+  </div>`;
 }
 
 function deltaHtml(curr,prev,compLbl){
@@ -1740,12 +1766,14 @@ function render(data){
   document.getElementById('k-avg').textContent=fmtN(r.avg_lineas,1);
   document.getElementById('d-avg').innerHTML=c&&c.avg_lineas?deltaHtml(r.avg_lineas,c.avg_lineas,compLbl):'';
 
-  // Sparklines
+  // Sparklines con promedio y tooltip de fecha
   const sp=r.sparklines||{};
-  document.getElementById('spark-ped').innerHTML=sparkSvg(sp.pedidos);
-  document.getElementById('spark-ventas').innerHTML=sparkSvg(sp.ventas);
-  document.getElementById('spark-vend').innerHTML=sparkSvg(sp.ped_vend);
-  document.getElementById('spark-avg').innerHTML=sparkSvg(sp.avg_lin);
+  const spd=sp.dates||[];
+  document.getElementById('spark-ped').innerHTML=sparkWithAvg(sp.pedidos,spd,v=>fmtN(v,0));
+  document.getElementById('spark-ventas').innerHTML=sparkWithAvg(sp.ventas,spd,v=>fmtK(v*1e6));
+  document.getElementById('spark-vend').innerHTML=sparkWithAvg(sp.ped_vend,spd,v=>fmtN(v,1));
+  document.getElementById('spark-avg').innerHTML=sparkWithAvg(sp.avg_lin,spd,v=>fmtN(v,1));
+  document.getElementById('spark-ticket').innerHTML=sparkWithAvg(sp.ticket,spd,v=>fmtK(v));
 
   // Flow bar
   const fact_cnt=(bs[13]?.cnt||0)+(bs[18]?.cnt||0);
