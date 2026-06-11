@@ -2266,7 +2266,7 @@ function topBar(){
       @@LOGO@@
       <div class="kt-divider"></div>
       <div><div class="kt-title">Operaciones · Tiempo Real</div>
-        <div class="kt-sub">Reactor · MSPA · Sala de control</div></div>
+        <div class="kt-sub">Reactor · MSPA · Actualización automática</div></div>
     </div>
     <div class="kt-right">
       <div class="kt-conn">
