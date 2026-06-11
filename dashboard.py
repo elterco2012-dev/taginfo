@@ -849,7 +849,7 @@ body.dark .date-pop input{color-scheme:dark}
 .plan-bar-pace{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text);z-index:2}
 .plan-bar-pace::after{content:'';position:absolute;top:-3px;left:-2px;border-left:3px solid transparent;border-right:3px solid transparent;border-top:4px solid var(--text)}
 .hero-foot{display:flex;justify-content:space-between;font-size:11px;color:var(--text-3);margin-top:4px;font-variant-numeric:tabular-nums}
-.hero-proy{display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text-2);font-variant-numeric:tabular-nums}
+.hero-proy{display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:14px;color:var(--text-2);font-variant-numeric:tabular-nums}
 .state-tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 9px;border-radius:6px;font-weight:600;white-space:nowrap;flex-shrink:0}
 .state-ok{background:var(--pos-bg);color:var(--pos-fg)}
 .state-warn{background:var(--amber-bg);color:var(--amber)}
@@ -871,7 +871,7 @@ body.dark .state-neutral{background:#334155;color:var(--text-3)}
 .kpi-val{font-size:25px;font-weight:700;line-height:1;color:var(--text);font-variant-numeric:tabular-nums}
 .spark{width:74px;height:30px;flex-shrink:0;opacity:.9}
 .kpi-foot{display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap}
-.delta{display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
+.delta{display:inline-flex;align-items:center;gap:2px;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
 .delta .ico{width:13px;height:13px}
 .delta.up{color:var(--pos-fg)}.delta.down{color:var(--neg-fg)}.delta.flat{color:var(--text-3)}
 .meta-chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--text-3);font-variant-numeric:tabular-nums}
@@ -895,7 +895,7 @@ body.dark .state-neutral{background:#334155;color:var(--text-3)}
 .tk-blue{background:var(--blue)}.tk-amber{background:var(--amber)}.tk-red{background:var(--red)}.tk-green{background:var(--green)}
 .flow-label{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text-2)}
 .flow-val{font-size:24px;font-weight:700;line-height:1;color:var(--text);font-variant-numeric:tabular-nums}
-.flow-sub{font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums}
+.flow-sub{font-size:13px;color:var(--text-3);font-variant-numeric:tabular-nums}
 .alert-icon{position:absolute;top:8px;right:10px;display:flex;align-items:center}
 .alert-icon .ico{width:14px;height:14px;color:var(--amber)}
 .flow-cell.pulse-warn{background:var(--amber-bg);animation:bgpulse 3s ease-in-out infinite}
@@ -1130,7 +1130,7 @@ body.tv .meta-curr{font-size:28px}
         <div class="kpi-foot" id="d-avg"></div>
       </div>
       <div class="kpi">
-        <div class="kpi-lbl">Ticket Promedio</div>
+        <div class="kpi-lbl">Pedido Promedio</div>
         <div class="kpi-top">
           <div class="kpi-val num" id="k-ticket">—</div>
         </div>
@@ -1195,7 +1195,7 @@ body.tv .meta-curr{font-size:28px}
         </div>
         <div class="flow-val num" id="fl-fact-val">—</div>
         <div class="flow-sub num" id="fl-fact-ped">—</div>
-        <div class="flow-sub num" id="fl-fact-mspa" style="font-size:9px;opacity:.7;margin-top:2px"></div>
+        <div class="flow-sub num" id="fl-fact-mspa" style="font-size:12px;opacity:.7;margin-top:2px"></div>
       </div>
     <div class="sk-overlay" style="flex-direction:row;gap:8px;padding:12px 16px">
       <div style="flex:1;display:flex;flex-direction:column;gap:7px">
@@ -1236,7 +1236,7 @@ body.tv .meta-curr{font-size:28px}
         <div class="hoy-val num" id="hoy-valor">—</div>
       </div>
       <div class="hoy-cell">
-        <div class="hoy-lbl">Ticket Promedio</div>
+        <div class="hoy-lbl">Pedido Promedio</div>
         <div class="hoy-val num" id="hoy-ticket">—</div>
       </div>
       <div class="hoy-cell">
@@ -1425,7 +1425,11 @@ function sparkSvg(data,w=74,h=30){
   const pts=data.map((v,i)=>[pad+i*step, h-pad-((v-mn)/rng)*(h-pad*2)]);
   const d=pts.map(([x,y],i)=>`${i?'L':'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
   const area=`${d} L${pts[pts.length-1][0].toFixed(1)} ${h} L${pts[0][0].toFixed(1)} ${h} Z`;
-  const up=data[data.length-1]>=data[0];
+  // Tendencia reciente: promedio última mitad vs. primera mitad
+  const mid=Math.floor(data.length/2);
+  const avgFirst=data.slice(0,mid).reduce((a,v)=>a+v,0)/mid;
+  const avgLast=data.slice(mid).reduce((a,v)=>a+v,0)/(data.length-mid);
+  const up=avgLast>=avgFirst;
   const c=up?'var(--green)':'var(--red)';
   const gid='sg'+Math.abs(data.slice(0,3).reduce((a,v,i)=>a^(v*1000+i*7),0)).toString(36);
   const [lx,ly]=pts[pts.length-1];
@@ -1655,7 +1659,7 @@ function renderTodaySummary(ts){
   const dp=ts.date?ts.date.split('-').reverse().join('/'):new Date().toLocaleDateString('es-AR');
   document.getElementById('hoy-lbl').textContent='Hoy '+dp+' — Pedidos informados hoy (en tiempo real)';
   document.getElementById('hoy-pedidos').textContent=fmtN(ts.pedidos,0);
-  document.getElementById('hoy-vend').textContent=fmtN(ts.vendedores,0)+' vendedores activos';
+  document.getElementById('hoy-vend').textContent=fmtN(ts.vendedores,0)+' vendedores con pedidos hoy';
   document.getElementById('hoy-valor').textContent=fmtK(ts.valor||0);
   document.getElementById('hoy-ticket').textContent=fmtK(ts.ticket||0);
   document.getElementById('hoy-pedvend').textContent=fmtN(ts.avg_ped_vend,1);
@@ -2423,12 +2427,23 @@ document.addEventListener('keydown',(e)=>{
   else if(e.key==='Escape')exitKiosk();
   poke();
 });
-// Auto fullscreen al entrar (el click del usuario fue el gesto que disparó la navegación)
-if(!document.fullscreenElement && document.documentElement.requestFullscreen){
-  document.documentElement.requestFullscreen().catch(()=>{});
-}
 fitStage();
 window.addEventListener('resize',fitStage);
+// Overlay de fullscreen — Chrome requiere gesto en la página destino
+(function(){
+  const ov=document.createElement('div');
+  ov.id='fs-ov';
+  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(3px)';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;padding:32px 48px;text-align:center;font-family:system-ui,sans-serif"><div style="font-size:22px;font-weight:700;color:#0f172a;margin-bottom:8px">Click para entrar en pantalla completa</div><div style="font-size:14px;color:#64748b">o presioná F en cualquier momento</div></div>';
+  function enterFs(){
+    ov.remove();
+    if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{});
+    fitStage();
+  }
+  ov.addEventListener('click',enterFs);
+  document.addEventListener('keydown',function h(e){if(e.key==='f'||e.key==='F'||e.key==='Enter'){document.removeEventListener('keydown',h);enterFs();}},true);
+  document.body.appendChild(ov);
+})();
 render();
 syncCtrl();
 refrescar();
