@@ -58,8 +58,9 @@ echo.
 echo [%date% %time%] Iniciando Wurth Dashboard...
 echo [%date% %time%] Iniciando Wurth Dashboard... >> "%LOGFILE%"
 
-:: ── 2) Lanzar el dashboard (su salida va a consola y al log) ────────────────
-%PYTHON% dashboard.py >> "%LOGFILE%" 2>&1
+:: ── 2) Lanzar el dashboard — salida en PANTALLA y al LOG a la vez (tee) ──────
+::    -u  = Python sin buffer, asi se ve en vivo
+%PYTHON% -u dashboard.py 2>&1 | powershell -NoProfile -Command "$input | Tee-Object -FilePath '%LOGFILE%' -Append"
 
 :: ── 3) Si llega aca es porque el proceso termino/crasheo ────────────────────
 echo.
