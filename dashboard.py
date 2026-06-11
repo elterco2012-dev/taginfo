@@ -2450,7 +2450,7 @@ function tickClock(){
   if(t)t.textContent=now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
   if(d)d.textContent=now.toLocaleDateString('es-AR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
 }
-const ROTATE_MS=20000;
+const ROTATE_MS=30000;
 const NBOARDS=2;
 let board=0;
 let paused=false;
