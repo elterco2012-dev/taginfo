@@ -875,10 +875,10 @@ body.dark .state-neutral{background:#334155;color:var(--text-3)}
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r-card);overflow:hidden;min-width:0}
 .kpi{background:var(--surface);padding:15px 18px;display:flex;flex-direction:column}
 .kpi-lbl{font-size:10px;color:var(--text-3);margin-bottom:7px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
-.kpi-top{display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
+.kpi-top{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;height:44px}
 .kpi-val{font-size:25px;font-weight:700;line-height:1;color:var(--text);font-variant-numeric:tabular-nums}
-.spark{width:74px;height:30px;flex-shrink:0;opacity:.9}
 .kpi-foot{display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap}
+.spark{width:74px;height:30px;flex-shrink:0;opacity:.9}
 .delta{display:inline-flex;align-items:center;gap:2px;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
 .delta .ico{width:13px;height:13px}
 .delta.up{color:var(--pos-fg)}.delta.down{color:var(--neg-fg)}.delta.flat{color:var(--text-3)}
@@ -1149,6 +1149,7 @@ body.tv .meta-curr{font-size:28px}
         <div class="kpi-lbl">% Facturado del Día</div>
         <div class="kpi-top">
           <div class="kpi-val num" id="k-factpct">—</div>
+          <div style="width:74px;height:30px;flex-shrink:0"></div>
         </div>
         <div class="kpi-foot" id="d-factpct"></div>
       </div>
@@ -1434,12 +1435,7 @@ function sparkSvg(data,w=74,h=30,dates,fmtFn){
   const pts=data.map((v,i)=>[pad+i*step, h-pad-((v-mn)/rng)*(h-pad*2)]);
   const d=pts.map(([x,y],i)=>`${i?'L':'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
   const area=`${d} L${pts[pts.length-1][0].toFixed(1)} ${h} L${pts[0][0].toFixed(1)} ${h} Z`;
-  // Tendencia reciente: promedio última mitad vs. primera mitad
-  const mid=Math.floor(data.length/2);
-  const avgFirst=data.slice(0,mid).reduce((a,v)=>a+v,0)/mid;
-  const avgLast=data.slice(mid).reduce((a,v)=>a+v,0)/(data.length-mid);
-  const up=avgLast>=avgFirst;
-  const c=up?'var(--green)':'var(--red)';
+  const c='var(--text-3)';
   const gid='sg'+Math.abs(data.slice(0,3).reduce((a,v,i)=>a^(v*1000+i*7),0)).toString(36);
   const [lx,ly]=pts[pts.length-1];
   // hit areas para tooltip
@@ -1605,7 +1601,7 @@ function renderChart(trend){
               ? Math.round(t.pedidos/(t.dias_hab||1)).toLocaleString('es-AR')
               : '$'+Math.round((t.valor/1e6)/(t.dias_hab||1));
             ctx2.save();
-            ctx2.font=isBars?'600 10px system-ui':'700 10px system-ui';
+            ctx2.font=isBars?'600 13px system-ui':'700 13px system-ui';
             ctx2.fillStyle=isBars?txtColor:'#cc0000';
             ctx2.textAlign='center';
             ctx2.textBaseline='bottom';
@@ -2034,16 +2030,27 @@ html,body{height:100%;background:var(--bg);overflow:hidden;font-family:var(--fon
 .kt-clock{text-align:right}
 .kt-time{font-size:42px;font-weight:700;line-height:1;letter-spacing:-.5px}
 .kt-date{font-size:17px;color:var(--text-3);margin-top:4px;text-transform:capitalize}
-.kt-alert{height:70px;display:flex;align-items:center;gap:18px;padding:0 44px;font-size:25px;font-weight:600}
-.kt-alert .ico{width:30px;height:30px;flex-shrink:0}
-.kt-alert b{font-weight:800}
-.kt-alert.warn{background:#fef3c7;color:#92400e;border-bottom:2px solid #f59e0b}
-.kt-alert.danger{background:#fee2e2;color:#991b1b;border-bottom:2px solid #dc2626}
-.kt-alert.ok{background:#d1fae5;color:#065f46;border-bottom:2px solid #059669}
+.kt-ctxbar{display:flex;align-items:center;gap:16px;height:72px;padding:0 44px;font-size:23px;font-weight:600;border-bottom:1px solid}
+.kt-ctxbar .ico{width:30px;height:30px;flex-shrink:0}
+.kt-ctxbar b{font-weight:800}
+.kt-ctxbar .ctx-sep{color:currentColor;opacity:.4}
+.kt-ctxbar .ctx-metric{font-size:20px;font-weight:600;opacity:.92}
+.kt-ctxbar .ctx-metric b{margin-left:6px}
+.kt-ctxbar .ctx-tag{margin-left:auto;font-size:16px;font-weight:800;padding:5px 14px;border-radius:8px;white-space:nowrap}
+.kt-ctxbar.warn{background:var(--amber-bg);color:#b45309;border-color:#fcd9a4}
+.kt-ctxbar.warn .ctx-tag{background:#fff;color:#b45309}
+.kt-ctxbar.danger{background:var(--red-bg);color:#b91c1c;border-color:#fbcdcd}
+.kt-ctxbar.danger .ctx-tag{background:#fff;color:#b91c1c}
+.kt-ctxbar.ok{background:var(--green-bg);color:#15803d;border-color:#b7ecca}
+.kt-ctxbar.ok .ctx-tag{background:#fff;color:#15803d}
 .kt-board{position:absolute;left:0;right:0;bottom:14px;padding:26px 44px 0;display:none}
 .kt-board.active{display:block}
-.kt-board.top1{top:166px}
-.kt-board.top0{top:96px}
+.kt-board.top1{top:168px}
+.kt-board.top0{top:150px}
+.north-tag{margin-left:auto;font-size:15px;font-weight:700;padding:4px 12px;border-radius:8px}
+.north-tag.ok{background:var(--green-bg);color:#065f46}
+.north-tag.warn{background:#fef3c7;color:#92400e}
+.north-tag.danger{background:#fee2e2;color:#991b1b}
 .kt-eyebrow{display:flex;align-items:center;gap:9px;font-size:16px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:var(--text-3);margin-bottom:14px}
 .kt-eyebrow .ico{width:18px;height:18px}
 .b1-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto auto;gap:20px;height:100%}
@@ -2062,7 +2069,8 @@ html,body{height:100%;background:var(--bg);overflow:hidden;font-family:var(--fon
 .b1-bar-pace{position:absolute;top:-6px;bottom:-6px;width:4px;background:var(--text)}
 .b1-plan-foot{display:flex;gap:0;margin-top:20px;font-size:20px;color:var(--text-2)}
 .b1-plan-foot b{color:var(--text);font-weight:700}
-.b1-plan-foot .pf-item{padding:10px 24px;border-radius:10px}
+.b1-plan-foot .pf-item{padding:10px 24px;border-radius:10px;display:inline-flex;align-items:center;gap:6px}
+.b1-plan-foot .pf-item .ico{width:14px;height:14px;flex-shrink:0}
 .b1-plan-foot .pf-item:first-child{background:var(--blue-bg);color:#1e40af}
 .b1-plan-foot .pf-item:first-child b{color:#1d4ed8}
 .b1-plan-foot .pf-item:nth-child(2){background:var(--amber-bg);color:#92400e;margin:0 16px}
@@ -2095,7 +2103,8 @@ html,body{height:100%;background:var(--bg);overflow:hidden;font-family:var(--fon
 .b1-live{grid-column:1 / -1;background:var(--panel-2);border:1px solid var(--border);border-radius:16px;padding:20px 30px;display:flex;align-items:center;gap:0}
 .b1-live-head{display:flex;flex-direction:column;gap:8px;padding-right:34px;border-right:1px solid var(--border);margin-right:6px}
 .b1-live-badge{display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:800;letter-spacing:.8px;color:var(--green);text-transform:uppercase}
-.b1-live-badge .pdot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 10px 1px rgba(34,197,94,.7)}
+.b1-live-badge .pdot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 10px 1px rgba(34,197,94,.7);animation:pulse-dot 2s ease-in-out infinite}
+@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.85)}}
 .b1-live-ttl{font-size:17px;color:var(--text-3)}
 .b1-live-items{flex:1;display:grid;grid-template-columns:repeat(5,1fr);gap:0}
 .b1-live-item{padding:0 26px;border-left:1px solid var(--border)}
@@ -2176,6 +2185,9 @@ const ICONS={
   arrowUp:'<path d="M12 19V5M5 12l7-7 7 7"/>',
   layers:'<path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65M22 12.65l-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
   activity:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+  calendar:'<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/>',
+  hourglass:'<path d="M5 22h14M5 2h14M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/>',
+  wallet:'<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 1-1 1v-1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
 };
 function ico(name,w=18){return `<svg class="ico" style="width:${w}px;height:${w}px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||''}</svg>`;}
 
@@ -2259,22 +2271,31 @@ function topBar(){
     <div class="kt-right">
       <div class="kt-conn">
         <span class="kt-conn-row"><span class="kt-dot ${DATOS_AL.mspaOk?'ok':'down'}"></span>MSPA ${DATOS_AL.mspaOk?'OK':'sin datos'} · <b>${DATOS_AL.mspa}</b></span>
-        <span class="kt-conn-row"><span class="kt-dot ${DATOS_AL.reactorOk?'ok':'down'}"></span>Reactor ${DATOS_AL.reactorOk?'OK':'sin datos'}</span>
+        <span class="kt-conn-row"><span class="kt-dot ${DATOS_AL.reactorOk?'ok':'down'}"></span>Reactor ${DATOS_AL.reactorOk?'OK':'sin datos'} · <b>${DATOS_AL.reactor}</b></span>
       </div>
       <div class="kt-clock"><div class="kt-time num" id="kt-time">--:--:--</div>
         <div class="kt-date" id="kt-date"></div></div>
     </div>
   </div>`;
 }
-function alertRibbon(){
+function ctxBar(){
+  if(!PLAN.plan_total) return '';
   const onTrack=PLAN.pct>=PLAN.pace;
-  if(!PLAN.plan_total)return '';
-  if(onTrack){
-    return `<div class="kt-alert ok">${ico('trendingUp',30)}<span>Plan de ventas <b>en ritmo</b> — ${fmtN(PLAN.pct,1)}% acumulado vs ${fmtN(PLAN.pace,1)}% esperado a hoy</span></div>`;
-  }
-  const gap=fmtN(PLAN.pace-PLAN.pct,1);
-  const sev=(PLAN.pace-PLAN.pct)>10?'danger':'warn';
-  return `<div class="kt-alert ${sev}">${ico('trendingDown',30)}<span>Plan de ventas <b>${gap} pts por debajo del ritmo</b> esperado — ${fmtN(PLAN.pct,1)}% acumulado vs ${fmtN(PLAN.pace,1)}% esperado a hoy</span></div>`;
+  const sev=onTrack?'ok':(PLAN.pace-PLAN.pct)>10?'danger':'warn';
+  const gap=fmtN(Math.abs(PLAN.pace-PLAN.pct),1);
+  const alertTxt=onTrack
+    ?`Plan de ventas <b>en ritmo</b> — ${fmtN(PLAN.pct,1)}% vs ${fmtN(PLAN.pace,1)}% esperado a hoy`
+    :`Plan de ventas <b>${gap} pts por debajo del ritmo</b> — ${fmtN(PLAN.pct,1)}% vs ${fmtN(PLAN.pace,1)}% esperado a hoy`;
+  const tagTxt=onTrack?'En ritmo':null;
+  return `<div class="kt-ctxbar ${sev}">
+    ${ico(onTrack?'trendingUp':'trendingDown',30)}
+    <span class="ctx-alert">${alertTxt}</span>
+    <span class="ctx-sep">·</span>
+    <span class="ctx-metric">Falta <b class="num">${fmtK(PLAN.plan_total-PLAN.fact_acum)}</b></span>
+    <span class="ctx-sep">·</span>
+    <span class="ctx-metric">Venta hoy <b class="num">${fmtK(VENTA.val)}</b></span>
+    ${tagTxt?`<span class="ctx-tag">${tagTxt}</span>`:''}
+  </div>`;
 }
 function board1(){
   const onTrack=PLAN.pct>=PLAN.pace;
@@ -2293,9 +2314,9 @@ function board1(){
             <div class="b1-bar-bg"><div class="b1-bar-fill" style="width:${Math.min(PLAN.pct,100)}%;background:${fill}"></div><div class="b1-bar-pace" style="left:${Math.min(PLAN.pace,100)}%"></div></div>
           </div>
           <div class="b1-plan-foot">
-            <span class="pf-item">📅 Día hábil <b class="num">${PLAN.dia_habil} de ${PLAN.dias_tot}</b></span>
-            <span class="pf-item">⏳ <b class="num">${PLAN.dias_rest}</b> días hábiles restantes</span>
-            <span class="pf-item">💰 Restante: <b class="num">${fmtK(PLAN.plan_total-PLAN.fact_acum)}</b></span>
+            <span class="pf-item">${ico('calendar',14)} Día hábil <b class="num">${PLAN.dia_habil} de ${PLAN.dias_tot}</b></span>
+            <span class="pf-item">${ico('hourglass',14)} <b class="num">${PLAN.dias_rest}</b> días hábiles restantes</span>
+            <span class="pf-item">${ico('wallet',14)} Restante: <b class="num">${fmtK(PLAN.plan_total-PLAN.fact_acum)}</b></span>
           </div>
         </div>
         <div class="b1-plan-r"></div>
@@ -2307,13 +2328,12 @@ function board1(){
         </div>
       </div>
       <div class="b1-stat panel"><div class="l">Venta del Día · MSPA</div><div class="v num">${fmtK(VENTA.val)}</div><div class="s num">${fmtN(VENTA.ords)} pedidos facturados</div></div>
-      <div class="b1-stat panel"><div class="l">Pedidos Informados</div><div class="v num">${fmtN(PEDIDOS.v)}</div>
-        <span class="b1-delta ${up?'up':'down'}">${ico(up?'arrowUp':'arrowDown',22)} ${fmtN(Math.abs(PEDIDOS.delta),1)}% <span style="color:var(--text-3);font-weight:400">vs. mismo día hábil mes anterior</span></span></div>
+      <div class="b1-stat panel">${(()=>{const up=PEDIDOS.delta>=0;return`<div class="l">Pedidos Informados</div><div class="v num">${fmtN(PEDIDOS.v)}</div><span class="b1-delta ${up?'up':'down'}">${ico(up?'arrowUp':'arrowDown',22)} ${fmtN(Math.abs(PEDIDOS.delta),1)}% <span style="color:var(--text-3);font-weight:400">vs. mismo día hábil mes anterior</span></span>`;})()}</div>
       <div class="b1-flow panel">
         ${flowCell('tk-blue','Informado',fmtK(FLOW.informado.val),fmtN(FLOW.informado.v)+' pedidos')}
         ${flowCell('tk-amber','Retenido',fmtK(FLOW.retenido.val),fmtN(FLOW.retenido.v)+' ped · '+fmtN(FLOW.retenido.pct,1)+'%')}
         ${flowCell('tk-red','Anulado',fmtK(FLOW.anulado.val),fmtN(FLOW.anulado.v)+' ped · '+fmtN(FLOW.anulado.pct,1)+'%')}
-        ${flowCell('tk-green','Facturado',fmtK(FLOW.facturado.val),fmtN(FLOW.facturado.v)+' pedidos')}
+        ${flowCell('tk-green','Facturado',fmtK(FLOW.facturado.val),fmtN(FLOW.facturado.v)+' pedidos'+(FLOW.informado.v>0?' · '+fmtN(FLOW.facturado.v/FLOW.informado.v*100,1)+'%':''))}
       </div>
       <div class="b1-live">
         <div class="b1-live-head">
@@ -2398,7 +2418,7 @@ function drawChart(){
             lbl='$'+Math.round(raw[2]/raw[3]);
           }
           ctx.save();
-          ctx.font=ds.type==='bar'?'600 13px system-ui':'700 12px system-ui';
+          ctx.font=ds.type==='bar'?'600 16px system-ui':'700 15px system-ui';
           ctx.fillStyle=ds.type==='bar'?'#64748b':'#cc0000';
           ctx.textAlign='center';
           ctx.textBaseline=ds.type==='bar'?'bottom':'bottom';
@@ -2412,7 +2432,7 @@ function drawChart(){
   chartInst=new Chart(cv.getContext('2d'),{
     plugins:[labelPlugin],
     data:{labels:TREND.map(t=>t[0]),datasets:[
-      {type:'bar',label:'Pedidos / día',data:TREND.map(t=>+(t[1]/t[3]).toFixed(1)),backgroundColor:'rgba(203,213,225,.75)',borderColor:'#cbd5e1',borderWidth:1,yAxisID:'y1',order:2},
+      {type:'bar',label:'Pedidos / día',data:TREND.map(t=>+(t[1]/t[3]).toFixed(1)),backgroundColor:'rgba(203,213,225,.30)',borderColor:'rgba(203,213,225,.4)',borderWidth:0,yAxisID:'y1',order:2},
       {type:'line',label:'Venta M$ / día',data:TREND.map(t=>+(t[2]/t[3]).toFixed(2)),borderColor:'#cc0000',backgroundColor:'rgba(204,0,0,.06)',borderWidth:3,pointRadius:4,pointBackgroundColor:'#cc0000',tension:.35,yAxisID:'y2',order:1,fill:true},
     ]},
     options:{responsive:true,maintainAspectRatio:false,animation:false,
@@ -2437,7 +2457,7 @@ let paused=false;
 let rotStart=Date.now();
 const stage=document.getElementById('stage');
 function render(){
-  stage.innerHTML=topBar()+alertRibbon()+(board===0?board1():board2())+
+  stage.innerHTML=topBar()+ctxBar()+(board===0?board1():board2())+
     `<div class="kt-rot"><div class="kt-rot-track"><div class="kt-rot-fill" id="kt-fill"></div></div></div>
      <div class="kt-dots" id="kt-dots">${Array.from({length:NBOARDS},(_,i)=>
         `<span class="kt-pg${board===i?' on':''}" data-go="${i}"></span>`).join('')}</div>`;
