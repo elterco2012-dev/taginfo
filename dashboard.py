@@ -1474,7 +1474,7 @@ function deltaHtml(curr,prev,compLbl){
   const p=(curr-prev)/prev*100;
   const ico=p>0?ICO.arrowUp:ICO.arrowDown;
   const cls=p>0?'up':'down';
-  const lbl=compLbl?`<span style="font-size:9px;color:var(--text3);display:block;margin-top:2px">${compLbl}</span>`:'';
+  const lbl=compLbl?`<span style="font-size:11px;color:var(--text-3);display:block;margin-top:2px">${compLbl}</span>`:'';
   return `<span class="delta ${cls}">${ico} ${fmtN(Math.abs(p),1)}%</span>${lbl}`;
 }
 
@@ -2457,20 +2457,24 @@ document.addEventListener('keydown',(e)=>{
 });
 fitStage();
 window.addEventListener('resize',fitStage);
-// Overlay de fullscreen — Chrome requiere gesto en la página destino
+// Fullscreen: intento silencioso primero; si Chrome lo bloquea, muestra botón chico flotante
 (function(){
-  const ov=document.createElement('div');
-  ov.id='fs-ov';
-  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(3px)';
-  ov.innerHTML='<div style="background:#fff;border-radius:16px;padding:32px 48px;text-align:center;font-family:system-ui,sans-serif"><div style="font-size:22px;font-weight:700;color:#0f172a;margin-bottom:8px">Click para entrar en pantalla completa</div><div style="font-size:14px;color:#64748b">o presioná F en cualquier momento</div></div>';
-  function enterFs(){
-    ov.remove();
-    if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{});
-    fitStage();
+  function showFsBtn(){
+    if(document.getElementById('fs-btn'))return;
+    const btn=document.createElement('button');
+    btn.id='fs-btn';
+    btn.textContent='⛶ Pantalla completa';
+    btn.style.cssText='position:fixed;top:12px;right:12px;z-index:9999;padding:8px 14px;background:rgba(0,0,0,.65);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;backdrop-filter:blur(6px)';
+    btn.onclick=function(){
+      if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().then(()=>{btn.remove();fitStage();}).catch(()=>{});
+    };
+    document.body.appendChild(btn);
+    // Se oculta solo si el usuario entra en fullscreen de otra forma (F, controles)
+    document.addEventListener('fullscreenchange',()=>{if(document.fullscreenElement)btn.remove();});
   }
-  ov.addEventListener('click',enterFs);
-  document.addEventListener('keydown',function h(e){if(e.key==='f'||e.key==='F'||e.key==='Enter'){document.removeEventListener('keydown',h);enterFs();}},true);
-  document.body.appendChild(ov);
+  if(document.documentElement.requestFullscreen){
+    document.documentElement.requestFullscreen().then(()=>fitStage()).catch(()=>showFsBtn());
+  }
 })();
 render();
 syncCtrl();
