@@ -1791,7 +1791,7 @@ function render(data){
   document.getElementById('fl-an-val').textContent=fmtK(bs[14]?.val||0);
   document.getElementById('fl-an-ped').textContent=fmtN(an,0)+' ped · '+pct(an,total);
   document.getElementById('fl-fact-val').textContent=fmtK(fact_val);
-  document.getElementById('fl-fact-ped').textContent=fmtN(fact_cnt,0)+' pedidos';
+  document.getElementById('fl-fact-ped').textContent=fmtN(fact_cnt,0)+' pedidos'+(total>0?' · '+pct(fact_cnt,total):'');
   const elMspaRef=document.getElementById('fl-fact-mspa');
   if(elMspaRef)elMspaRef.textContent=venta.val>0?'Cierre Reactor · MSPA día: '+fmtK(venta.val):'';
 
@@ -2366,11 +2366,11 @@ function drawChart(){
           const raw=TREND[i];
           let lbl;
           if(ds.type==='bar'||ds.yAxisID==='y1'){
-            // Pedidos totales del mes (no por día) sobre la barra
-            lbl=Math.round(raw[1]).toLocaleString('es-AR');
+            // Promedio pedidos / día hábil sobre la barra
+            lbl=Math.round(raw[1]/raw[3]).toLocaleString('es-AR');
           } else {
-            // M$ total del mes sobre el punto de la línea
-            lbl='$'+(raw[2]/raw[3]).toFixed(1).replace('.',',')+' M';
+            // M$ / día hábil sobre el punto — sin decimales ni "M" (se entiende por contexto)
+            lbl='$'+Math.round(raw[2]/raw[3]);
           }
           ctx.save();
           ctx.font=ds.type==='bar'?'600 13px system-ui':'700 12px system-ui';
@@ -2388,7 +2388,7 @@ function drawChart(){
     plugins:[labelPlugin],
     data:{labels:TREND.map(t=>t[0]),datasets:[
       {type:'bar',label:'Pedidos / día hábil',data:TREND.map(t=>+(t[1]/t[3]).toFixed(1)),backgroundColor:'rgba(203,213,225,.75)',borderColor:'#cbd5e1',borderWidth:1,yAxisID:'y1',order:2},
-      {type:'line',label:'M$ / día hábil',data:TREND.map(t=>+(t[2]/t[3]).toFixed(2)),borderColor:'#cc0000',backgroundColor:'rgba(204,0,0,.06)',borderWidth:3,pointRadius:4,pointBackgroundColor:'#cc0000',tension:.35,yAxisID:'y2',order:1,fill:true},
+      {type:'line',label:'Venta M$ / día',data:TREND.map(t=>+(t[2]/t[3]).toFixed(2)),borderColor:'#cc0000',backgroundColor:'rgba(204,0,0,.06)',borderWidth:3,pointRadius:4,pointBackgroundColor:'#cc0000',tension:.35,yAxisID:'y2',order:1,fill:true},
     ]},
     options:{responsive:true,maintainAspectRatio:false,animation:false,
       layout:{padding:{top:28}},
