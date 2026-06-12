@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard — Evolución v1 → v2 → v3</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="colors_and_type.css">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'IBM Plex Sans',var(--font-sans);background:#e9ecf1;color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  .topbar{display:flex;align-items:center;gap:14px;padding:11px 22px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;position:relative;z-index:10}
+  .topbar::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--wurth-red)}
+  .topbar img{height:26px}
+  .topbar .t{font-size:14px;font-weight:700}
+  .topbar .s{font-size:11px;color:var(--text-3);margin-top:1px}
+  .spacer{flex:1}
+  .mejoras-btn{font-size:12px;font-weight:600;border:1px solid var(--border-2);background:transparent;color:var(--text-2);border-radius:6px;padding:7px 14px;cursor:pointer}
+  .mejoras-btn:hover{background:var(--surface-2)}
+
+  .stage{flex:1;display:flex;gap:1px;background:var(--border);min-height:0}
+  .pane{flex:1;display:flex;flex-direction:column;background:var(--surface);min-width:0}
+  .pane-head{display:flex;align-items:center;gap:9px;padding:9px 14px;background:var(--surface-2);border-bottom:1px solid var(--border);flex-shrink:0}
+  .chip{font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;padding:3px 9px;border-radius:5px}
+  .chip.v1{background:var(--flat-bg);color:var(--text-2)}
+  .chip.v2{background:#dbeafe;color:#1d4ed8}
+  .chip.v3{background:var(--pos-bg);color:var(--pos-fg)}
+  .pane-head .lbl{font-size:11px;color:var(--text-2);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pane-head .open{margin-left:auto;font-size:11px;color:var(--blue);text-decoration:none;font-weight:600;white-space:nowrap}
+  .pane iframe{flex:1;border:0;width:100%;background:#f0f2f5}
+
+  .drawer{position:fixed;top:0;right:0;bottom:0;width:400px;background:var(--surface);border-left:1px solid var(--border);box-shadow:var(--shadow-pop);transform:translateX(100%);transition:transform .25s ease;z-index:100;display:flex;flex-direction:column}
+  .drawer.open{transform:translateX(0)}
+  .drawer-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
+  .drawer-head h3{font-size:14px;font-weight:700}
+  .drawer-head button{border:none;background:transparent;font-size:20px;color:var(--text-3);cursor:pointer;line-height:1}
+  .drawer-body{overflow-y:auto;padding:4px 0}
+  .round{padding:13px 20px 4px;font-size:10px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-3);position:sticky;top:0;background:var(--surface)}
+  .round.r2{color:#1d4ed8}.round.r3{color:var(--pos-fg)}
+  .mj{padding:11px 20px;border-bottom:1px solid var(--border)}
+  .mj .n{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin-bottom:4px}
+  .mj .n .b{width:19px;height:19px;border-radius:5px;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:800}
+  .r2 ~ .mj .n .b,.mj.m2 .n .b{background:#2563eb}
+  .mj.m3 .n .b{background:var(--green)}
+  .mj p{font-size:12px;color:var(--text-2);line-height:1.5}
+  .backdrop{position:fixed;inset:0;background:rgba(15,23,42,.35);z-index:90;opacity:0;pointer-events:none;transition:opacity .25s}
+  .backdrop.open{opacity:1;pointer-events:auto}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <img src="assets/wurth-logo.png" alt="Würth">
+    <div>
+      <div class="t">Operations Dashboard — Evolución del rediseño</div>
+      <div class="s">v1 original → v2 profesional → v3 diseño de información</div>
+    </div>
+    <div class="spacer"></div>
+    <button class="mejoras-btn" onclick="toggleDrawer()">Ver todas las mejoras →</button>
+  </div>
+
+  <div class="stage">
+    <div class="pane">
+      <div class="pane-head"><span class="chip v1">v1</span><span class="lbl">Original</span><a class="open" href="ui_kits/operations-dashboard/index.html" target="_blank">Abrir ↗</a></div>
+      <iframe src="ui_kits/operations-dashboard/index.html" title="v1"></iframe>
+    </div>
+    <div class="pane">
+      <div class="pane-head"><span class="chip v2">v2</span><span class="lbl">Profesional</span><a class="open" href="ui_kits/operations-dashboard-v2/index.html" target="_blank">Abrir ↗</a></div>
+      <iframe src="ui_kits/operations-dashboard-v2/index.html" title="v2"></iframe>
+    </div>
+    <div class="pane">
+      <div class="pane-head"><span class="chip v3">v3</span><span class="lbl">Info + UX</span><a class="open" href="ui_kits/operations-dashboard-v3/index.html" target="_blank">Abrir ↗</a></div>
+      <iframe src="ui_kits/operations-dashboard-v3/index.html" title="v3"></iframe>
+    </div>
+  </div>
+
+  <div class="backdrop" id="bd" onclick="toggleDrawer()"></div>
+  <div class="drawer" id="dw">
+    <div class="drawer-head"><h3>Qué cambió en cada versión</h3><button onclick="toggleDrawer()">×</button></div>
+    <div class="drawer-body">
+      <div class="round r2">v2 · Refinamiento profesional (lo cosmético)</div>
+      <div class="mj m2"><div class="n"><span class="b">1</span> Jerarquía clara</div><p>El Plan de Ventas pasa a ser el héroe; <b>max-width</b> para no estirarse en monitores grandes.</p></div>
+      <div class="mj m2"><div class="n"><span class="b">2</span> Números tabulares + coma es-AR</div><p>Dígitos de ancho fijo que no “saltan” al refrescar; <b>$3,4M</b> consistente.</p></div>
+      <div class="mj m2"><div class="n"><span class="b">3</span> Adiós al arcoíris</div><p>KPIs neutros; el color sólo significa estado.</p></div>
+      <div class="mj m2"><div class="n"><span class="b">4</span> Íconos de línea Lucide</div><p>En vez de emojis 🏆⏸✕.</p></div>
+      <div class="mj m2"><div class="n"><span class="b">5</span> Una sola elevación</div><p>Hairline plano, sin sombras; sin animación de alarma.</p></div>
+      <div class="mj m2"><div class="n"><span class="b">6</span> Gráfico legible</div><p>Títulos en ambos ejes, barras neutras, línea roja Würth.</p></div>
+
+      <div class="round r3">v3 · Diseño de información y UX (los 4 niveles)</div>
+      <div class="mj m3"><div class="n"><span class="b">1</span> Contexto en los números</div><p><b>Sparklines</b> de 14 días en cada KPI, <b>metas</b> junto al valor (meta 1.350) y comparación explícita (“vs. mismo día hábil del mes anterior”).</p></div>
+      <div class="mj m3"><div class="n"><span class="b">2</span> Jerarquía por excepción</div><p>Banda de <b>alertas</b> arriba que sólo aparece cuando algo cruza umbral (retenidos &gt;20%, vendedores sin facturar, plan bajo ritmo, crédito bloqueado). <b>Semáforos</b> sutiles en el panel MSPA.</p></div>
+      <div class="mj m3"><div class="n"><span class="b">3</span> Confianza y operación</div><p><b>Estado de conexión</b> por fuente (MSPA/Reactor: ok/lento/sin conexión), <b>“datos al” </b>con hora real, <b>skeletons</b> en la carga, y botón <b>exportar/imprimir</b>.</p></div>
+      <div class="mj m3"><div class="n"><span class="b">4</span> Pulido fino</div><p><b>Modo TV</b> (números grandes para monitor de pared), tipografía de números dedicada (<b>IBM Plex Sans</b>), y se quitaron métricas que nadie mira.</p></div>
+    </div>
+  </div>
+
+  <script>
+    function toggleDrawer(){
+      document.getElementById('dw').classList.toggle('open');
+      document.getElementById('bd').classList.toggle('open');
+    }
+  </script>
+</body>
+</html>

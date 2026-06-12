@@ -1,0 +1,11 @@
+/* ============================================================================
+   WÜRTH OPS DESIGN SYSTEM — root stylesheet
+   Single entry point for consumers. Link THIS file and you get the full token
+   foundation (colors, type, spacing, radii, shadows, fonts) for both surfaces:
+   the modern Operations Dashboard and the legacy DAILY INFO 2 SALES terminal.
+
+   The per-kit structural CSS (dashboard.css, terminal.css) is NOT imported here
+   on purpose — those are component layouts scoped to each UI kit. Import the kit
+   sheet alongside this one only when rebuilding that specific surface.
+   ============================================================================ */
+@import url("colors_and_type.css");

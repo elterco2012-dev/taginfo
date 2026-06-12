@@ -1,0 +1,207 @@
+{
+  "plugins": [
+    "react",
+    "import"
+  ],
+  "rules": {
+    "react/forbid-elements": [
+      "warn",
+      {
+        "forbid": []
+      }
+    ],
+    "no-restricted-imports": [
+      "warn",
+      {
+        "patterns": [
+          {
+            "group": [
+              "ui_kits/operations-dashboard-v2/**",
+              "ui_kits/operations-dashboard-v3/**",
+              "ui_kits/operations-dashboard/**",
+              "ui_kits/taginfo-terminal/**"
+            ],
+            "message": "Import design-system components from 'index.js', not component internals."
+          }
+        ]
+      }
+    ],
+    "no-restricted-syntax": [
+      "warn",
+      {
+        "selector": "Literal[value=/#[0-9a-fA-F]{3,8}\\b/]",
+        "message": "Raw hex color — use a design-system color token via var()."
+      },
+      {
+        "selector": "Literal[value=/\\b\\d+px\\b/]",
+        "message": "Raw px value — use a design-system spacing token via var()."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/index.js"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
+  "x-omelette": {
+    "components": {},
+    "tokens": [
+      "--amber",
+      "--amber-bg",
+      "--bg",
+      "--blue",
+      "--blue-bg",
+      "--border",
+      "--border-2",
+      "--cyan",
+      "--flat-bg",
+      "--flat-fg",
+      "--font-mono",
+      "--font-sans",
+      "--font-term",
+      "--fs-2xs",
+      "--fs-3xs",
+      "--fs-body",
+      "--fs-display",
+      "--fs-h",
+      "--fs-sm",
+      "--fs-stat",
+      "--fs-xs",
+      "--fw-black",
+      "--fw-bold",
+      "--fw-extrabold",
+      "--fw-medium",
+      "--fw-normal",
+      "--fw-semibold",
+      "--green",
+      "--green-bg",
+      "--lh-normal",
+      "--lh-tight",
+      "--ls-label",
+      "--ls-wordmark",
+      "--neg-bg",
+      "--neg-fg",
+      "--orange",
+      "--pos-bg",
+      "--pos-fg",
+      "--purple",
+      "--r-card",
+      "--r-ctrl",
+      "--r-pill",
+      "--red",
+      "--red-bg",
+      "--shadow-card",
+      "--shadow-header",
+      "--shadow-pop",
+      "--sp-1",
+      "--sp-2",
+      "--sp-3",
+      "--sp-4",
+      "--sp-5",
+      "--sp-6",
+      "--sp-7",
+      "--sp-8",
+      "--surface",
+      "--surface-2",
+      "--term-bar-bg",
+      "--term-bar-fg",
+      "--term-bg",
+      "--term-error",
+      "--term-fg",
+      "--term-fg-dim",
+      "--term-fg-dimmer",
+      "--term-fs",
+      "--term-fs-title",
+      "--term-row-hover",
+      "--text",
+      "--text-2",
+      "--text-3",
+      "--wurth-red",
+      "--wurth-red-bg",
+      "--wurth-red-bg-dk",
+      "--wurth-red-hover"
+    ],
+    "tokenKinds": {
+      "--wurth-red": "color",
+      "--wurth-red-hover": "color",
+      "--wurth-red-bg": "color",
+      "--wurth-red-bg-dk": "color",
+      "--bg": "color",
+      "--surface": "color",
+      "--surface-2": "color",
+      "--border": "color",
+      "--border-2": "color",
+      "--text": "font",
+      "--text-2": "font",
+      "--text-3": "font",
+      "--blue": "color",
+      "--cyan": "color",
+      "--green": "color",
+      "--amber": "color",
+      "--orange": "color",
+      "--red": "color",
+      "--purple": "color",
+      "--blue-bg": "color",
+      "--green-bg": "color",
+      "--amber-bg": "color",
+      "--red-bg": "color",
+      "--pos-bg": "color",
+      "--pos-fg": "color",
+      "--neg-bg": "color",
+      "--neg-fg": "color",
+      "--flat-bg": "color",
+      "--flat-fg": "color",
+      "--r-card": "spacing",
+      "--r-ctrl": "spacing",
+      "--r-pill": "spacing",
+      "--shadow-card": "shadow",
+      "--shadow-header": "shadow",
+      "--shadow-pop": "shadow",
+      "--sp-1": "spacing",
+      "--sp-2": "spacing",
+      "--sp-3": "spacing",
+      "--sp-4": "spacing",
+      "--sp-5": "spacing",
+      "--sp-6": "spacing",
+      "--sp-7": "spacing",
+      "--sp-8": "spacing",
+      "--font-sans": "font",
+      "--font-mono": "font",
+      "--fs-display": "spacing",
+      "--fs-stat": "spacing",
+      "--fs-h": "spacing",
+      "--fs-body": "spacing",
+      "--fs-sm": "spacing",
+      "--fs-xs": "spacing",
+      "--fs-2xs": "spacing",
+      "--fs-3xs": "spacing",
+      "--fw-normal": "font",
+      "--fw-medium": "font",
+      "--fw-semibold": "font",
+      "--fw-bold": "font",
+      "--fw-extrabold": "font",
+      "--fw-black": "font",
+      "--lh-tight": "font",
+      "--lh-normal": "font",
+      "--ls-label": "spacing",
+      "--ls-wordmark": "spacing",
+      "--term-bg": "color",
+      "--term-fg": "color",
+      "--term-fg-dim": "color",
+      "--term-fg-dimmer": "color",
+      "--term-row-hover": "color",
+      "--term-error": "color",
+      "--term-bar-bg": "color",
+      "--term-bar-fg": "color",
+      "--term-fs": "spacing",
+      "--term-fs-title": "spacing",
+      "--font-term": "font"
+    },
+    "fontFamilies": []
+  }
+}
