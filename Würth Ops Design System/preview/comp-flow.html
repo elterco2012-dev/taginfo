@@ -1,0 +1,31 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;font-family:var(--font-sans);background:#f0f2f5;padding:18px;color:var(--text)}
+  .flow{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .cell{background:#fff;padding:14px 16px;display:flex;flex-direction:column;gap:4px;position:relative}
+  .cell::after{content:'›';position:absolute;right:-7px;top:50%;transform:translateY(-50%);color:var(--text-3);font-size:18px;z-index:1}
+  .cell:last-child::after{display:none}
+  .l{font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
+  .v{font-size:22px;font-weight:800;line-height:1.1}
+  .s{font-size:10px;color:var(--text-3)}
+  .p{font-size:11px;font-weight:600;margin-top:2px}
+  .inf{border-top:3px solid var(--blue)}.inf .l,.inf .v{color:var(--blue)}
+  .ret{border-top:3px solid var(--amber);background:var(--amber-bg)}.ret .l,.ret .v,.ret .p{color:var(--amber)}
+  .an{border-top:3px solid var(--red);background:var(--red-bg)}.an .l,.an .v,.an .p{color:var(--red)}
+  .fact{border-top:3px solid var(--green);background:var(--green-bg)}.fact .l,.fact .v,.fact .p{color:var(--green)}
+</style>
+</head>
+<body>
+  <div class="flow">
+    <div class="cell inf"><div class="l">Informado</div><div class="v">1.284</div><div class="s">$5,1M</div></div>
+    <div class="cell ret"><div class="l">Retenido</div><div class="v">312</div><div class="p">24,3%</div></div>
+    <div class="cell an"><div class="l">Anulado</div><div class="v">48</div><div class="p">3,7%</div></div>
+    <div class="cell fact"><div class="l">Facturado</div><div class="v">924</div><div class="p">71,9%</div></div>
+  </div>
+</body>
+</html>

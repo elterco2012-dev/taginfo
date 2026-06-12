@@ -1,0 +1,33 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;font-family:var(--font-sans);background:#fff;padding:18px;color:var(--text)}
+  .lead{font-size:11px;color:var(--text-3);margin:0 0 14px;text-transform:uppercase;letter-spacing:2px;font-weight:700}
+  .tags{display:flex;gap:8px;flex-wrap:wrap}
+  .tag{font-size:10px;padding:3px 10px;border-radius:12px;font-weight:600}
+  .ok{background:#dcfce7;color:#15803d}
+  .warn{background:#fffbeb;color:#d97706}
+  .danger{background:#fee2e2;color:#dc2626}
+  .neutral{background:#f1f5f9;color:#94a3b8}
+  .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700}
+  .pill-ret{background:#fffbeb;color:#d97706}.pill-an{background:#fee2e2;color:#dc2626}
+</style>
+</head>
+<body>
+  <p class="lead">Status tags &amp; pills</p>
+  <div class="tags" style="margin-bottom:14px">
+    <span class="tag ok">+42 sobre ritmo</span>
+    <span class="tag warn">18 por debajo del ritmo</span>
+    <span class="tag danger">120 pedidos por debajo</span>
+    <span class="tag neutral">Sin referencia</span>
+  </div>
+  <div class="tags">
+    <span class="pill pill-ret">12 retenidos</span>
+    <span class="pill pill-an">4 anulados</span>
+  </div>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!-- @dsCard group="Colors" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;font-family:var(--font-sans);background:var(--term-bg);padding:20px}
+  .lead{font-size:11px;color:var(--term-fg);margin:0 0 14px;text-transform:uppercase;letter-spacing:2px;font-weight:700;font-family:var(--font-term)}
+  .row{display:flex;gap:10px}
+  .sw{flex:1;border-radius:4px;overflow:hidden;border:1px solid var(--term-fg-dimmer)}
+  .chip{height:50px}
+  .meta{padding:7px 9px;background:#0a1400}
+  .name{font-size:10px;font-weight:700;color:var(--term-fg);font-family:var(--font-term)}
+  .hex{font-size:10px;color:var(--term-fg-dim);font-family:var(--font-term);margin-top:2px}
+</style>
+</head>
+<body>
+  <p class="lead">Terminal · phosphor palette</p>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background:var(--term-bg);border-bottom:1px solid var(--term-fg-dimmer)"></div><div class="meta"><div class="name">screen</div><div class="hex">#000000</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--term-fg)"></div><div class="meta"><div class="name">phosphor</div><div class="hex">#b4d900</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--term-fg-dim)"></div><div class="meta"><div class="name">dim</div><div class="hex">#4a6400</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--term-fg-dimmer)"></div><div class="meta"><div class="name">separator</div><div class="hex">#3a4a00</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--term-error)"></div><div class="meta"><div class="name">error</div><div class="hex">#ff4444</div></div></div>
+  </div>
+</body>
+</html>

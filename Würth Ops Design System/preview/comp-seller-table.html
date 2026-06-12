@@ -1,0 +1,32 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;font-family:var(--font-sans);background:#fff;padding:18px;color:var(--text)}
+  .lead{font-size:11px;color:var(--green);margin:0 0 8px;text-transform:uppercase;letter-spacing:2px;font-weight:700}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);padding:4px 8px;border-bottom:2px solid var(--border);text-align:left}
+  td{padding:7px 8px;border-bottom:1px solid var(--border)}
+  tr:last-child td{border-bottom:none}
+  .rank{font-weight:800;width:22px;font-size:14px}
+  .m1{color:#f59e0b}.m2{color:#94a3b8}.m3{color:#b45309}
+  .name{font-weight:600}
+  .sub{font-size:10px;color:var(--text-3)}
+  .val{font-weight:700;text-align:right;color:var(--green)}
+</style>
+</head>
+<body>
+  <p class="lead">🏆 Top 5 Facturación del Día</p>
+  <table>
+    <thead><tr><th></th><th>Vendedor</th><th style="text-align:right">Valor</th></tr></thead>
+    <tbody>
+      <tr><td class="rank m1">1</td><td><div class="name">García, M. (204)</div><div class="sub">3 pedidos</div></td><td class="val">$1,1M</td></tr>
+      <tr><td class="rank m2">2</td><td><div class="name">Rossi, L. (118)</div><div class="sub">5 pedidos</div></td><td class="val">$842K</td></tr>
+      <tr><td class="rank m3">3</td><td><div class="name">Pérez, A. (077)</div><div class="sub">2 pedidos</div></td><td class="val">$610K</td></tr>
+    </tbody>
+  </table>
+</body>
+</html>

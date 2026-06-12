@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Würth — Kiosk / Wallboard</title>
+<link rel="stylesheet" href="kiosk.css">
+</head>
+<body>
+<div class="viewport"><div class="stage" id="stage"></div></div>
+
+<script>
+/* ============================================================================
+   WÜRTH OPS — KIOSK / WALLBOARD  (vanilla JS, sin React/Babel → carga robusta)
+   Tablero fijo 1920×1080 escalado a la TV. Rota en silencio entre 2 tableros.
+   ============================================================================ */
+
+/* ── formato es-AR ─────────────────────────────────────────────────────── */
+function fmtN(n, d = 0) { return Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+function fmtK(n) {
+  n = Number(n) || 0; const neg = n < 0; n = Math.abs(n); let s;
+  if (n >= 1e9) s = '$' + (n / 1e9).toFixed(1).replace('.', ',') + 'B';
+  else if (n >= 1e6) s = '$' + (n / 1e6).toFixed(1).replace('.', ',') + 'M';
+  else if (n >= 1e3) s = '$' + Math.round(n / 1e3) + 'K';
+  else s = '$' + fmtN(n, 0);
+  return (neg ? '−' : '') + s;
+}
+
+/* ── íconos Lucide (sólo los que usa el kiosk) ─────────────────────────── */
+const ICONS = {
+  target: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+  trendingDown: '<path d="M16 17h6v-6"/><path d="m22 17-8.5-8.5-5 5L2 7"/>',
+  trendingUp: '<path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/>',
+  arrowDown: '<path d="M12 5v14M5 12l7 7 7-7"/>',
+  layers: '<path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65M22 12.65l-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
+  activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+};
+function ico(name, w = 18) {
+  return `<svg class="ico" style="width:${w}px;height:${w}px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`;
+}
+
+/* ── datos (mock con la escala de las capturas reales) ─────────────────── */
+const DATOS_AL = { mspa: '14:32:07', reactor: '14:25:00' };
+const FLOW = {
+  informado: { v: 488, val: 161.2e6 },
+  retenido:  { v: 37,  val: 12.5e6, pct: 7.6 },
+  anulado:   { v: 4,   val: 724000, pct: 0.8 },
+  facturado: { v: 443, val: 146.5e6 },
+};
+const PLAN = { fact_acum: 942.1e6, plan_total: 3.6e9, pct: 25.8, pace: 33.3, proy: 2.8e9, proy_pct: 77.5, dia_habil: 7, dias_tot: 21, dias_rest: 14 };
+const VENTA = { val: 151.6e6, ords: 547 };
+const PEDIDOS = { v: 488, delta: -11.4 };
+const HOY = { pedidos: 363, monto: 124.3e6, ticket: 343000, ped_vend: 2.3, lineas: 6.4 };
+const RITMO = { curr: 3754, last: 9622, pct: 39, pace: 33, sobre: 547 };
+const MSPA = [
+  { k: 'Backorders (Plazos viejos)', val: 26.2e6, ords: 51, pos: 263, sev: 'warn' },
+  { k: 'Bloqueados por Límite Crédito', val: 38.1e6, ords: 116, pos: 837, sev: 'warn' },
+  { k: 'Bloqueados (Status < -1)', val: 0, ords: 0, pos: 0, sev: 'ok' },
+  { k: 'Pedidos Abiertos (Futuros)', val: 1.1e6, ords: 5, pos: 7, sev: 'ok' },
+  { k: 'Producción Abierta', val: 32.0e6, ords: 112, pos: 639, sev: 'warn' },
+  { k: 'Remitos / Facturas Abiertas', val: 0, ords: 0, pos: 0, sev: 'ok' },
+  { k: 'Venta del Día', val: 151.6e6, ords: 547, pos: 3236, venta: true },
+];
+const TREND = [
+  ['Jun 25', 4120, 38.2, 21], ['Jul 25', 4480, 41.5, 23], ['Ago 25', 3990, 36.8, 21],
+  ['Sep 25', 4610, 43.1, 22], ['Oct 25', 4820, 45.9, 23], ['Nov 25', 4530, 42.7, 20],
+  ['Dic 25', 3870, 39.4, 19], ['Ene 26', 4210, 40.1, 22], ['Feb 26', 4350, 41.0, 20],
+  ['Mar 26', 4900, 46.8, 22], ['Abr 26', 4720, 44.2, 21], ['May 26', 4980, 47.6, 21],
+];
+
+/* ── top bar (con reloj vivo) ──────────────────────────────────────────── */
+function topBar() {
+  return `<div class="kt-top">
+    <div class="kt-brand">
+      <img class="kt-logo" src="wurth-logo.png" alt="Würth">
+      <div class="kt-divider"></div>
+      <div><div class="kt-title">Operaciones · Tiempo Real</div>
+        <div class="kt-sub">Reactor · MSPA · Sala de control</div></div>
+    </div>
+    <div class="kt-right">
+      <div class="kt-conn">
+        <span class="kt-conn-row"><span class="kt-dot ok"></span>MSPA OK · datos al <b>${DATOS_AL.mspa}</b></span>
+        <span class="kt-conn-row"><span class="kt-dot ok"></span>Reactor OK · <b>${DATOS_AL.reactor}</b></span>
+      </div>
+      <div class="kt-clock"><div class="kt-time num" id="kt-time">--:--:--</div>
+        <div class="kt-date" id="kt-date"></div></div>
+    </div>
+  </div>`;
+}
+function alertRibbon() {
+  const gap = fmtN(PLAN.pace - PLAN.pct, 1);
+  return `<div class="kt-alert warn">${ico('trendingDown', 30)}
+    <span>Plan de ventas <b>${gap} pts por debajo del ritmo</b> esperado — ${fmtN(PLAN.pct, 1)}% acumulado vs ${fmtN(PLAN.pace, 1)}% esperado a hoy</span>
+  </div>`;
+}
+
+/* ── Board 1 — Operación hoy ───────────────────────────────────────────── */
+function board1() {
+  const onTrack = PLAN.pct >= PLAN.pace;
+  const fill = onTrack ? 'var(--green)' : 'var(--amber)';
+  const flowCell = (tick, label, val, sub) =>
+    `<div class="b1-flow-cell"><div class="b1-flow-top"><span class="b1-tick ${tick}"></span><span class="b1-flow-label">${label}</span></div><div class="b1-flow-val num">${val}</div><div class="b1-flow-sub num">${sub}</div></div>`;
+  const liveItem = (l, v) => `<div class="b1-live-item"><div class="l">${l}</div><div class="v num">${v}</div></div>`;
+  return `<div class="kt-board top1 active">
+    <div class="b1-grid">
+      <div class="b1-plan panel">
+        <div class="b1-plan-l">
+          <div class="b1-plan-eyebrow">${ico('target')} Plan de ventas · Facturación acumulada del mes</div>
+          <div class="b1-figs"><span class="b1-curr num">${fmtK(PLAN.fact_acum)}</span><span class="b1-total num">/ ${fmtK(PLAN.plan_total)}</span></div>
+          <div class="b1-bar-line">
+            <span class="b1-pct num" style="color:${fill}">${fmtN(PLAN.pct, 1)}%</span>
+            <div class="b1-bar-bg"><div class="b1-bar-fill" style="width:${PLAN.pct}%;background:${fill}"></div><div class="b1-bar-pace" style="left:${PLAN.pace}%"></div></div>
+          </div>
+          <div class="b1-plan-foot">
+            <span>Día hábil <b class="num">${PLAN.dia_habil} de ${PLAN.dias_tot}</b></span>
+            <span><b class="num">${PLAN.dias_rest}</b> días hábiles restantes</span>
+            <span>Restante: <b class="num">${fmtK(PLAN.plan_total - PLAN.fact_acum)}</b></span>
+          </div>
+        </div>
+        <div class="b1-plan-r"></div>
+        <div class="b1-proy">
+          <div class="l">Proyección de cierre</div>
+          <div class="v num">${fmtK(PLAN.proy)}</div>
+          <div class="s num">${fmtN(PLAN.proy_pct, 1)}% del plan</div>
+          <div class="b1-state warn">${ico('trendingDown', 19)} Por debajo del ritmo</div>
+        </div>
+      </div>
+
+      <div class="b1-stat panel"><div class="l">Venta del Día · MSPA</div><div class="v num">${fmtK(VENTA.val)}</div><div class="s num">${fmtN(VENTA.ords)} pedidos facturados</div></div>
+      <div class="b1-stat panel"><div class="l">Pedidos Informados</div><div class="v num">${fmtN(PEDIDOS.v)}</div>
+        <span class="b1-delta down">${ico('arrowDown', 22)} ${fmtN(Math.abs(PEDIDOS.delta), 1)}% <span style="color:var(--text-3);font-weight:400">vs. mismo día hábil mes anterior</span></span></div>
+
+      <div class="b1-flow panel">
+        ${flowCell('tk-blue', 'Informado', fmtK(FLOW.informado.val), fmtN(FLOW.informado.v) + ' pedidos')}
+        ${flowCell('tk-amber', 'Retenido', fmtK(FLOW.retenido.val), fmtN(FLOW.retenido.v) + ' ped · ' + fmtN(FLOW.retenido.pct, 1) + '%')}
+        ${flowCell('tk-red', 'Anulado', fmtK(FLOW.anulado.val), fmtN(FLOW.anulado.v) + ' ped · ' + fmtN(FLOW.anulado.pct, 1) + '%')}
+        ${flowCell('tk-green', 'Facturado', fmtK(FLOW.facturado.val), fmtN(FLOW.facturado.v) + ' pedidos')}
+      </div>
+
+      <div class="b1-live">
+        <div class="b1-live-head">
+          <span class="b1-live-badge"><span class="pdot"></span>En vivo · parcial</span>
+          <span class="b1-live-ttl">Así viene hoy · carga en curso</span>
+        </div>
+        <div class="b1-live-items">
+          ${liveItem('Pedidos', fmtN(HOY.pedidos))}
+          ${liveItem('Monto informado', fmtK(HOY.monto))}
+          ${liveItem('Ticket promedio', fmtK(HOY.ticket))}
+          ${liveItem('Ped / Vendedor', fmtN(HOY.ped_vend, 1))}
+          ${liveItem('Líneas / Pedido', fmtN(HOY.lineas, 1))}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ── Board 2 — Tendencia & estado ──────────────────────────────────────── */
+function board2() {
+  const mspaRow = (r) => {
+    const sem = r.venta ? 'mspa-sem' : 'mspa-sem' + (r.sev !== 'ok' ? ' ' + r.sev : '');
+    return `<div class="mspa-row${r.venta ? ' venta' : ''}"><span class="mspa-l"><span class="${sem}"></span><span class="mspa-lbl">${r.k}</span></span><span class="mspa-val num">${fmtK(r.val)}<div class="sub num">${fmtN(r.ords)} ord · ${fmtN(r.pos)} pos</div></span></div>`;
+  };
+  return `<div class="kt-board top1 active">
+    <div class="b2-grid">
+      <div class="panel b2-chart">
+        <div class="kt-eyebrow">${ico('trendingUp')} Tendencia mensual · pedidos &amp; valor por día hábil</div>
+        <div class="b2-chart-wrap"><canvas id="kt-chart"></canvas></div>
+      </div>
+      <div class="panel b2-mspa">
+        <div class="kt-eyebrow">${ico('layers')} MSPA · Estado actual</div>
+        ${MSPA.map(mspaRow).join('')}
+      </div>
+      <div class="panel b2-ritmo">
+        <div class="kt-eyebrow">${ico('activity')} Ritmo mensual · pedidos vs. mes anterior</div>
+        <div class="b2-ritmo-row">
+          <span class="b2-ritmo-fig num">${fmtN(RITMO.curr)} <small>/ ${fmtN(RITMO.last)}</small></span>
+          <div class="b2-ritmo-bar"><div class="b2-ritmo-fill" style="width:${RITMO.pct}%"></div><div class="b2-ritmo-pace" style="left:${RITMO.pace}%"></div></div>
+          <span class="b2-ritmo-tag num">+${fmtN(RITMO.sobre)} sobre ritmo</span>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ── chart ─────────────────────────────────────────────────────────────── */
+let chartInst = null;
+let chartJsLoading = false;
+function ensureChartJs(cb) {
+  if (window.Chart) { cb(); return; }
+  if (chartJsLoading) return;
+  chartJsLoading = true;
+  const s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+  s.onload = () => { chartJsLoading = false; cb(); };
+  s.onerror = () => { chartJsLoading = false; const w = document.getElementById('kt-chart'); if (w) w.closest('.b2-chart-wrap').innerHTML = '<div style="display:flex;height:100%;align-items:center;justify-content:center;color:var(--text-3);font-size:18px">No se pudo cargar el gráfico</div>'; };
+  document.head.appendChild(s);
+}
+function drawChart() {
+  const cv = document.getElementById('kt-chart');
+  if (!cv) return;
+  if (!window.Chart) { ensureChartJs(drawChart); return; }
+  if (chartInst) { chartInst.destroy(); chartInst = null; }
+  chartInst = new Chart(cv.getContext('2d'), {
+    data: {
+      labels: TREND.map(t => t[0]),
+      datasets: [
+        { type: 'bar', label: 'Pedidos / día hábil', data: TREND.map(t => +(t[1] / t[3]).toFixed(1)), backgroundColor: 'rgba(203,213,225,.75)', borderColor: '#cbd5e1', borderWidth: 1, yAxisID: 'y1', order: 2 },
+        { type: 'line', label: 'M$ / día hábil', data: TREND.map(t => +(t[2] / t[3]).toFixed(2)), borderColor: '#cc0000', backgroundColor: 'rgba(204,0,0,.06)', borderWidth: 3, pointRadius: 3, pointBackgroundColor: '#cc0000', tension: .35, yAxisID: 'y2', order: 1, fill: true },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { labels: { color: '#475569', font: { size: 16 }, boxWidth: 16, padding: 22, usePointStyle: true } },
+        tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + Number(c.parsed.y).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) } } },
+      scales: {
+        x: { ticks: { color: '#64748b', font: { size: 14 } }, grid: { display: false } },
+        y1: { position: 'left', title: { display: true, text: 'pedidos/día', color: '#94a3b8', font: { size: 12 } }, ticks: { color: '#64748b', font: { size: 13 } }, grid: { color: '#eef2f7' } },
+        y2: { position: 'right', title: { display: true, text: 'M$/día', color: '#94a3b8', font: { size: 12 } }, ticks: { color: '#cc0000', font: { size: 13 }, callback: v => v.toFixed(1).replace('.', ',') }, grid: { drawOnChartArea: false } },
+      }
+    }
+  });
+}
+
+/* ── reloj ─────────────────────────────────────────────────────────────── */
+function tickClock() {
+  const now = new Date();
+  const t = document.getElementById('kt-time'), d = document.getElementById('kt-date');
+  if (t) t.textContent = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  if (d) d.textContent = now.toLocaleDateString('es-AR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+}
+
+/* ── shell + rotación + controles ──────────────────────────────────────── */
+const ROTATE_MS = 18000;
+const NBOARDS = 2;
+let board = 0;
+let paused = false;
+let rotStart = Date.now();
+const stage = document.getElementById('stage');
+
+const CTRL_ICONS = {
+  prev: '<path d="M15 18l-6-6 6-6"/>',
+  next: '<path d="M9 18l6-6-6-6"/>',
+  pause: '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>',
+  play: '<path d="M6 4l14 8-14 8V4z"/>',
+  full: '<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>',
+  exit: '<path d="M18 6 6 18M6 6l12 12"/>',
+};
+function ctrlBtn(action, name, title, cls) {
+  return `<button class="${cls || ''}" data-act="${action}" title="${title}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${CTRL_ICONS[name]}</svg></button>`;
+}
+
+function render() {
+  stage.innerHTML =
+    topBar() + alertRibbon() +
+    (board === 0 ? board1() : board2()) +
+    `<div class="kt-rot"><div class="kt-rot-track"><div class="kt-rot-fill" id="kt-fill"></div></div></div>
+     <div class="kt-dots" id="kt-dots">${Array.from({ length: NBOARDS }, (_, i) =>
+        `<span class="kt-pg${board === i ? ' on' : ''}" data-go="${i}"></span>`).join('')}</div>`;
+  tickClock();
+  if (board === 1) drawChart();
+}
+
+function goTo(n) { board = (n + NBOARDS) % NBOARDS; rotStart = Date.now(); render(); syncCtrl(); }
+function next() { goTo(board + 1); }
+function prev() { goTo(board - 1); }
+function togglePause() { paused = !paused; rotStart = Date.now(); syncCtrl(); }
+function toggleFull() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+}
+function exitKiosk() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  // En producción apuntá esto a tu dashboard normal (ej. '/'). En el mock vuelve al dashboard v3.
+  window.location.href = 'index.html';
+}
+
+/* barra de controles (fuera del stage → no escala, siempre clickeable) */
+const ctrl = document.createElement('div');
+ctrl.className = 'kt-ctrl';
+ctrl.id = 'kt-ctrl';
+document.body.appendChild(ctrl);
+function syncCtrl() {
+  ctrl.innerHTML =
+    ctrlBtn('prev', 'prev', 'Anterior (←)') +
+    ctrlBtn('pause', paused ? 'play' : 'pause', paused ? 'Reanudar (espacio)' : 'Pausar (espacio)') +
+    ctrlBtn('next', 'next', 'Siguiente (→)') +
+    `<span class="pgnum">${board + 1} / ${NBOARDS}</span>` +
+    `<span class="sep"></span>` +
+    ctrlBtn('full', 'full', 'Pantalla completa (F)') +
+    ctrlBtn('exit', 'exit', 'Salir del modo kiosk (Esc)', 'exit');
+}
+ctrl.addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  ({ prev, next, pause: togglePause, full: toggleFull, exit: exitKiosk })[b.dataset.act]?.();
+});
+/* dots clickeables (delegado en el stage) */
+stage.addEventListener('click', (e) => {
+  const d = e.target.closest('[data-go]'); if (d) goTo(+d.dataset.go);
+});
+
+/* mostrar controles al mover el mouse, ocultar tras 3s */
+let hideT;
+const hint = document.createElement('div');
+hint.className = 'kt-hint'; hint.textContent = '← → cambiar · espacio pausar · F pantalla · Esc salir';
+document.body.appendChild(hint);
+function poke() {
+  ctrl.classList.add('show'); hint.classList.add('show');
+  clearTimeout(hideT);
+  hideT = setTimeout(() => { ctrl.classList.remove('show'); hint.classList.remove('show'); }, 3000);
+}
+window.addEventListener('mousemove', poke);
+window.addEventListener('touchstart', poke);
+
+/* teclado */
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight') next();
+  else if (e.key === 'ArrowLeft') prev();
+  else if (e.key === ' ') { e.preventDefault(); togglePause(); }
+  else if (e.key === 'f' || e.key === 'F') toggleFull();
+  else if (e.key === 'Escape') exitKiosk();
+  poke();
+});
+
+/* escalado: ESTIRA a toda la pantalla (sin barras negras) */
+function fitStage() {
+  const sx = window.innerWidth / 1920, sy = window.innerHeight / 1080;
+  stage.style.transform = 'scale(' + sx + ',' + sy + ')';
+}
+
+/* init */
+setTimeout(function loadFont(){
+  const l = document.createElement('link');
+  l.rel = 'stylesheet';
+  l.href = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&display=swap';
+  document.head.appendChild(l);
+}, 1500);
+fitStage();
+window.addEventListener('resize', fitStage);
+render();
+syncCtrl();
+setInterval(tickClock, 1000);
+setInterval(() => {
+  const fill = document.getElementById('kt-fill');
+  const pct = paused ? 0 : Math.min((Date.now() - rotStart) / ROTATE_MS * 100, 100);
+  if (fill) fill.style.width = pct + '%';
+}, 100);
+setInterval(() => {
+  if (paused) { rotStart = Date.now(); return; }
+  if (Date.now() - rotStart >= ROTATE_MS) next();
+}, 500);
+</script>
+</body>
+</html>

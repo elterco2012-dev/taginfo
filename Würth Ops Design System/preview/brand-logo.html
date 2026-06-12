@@ -1,0 +1,27 @@
+<!-- @dsCard group="Brand" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;font-family:var(--font-sans);background:#fff;padding:24px;color:var(--text)}
+  .lead{font-size:11px;color:var(--text-3);margin:0 0 18px;text-transform:uppercase;letter-spacing:2px;font-weight:700}
+  .row{display:flex;align-items:center;gap:36px}
+  .col{text-align:center}
+  .col img{height:44px;width:auto}
+  .fallback{display:flex;align-items:center;gap:6px}
+  .lw{background:var(--wurth-red);color:#fff;font-weight:900;font-size:18px;padding:6px 10px;border-radius:3px;line-height:1}
+  .ln{font-size:22px;font-weight:900;letter-spacing:3px;color:var(--wurth-red)}
+  .cap{font-size:10px;color:var(--text-3);margin-top:12px;font-family:var(--font-mono)}
+</style>
+</head>
+<body>
+  <p class="lead">Logo · primary mark &amp; CSS fallback</p>
+  <div class="row">
+    <div class="col"><img src="../assets/wurth-logo.png" alt="Würth"><div class="cap">wurth-logo.png</div></div>
+    <div style="width:1px;height:48px;background:var(--border)"></div>
+    <div class="col"><div class="fallback"><span class="lw">W</span><span class="ln">WÜRTH</span></div><div class="cap">text fallback</div></div>
+  </div>
+</body>
+</html>

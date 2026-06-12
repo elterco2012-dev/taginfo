@@ -1,0 +1,156 @@
+/* ============================================================================
+   WÜRTH OPS — Colors & Type foundation
+   Derived from the taginfo repo (dashboard.py + taginfo_web.py).
+   Two surfaces share one brand:
+     • "Operations Dashboard" — modern light/dark web app (Würth red brand).
+     • "DAILY INFO 2 SALES"   — retro green-screen terminal (legacy ERP look).
+   Import this file and use the semantic vars; never hard-code hexes.
+   ============================================================================ */
+
+/* ---------------------------------------------------------------------------
+   1. BRAND
+   --------------------------------------------------------------------------- */
+:root {
+  /* Würth red — the single brand color. Used for the logo, header rule,
+     primary actions and the sales-plan progress bar. Use sparingly. */
+  --wurth-red:        #cc0000;
+  --wurth-red-hover:  #b00000;   /* press / hover (slightly darker) */
+  --wurth-red-bg:     #fff7f7;   /* tinted surface behind red elements (light) */
+  --wurth-red-bg-dk:  #3b0d0d;   /* same, dark mode */
+}
+
+/* ---------------------------------------------------------------------------
+   2. OPERATIONS DASHBOARD — LIGHT (default)
+   Slate-based neutral ramp + a functional accent palette. The accents are
+   *semantic*: blue = informed/primary, green = sales/positive, amber = warning,
+   red = danger/cancelled, cyan/orange = secondary KPI accents.
+   --------------------------------------------------------------------------- */
+:root {
+  /* neutrals / surfaces */
+  --bg:        #f0f2f5;   /* app background */
+  --surface:   #ffffff;   /* cards, header */
+  --surface-2: #f8fafc;   /* row hover, insets */
+  --border:    #e2e8f0;   /* hairlines, dividers */
+  --border-2:  #cbd5e1;   /* stronger borders, inputs */
+
+  /* text ramp */
+  --text:   #0f172a;   /* primary text / big numbers */
+  --text-2: #475569;   /* secondary, labels */
+  --text-3: #94a3b8;   /* tertiary, captions, axis ticks */
+
+  /* functional accents */
+  --blue:   #2563eb;   /* primary KPI / "informed" */
+  --cyan:   #0891b2;   /* secondary KPI */
+  --green:  #059669;   /* sales / positive / "facturado" */
+  --amber:  #d97706;   /* warning / "retenido" */
+  --orange: #ea580c;   /* secondary KPI */
+  --red:    #dc2626;   /* danger / "anulado" */
+  --purple: #7c3aed;   /* rare extra accent */
+
+  /* tinted accent backgrounds (alert cards, flow cells) */
+  --blue-bg:  #eff6ff;
+  --green-bg: #f0fdf4;
+  --amber-bg: #fffbeb;
+  --red-bg:   #fef2f2;
+
+  /* status pill fills (delta up/down, tags) */
+  --pos-bg:  #dcfce7;  --pos-fg:  #15803d;
+  --neg-bg:  #fee2e2;  --neg-fg:  #b91c1c;
+  --flat-bg: #f1f5f9;  --flat-fg: #94a3b8;
+
+  /* ----- radii ----- */
+  --r-card:  10px;   /* cards, KPIs, flow bars, popovers */
+  --r-ctrl:   6px;   /* buttons, inputs, badges */
+  --r-pill:  20px;   /* delta pills, status pills */
+
+  /* ----- elevation ----- */
+  --shadow-card:  0 1px 3px rgba(0,0,0,.05);   /* resting card */
+  --shadow-header:0 1px 4px rgba(0,0,0,.06);   /* sticky header */
+  --shadow-pop:   0 8px 24px rgba(0,0,0,.15);  /* popovers, menus */
+
+  /* ----- spacing scale (px) ----- */
+  --sp-1: 4px;  --sp-2: 6px;  --sp-3: 8px;  --sp-4: 10px;
+  --sp-5: 14px; --sp-6: 16px; --sp-7: 20px; --sp-8: 24px;
+
+  /* ----- type ----- */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Courier New', Courier, ui-monospace, monospace;
+
+  --fs-display: 32px;  /* KPI hero number */
+  --fs-stat:    22px;  /* flow value, meta current, plan current(26) */
+  --fs-h:       14px;  /* card / header titles */
+  --fs-body:    13px;  /* base body */
+  --fs-sm:      12px;  /* table cells, secondary */
+  --fs-xs:      11px;  /* captions */
+  --fs-2xs:     10px;  /* kpi labels, sub text */
+  --fs-3xs:      9px;  /* section labels (uppercase) */
+
+  --fw-normal: 400;    /* @kind font */
+  --fw-medium: 500;    /* @kind font */
+  --fw-semibold: 600;  /* @kind font */
+  --fw-bold: 700;      /* @kind font */
+  --fw-extrabold: 800; /* @kind font */
+  --fw-black: 900;     /* @kind font */
+
+  --lh-tight: 1.1;     /* @kind font */
+  --lh-normal: 1.5;    /* @kind font */
+  --ls-label: 2px;   /* uppercase section labels */
+  --ls-wordmark: 3px;
+}
+
+/* ---------------------------------------------------------------------------
+   3. OPERATIONS DASHBOARD — DARK
+   Apply by adding class="dark" to <body> (matches dashboard.py toggle).
+   --------------------------------------------------------------------------- */
+body.dark, .theme-dark {
+  --bg:        #0f172a;
+  --surface:   #1e293b;
+  --surface-2: #1e293b;
+  --border:    #334155;
+  --border-2:  #475569;
+  --text:   #f1f5f9;
+  --text-2: #cbd5e1;
+  --text-3: #64748b;
+  --blue-bg:  #0d2045;
+  --green-bg: #052e16;
+  --amber-bg: #3b2800;
+  --red-bg:   #3b0d0d;
+  --shadow-card:  0 1px 3px rgba(0,0,0,.3);
+  --shadow-pop:   0 8px 24px rgba(0,0,0,.5);
+}
+
+/* ---------------------------------------------------------------------------
+   4. TERMINAL — "DAILY INFO 2 SALES" (legacy green-screen)
+   Self-contained palette; use the --term-* vars only on the terminal surface.
+   --------------------------------------------------------------------------- */
+:root {
+  --term-bg:        #000000;   /* pure black screen */
+  --term-fg:        #b4d900;   /* phosphor lime — text + rules */
+  --term-fg-dim:    #4a6400;   /* dim footer text */
+  --term-fg-dimmer: #3a4a00;   /* dashed row separators */
+  --term-row-hover: #0a1400;   /* row hover wash */
+  --term-error:     #ff4444;   /* error red */
+  --term-bar-bg:    #b4d900;   /* title-bar fill (inverse) */
+  --term-bar-fg:    #000000;   /* title-bar text */
+  --term-fs:        16px;
+  --term-fs-title:  17px;
+  --font-term:      'Courier New', Courier, ui-monospace, monospace;
+}
+
+/* ===========================================================================
+   5. SEMANTIC TYPE CLASSES
+   Reusable text roles for the modern dashboard surface.
+   =========================================================================== */
+.ty-display   { font:var(--fw-extrabold) var(--fs-display)/var(--lh-tight) var(--font-sans); }
+.ty-stat      { font:var(--fw-extrabold) var(--fs-stat)/var(--lh-tight)    var(--font-sans); }
+.ty-h         { font:var(--fw-bold)      var(--fs-h)/1.3                    var(--font-sans); color:var(--text); }
+.ty-body      { font:var(--fw-normal)    var(--fs-body)/var(--lh-normal)   var(--font-sans); color:var(--text); }
+.ty-sm        { font:var(--fw-normal)    var(--fs-sm)/var(--lh-normal)     var(--font-sans); color:var(--text-2); }
+.ty-caption   { font:var(--fw-normal)    var(--fs-2xs)/1.4                 var(--font-sans); color:var(--text-3); }
+.ty-section   { font:var(--fw-bold)      var(--fs-3xs)/1   var(--font-sans);
+                text-transform:uppercase; letter-spacing:var(--ls-label); color:var(--text-3); }
+.ty-mono      { font:var(--fw-normal)    var(--fs-body)/var(--lh-normal)   var(--font-mono); }
+
+/* terminal text role */
+.ty-term      { font:var(--fw-normal)    var(--term-fs)/1.5 var(--font-term);
+                color:var(--term-fg); background:var(--term-bg); }

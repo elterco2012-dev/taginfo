@@ -1,0 +1,50 @@
+# Formateadores es-AR consistentes (clave de la mejora #2)
+
+# La inconsistencia más común: mezclar "$3.4M" (punto) con "3.402.190" (coma).
+# La regla: TODO con coma decimal es-AR. Estas funciones lo garantizan.
+
+# ─────────────────────────────────────────────────────────────────────
+# PYTHON (para generar el HTML desde dashboard.py)
+# ─────────────────────────────────────────────────────────────────────
+
+def fmt_n(n, dec=0):
+    """Número es-AR: 1.234.567,89  (punto miles, coma decimal)."""
+    s = f"{float(n or 0):,.{dec}f}"          # 1,234,567.89  (formato en)
+    return s.replace(",", "§").replace(".", ",").replace("§", ".")
+
+def fmt_k(n):
+    """Moneda abreviada: $1,2B / $3,4M / $45K / $1.234."""
+    n = float(n or 0)
+    if n >= 1e9:  return "$" + f"{n/1e9:.1f}".replace(".", ",") + "B"
+    if n >= 1e6:  return "$" + f"{n/1e6:.1f}".replace(".", ",") + "M"
+    if n >= 1e3:  return "$" + str(round(n/1e3)) + "K"
+    return "$" + fmt_n(n, 0)
+
+def pct(a, b):
+    """Porcentaje es-AR o guion si no hay base."""
+    if not b: return "—"
+    return f"{a/b*100:.1f}".replace(".", ",") + "%"
+
+# IMPORTANTE: además de formatear, aplicá la clase CSS .num a todo elemento
+# que muestre números (KPIs, tablas, deltas). Esa clase activa
+# font-variant-numeric: tabular-nums, que evita que los dígitos "salten"
+# de ancho cuando el dashboard refresca cada 60s.
+
+
+# ─────────────────────────────────────────────────────────────────────
+# JAVASCRIPT (si formateás en el front en lugar de en Python)
+# ─────────────────────────────────────────────────────────────────────
+#
+#   const fmtN = (n, d = 0) =>
+#     Number(n || 0).toLocaleString('es-AR',
+#       { minimumFractionDigits: d, maximumFractionDigits: d });
+#
+#   const fmtK = (n) => {
+#     n = Number(n) || 0;
+#     if (n >= 1e9) return '$' + (n / 1e9).toFixed(1).replace('.', ',') + 'B';
+#     if (n >= 1e6) return '$' + (n / 1e6).toFixed(1).replace('.', ',') + 'M';
+#     if (n >= 1e3) return '$' + Math.round(n / 1e3) + 'K';
+#     return '$' + fmtN(n, 0);
+#   };
+#
+#   const pct = (a, b) => (b ? ((a / b) * 100).toFixed(1).replace('.', ',') + '%' : '—');
