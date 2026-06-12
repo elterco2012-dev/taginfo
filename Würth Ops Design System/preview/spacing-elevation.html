@@ -1,0 +1,25 @@
+<!-- @dsCard group="Spacing" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;font-family:var(--font-sans);background:#f0f2f5;padding:26px;color:var(--text)}
+  .lead{font-size:11px;color:var(--text-3);margin:0 0 22px;text-transform:uppercase;letter-spacing:2px;font-weight:700}
+  .row{display:flex;gap:28px}
+  .item{text-align:center}
+  .box{background:#fff;width:120px;height:60px;border-radius:10px;border:1px solid var(--border)}
+  .name{font-size:11px;font-weight:700;margin-top:12px}
+  .val{font-size:10px;color:var(--text-3);font-family:var(--font-mono)}
+</style>
+</head>
+<body>
+  <p class="lead">Elevation · soft &amp; flat</p>
+  <div class="row">
+    <div class="item"><div class="box" style="box-shadow:0 1px 3px rgba(0,0,0,.05)"></div><div class="name">card</div><div class="val">0 1px 3px / .05</div></div>
+    <div class="item"><div class="box" style="box-shadow:0 1px 4px rgba(0,0,0,.06)"></div><div class="name">header</div><div class="val">0 1px 4px / .06</div></div>
+    <div class="item"><div class="box" style="box-shadow:0 8px 24px rgba(0,0,0,.15)"></div><div class="name">popover</div><div class="val">0 8px 24px / .15</div></div>
+  </div>
+</body>
+</html>

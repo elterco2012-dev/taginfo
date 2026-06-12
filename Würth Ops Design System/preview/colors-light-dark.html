@@ -1,0 +1,35 @@
+<!-- @dsCard group="Colors" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;font-family:var(--font-sans);padding:0}
+  .split{display:flex;height:160px}
+  .pane{flex:1;padding:18px 20px}
+  .light{background:#f0f2f5}
+  .dark{background:#0f172a}
+  .tag{font-size:9px;text-transform:uppercase;letter-spacing:2px;font-weight:700;margin-bottom:10px}
+  .light .tag{color:#94a3b8}.dark .tag{color:#64748b}
+  .card{border-radius:10px;padding:12px 14px;border:1px solid;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .light .card{background:#fff;border-color:#e2e8f0}
+  .dark .card{background:#1e293b;border-color:#334155;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+  .klbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px}
+  .light .klbl{color:#94a3b8}.dark .klbl{color:#64748b}
+  .kval{font-size:30px;font-weight:800;color:#2563eb;line-height:1;margin-top:6px}
+</style>
+</head>
+<body>
+  <div class="split">
+    <div class="pane light">
+      <div class="tag">Light mode</div>
+      <div class="card"><div class="klbl">Pedidos Informados</div><div class="kval">1.284</div></div>
+    </div>
+    <div class="pane dark">
+      <div class="tag">Dark mode</div>
+      <div class="card"><div class="klbl">Pedidos Informados</div><div class="kval">1.284</div></div>
+    </div>
+  </div>
+</body>
+</html>

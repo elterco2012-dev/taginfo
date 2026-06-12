@@ -1,0 +1,28 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;font-family:var(--font-sans);background:#fff;padding:18px;color:var(--text)}
+  .lead{font-size:11px;color:var(--text-3);margin:0 0 12px;text-transform:uppercase;letter-spacing:2px;font-weight:700}
+  .plan-row{display:flex;align-items:center;gap:14px}
+  .nums{display:flex;align-items:baseline;gap:8px;flex-shrink:0}
+  .curr{font-size:26px;font-weight:800;color:var(--wurth-red)}
+  .total{font-size:14px;color:var(--text-3);font-weight:600}
+  .bar-bg{background:var(--border);border-radius:8px;height:18px;position:relative;overflow:hidden;flex:1;min-width:180px}
+  .bar-fill{height:100%;border-radius:8px;background:var(--wurth-red);display:flex;align-items:center;padding-left:8px;font-size:10px;font-weight:700;color:#fff}
+  .pace{position:absolute;top:0;bottom:0;width:3px;background:var(--amber);z-index:2}
+  .tag{font-size:10px;padding:3px 10px;border-radius:12px;font-weight:600;background:#fffbeb;color:#d97706;flex-shrink:0}
+</style>
+</head>
+<body>
+  <p class="lead">📊 Plan de Ventas — progreso vs. ritmo</p>
+  <div class="plan-row">
+    <div class="nums"><span class="curr">$28,4M</span><span class="total">/ $42,0M</span></div>
+    <div class="bar-bg"><div class="bar-fill" style="width:67%">67,6%</div><div class="pace" style="left:72%"></div></div>
+    <span class="tag">por debajo del ritmo</span>
+  </div>
+</body>
+</html>

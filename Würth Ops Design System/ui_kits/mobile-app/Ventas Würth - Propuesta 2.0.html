@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ventas Würth — Propuesta 2.0 (Daniel)</title>
+<style>
+  :root{
+    --bg:#0c0d10; --card:#16181d; --card-2:#1b1e24; --line:#23262e;
+    --text:#f4f6fa; --text-2:#aab2c0; --text-3:#6c7480;
+    --red:#e11d2a; --red-soft:#ff5a63;
+    --green:#22c55e; --amber:#f5a623; --amber-bg:#2a2008;
+    --font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#05060a;font-family:var(--font);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;gap:40px;flex-wrap:wrap}
+  .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+
+  /* phone shell */
+  .phone{width:390px;height:auto;min-height:760px;background:var(--bg);border-radius:42px;border:11px solid #1d1f25;
+    box-shadow:0 30px 80px rgba(0,0,0,.6),inset 0 0 0 2px #000;position:relative;overflow:hidden;flex-shrink:0}
+  .notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:130px;height:26px;background:#000;border-radius:0 0 16px 16px;z-index:5}
+  .statusbar{height:42px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 4px;color:var(--text);font-size:13px;font-weight:600}
+  .statusbar .r{display:flex;gap:6px;align-items:center}
+
+  .screen{padding:14px 18px 28px}
+
+  /* header */
+  .hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
+  .greet{font-size:15px;color:var(--text-3);font-weight:500}
+  .app-ttl{font-size:26px;font-weight:800;color:var(--text);letter-spacing:-.5px;margin-top:1px}
+  .fresh{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-3);margin-top:7px}
+  .fresh .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px 1px rgba(34,197,94,.6)}
+  .logo{width:50px;height:50px;border-radius:13px;background:var(--red);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 6px 18px rgba(225,29,42,.35)}
+  .logo span{color:#fff;font-weight:900;font-size:24px;font-style:italic}
+
+  /* alert */
+  .alert{display:flex;align-items:center;gap:10px;background:var(--amber-bg);border:1px solid #4a3a10;border-radius:14px;padding:11px 14px;margin-bottom:16px}
+  .alert svg{width:20px;height:20px;color:var(--amber);flex-shrink:0}
+  .alert-txt{font-size:13px;color:#f5c97a;line-height:1.35}
+  .alert-txt b{color:var(--amber);font-weight:700}
+
+  /* HERO — plan */
+  .hero{background:linear-gradient(160deg,#1c1f26,#141519);border:1px solid var(--line);border-radius:22px;padding:20px;margin-bottom:14px}
+  .hero-lbl{font-size:11px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;color:var(--text-3);margin-bottom:12px}
+  .hero-figs{display:flex;align-items:baseline;gap:9px}
+  .hero-curr{font-size:46px;font-weight:800;color:var(--text);line-height:.95;letter-spacing:-1.5px}
+  .hero-total{font-size:19px;color:var(--text-3);font-weight:600}
+  .hero-bar-line{display:flex;align-items:center;gap:12px;margin:16px 0 6px}
+  .hero-pct{font-size:18px;font-weight:800;color:var(--amber);min-width:54px}
+  .bar-bg{flex:1;height:13px;background:#0a0b0e;border-radius:7px;position:relative;overflow:hidden;border:1px solid #23262e}
+  .bar-fill{height:100%;border-radius:7px;background:linear-gradient(90deg,var(--red),var(--red-soft))}
+  .bar-pace{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text)}
+  .hero-proy{display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding-top:15px;border-top:1px solid var(--line)}
+  .proy-l{font-size:12px;color:var(--text-3);text-transform:uppercase;letter-spacing:.6px}
+  .proy-v{font-size:22px;font-weight:800;color:var(--red-soft)}
+  .proy-s{font-size:12px;color:var(--text-3);margin-top:2px}
+
+  /* live row */
+  .live-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+  .live-card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px 17px}
+  .lc-top{display:flex;align-items:center;gap:6px;margin-bottom:9px}
+  .lc-live{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:800;letter-spacing:.5px;color:var(--green);text-transform:uppercase}
+  .lc-live .pdot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 7px 1px rgba(34,197,94,.6);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .lc-lbl{font-size:12px;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+  .lc-val{font-size:30px;font-weight:800;color:var(--text);line-height:1;margin-top:4px;letter-spacing:-.5px}
+  .lc-sub{font-size:12px;color:var(--text-3);margin-top:7px}
+  .spark{width:100%;height:30px;margin-top:10px;display:block}
+
+  /* secondary toggle */
+  .more{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  .more-head{display:flex;align-items:center;justify-content:space-between;padding:15px 17px;cursor:pointer}
+  .more-head .t{font-size:13px;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.6px}
+  .more-head .chev{color:var(--text-3);transition:transform .25s}
+  .more.open .chev{transform:rotate(180deg)}
+  .more-body{display:none;padding:0 17px 6px}
+  .more.open .more-body{display:block}
+  .more-row{display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-top:1px solid var(--line)}
+  .more-row .k{font-size:13px;color:var(--text-2)}
+  .more-row .v{font-size:16px;font-weight:700;color:var(--text)}
+  .more-row .sem{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:8px;vertical-align:1px}
+  .sem.ok{background:var(--green)}.sem.warn{background:var(--amber)}
+
+  .foot{text-align:center;font-size:11px;color:var(--text-3);margin-top:18px;line-height:1.5}
+
+  /* annotation panel */
+  .note{max-width:360px;color:#cdd4e0;font-family:var(--font)}
+  .note h2{font-size:20px;color:#fff;margin-bottom:6px}
+  .note .sub{font-size:13px;color:#8b93a3;margin-bottom:20px}
+  .note .item{display:flex;gap:12px;margin-bottom:16px}
+  .note .n{width:24px;height:24px;border-radius:7px;background:var(--red);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .note .item .t{font-size:14px;font-weight:700;color:#fff;margin-bottom:3px}
+  .note .item p{font-size:13px;color:#9aa2b2;line-height:1.5}
+  @media(max-width:880px){.note{max-width:390px}}
+</style>
+</head>
+<body>
+  <div class="phone">
+    <div class="notch"></div>
+    <div class="statusbar"><span class="num">9:41</span><span class="r">●●● ▼ 100%</span></div>
+    <div class="screen">
+      <div class="hdr">
+        <div>
+          <div class="greet">Buenas tardes, Daniel</div>
+          <div class="app-ttl">Ventas Würth</div>
+          <div class="fresh"><span class="dot"></span>hace 16s · 11/06/2026</div>
+        </div>
+        <div class="logo"><span>W</span></div>
+      </div>
+
+      <div class="alert">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 17h6v-6"/><path d="m22 17-8.5-8.5-5 5L2 7"/></svg>
+        <div class="alert-txt">Plan <b>8,8 pts por debajo del ritmo</b> · proyección $2,8B (77% del plan)</div>
+      </div>
+
+      <div class="hero">
+        <div class="hero-lbl">Plan del mes · facturación acumulada</div>
+        <div class="hero-figs"><span class="hero-curr num">$1,1B</span><span class="hero-total num">/ $3,6B</span></div>
+        <div class="hero-bar-line">
+          <span class="hero-pct num">30,0%</span>
+          <div class="bar-bg"><div class="bar-fill" style="width:30%"></div><div class="bar-pace" style="left:38%"></div></div>
+        </div>
+        <div class="hero-proy">
+          <div><div class="proy-l">Proyección de cierre</div><div class="proy-s">Día hábil 8 de 21 · restante $2,6B</div></div>
+          <div style="text-align:right"><div class="proy-v num">$2,8B</div><div class="proy-s num">77,0% del plan</div></div>
+        </div>
+      </div>
+
+      <div class="live-grid">
+        <div class="live-card">
+          <div class="lc-top"><span class="lc-live"><span class="pdot"></span>Hoy</span></div>
+          <div class="lc-lbl">Venta del día</div>
+          <div class="lc-val num">$86,6M</div>
+          <svg class="spark" id="sp1" viewBox="0 0 120 30" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="live-card">
+          <div class="lc-top"><span class="lc-live"><span class="pdot"></span>Hoy</span></div>
+          <div class="lc-lbl">Pedidos hoy</div>
+          <div class="lc-val num">287</div>
+          <svg class="spark" id="sp2" viewBox="0 0 120 30" preserveAspectRatio="none"></svg>
+        </div>
+      </div>
+
+      <div class="more" id="more">
+        <div class="more-head" onclick="document.getElementById('more').classList.toggle('open')">
+          <span class="t">Detalle operativo</span>
+          <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+        <div class="more-body">
+          <div class="more-row"><span class="k">Vendedores activos</span><span class="v num">136</span></div>
+          <div class="more-row"><span class="k">Líneas / pedido</span><span class="v num">5,8</span></div>
+          <div class="more-row"><span class="k"><span class="sem warn"></span>Backorders</span><span class="v num">140</span></div>
+          <div class="more-row"><span class="k"><span class="sem ok"></span>Remitos abiertos</span><span class="v num">0</span></div>
+        </div>
+      </div>
+
+      <div class="foot">Datos en tiempo real · Reactor · MSPA<br>Toca "Detalle operativo" para ver más</div>
+    </div>
+  </div>
+
+  <div class="note">
+    <h2>Propuesta 2.0 · vista para Daniel</h2>
+    <div class="sub">Misma app, curada para dirección. Menos números, más decisión.</div>
+    <div class="item"><div class="n">1</div><div><div class="t">Números abreviados</div><p>$1,1B / $3,6B en vez de $1.095.297.511. Legible de un vistazo, consistente con el dashboard.</p></div></div>
+    <div class="item"><div class="n">2</div><div><div class="t">El Plan es el héroe</div><p>Lo primero que ve: cómo viene el mes + la proyección de cierre. Es la pregunta que se hace un gerente.</p></div></div>
+    <div class="item"><div class="n">3</div><div><div class="t">Alerta arriba</div><p>Si algo está fuera de ritmo, se lo dice directo. Si todo OK, queda en verde.</p></div></div>
+    <div class="item"><div class="n">4</div><div><div class="t">Lo operativo, plegado</div><p>Backorders, remitos, vendedores: están, pero abajo y ocultos. No le roban atención a lo importante.</p></div></div>
+    <div class="item"><div class="n">5</div><div><div class="t">Sparklines neutros</div><p>Muestran la tendencia sin gritar. El color se reserva para el estado.</p></div></div>
+  </div>
+
+  <script>
+    function spark(id, data){
+      const el=document.getElementById(id); if(!el) return;
+      const w=120,h=30,pad=2, mn=Math.min(...data),mx=Math.max(...data),rng=(mx-mn)||1;
+      const step=(w-pad*2)/(data.length-1);
+      const pts=data.map((v,i)=>[pad+i*step, h-pad-((v-mn)/rng)*(h-pad*2)]);
+      const d=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+      const c='#7c8593';
+      el.innerHTML='<path d="'+d+'" fill="none" stroke="'+c+'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'+
+        '<circle cx="'+pts.at(-1)[0].toFixed(1)+'" cy="'+pts.at(-1)[1].toFixed(1)+'" r="2.4" fill="'+c+'"/>';
+    }
+    spark('sp1',[62,71,55,80,68,77,64,59,82,70,66,86]);
+    spark('sp2',[260,290,255,310,275,300,265,288,305,280,272,287]);
+  </script>
+</body>
+</html>

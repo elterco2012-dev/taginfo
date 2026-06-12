@@ -1,0 +1,27 @@
+<!-- @dsCard group="Colors" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;font-family:var(--font-sans);background:#fff;padding:20px;color:var(--text)}
+  .row{display:flex;gap:14px}
+  .sw{flex:1;border-radius:var(--r-ctrl);overflow:hidden;border:1px solid var(--border)}
+  .chip{height:64px}
+  .meta{padding:8px 10px}
+  .name{font-size:12px;font-weight:700}
+  .hex{font-size:11px;color:var(--text-3);font-family:var(--font-mono);margin-top:2px}
+  .lead{font-size:11px;color:var(--text-3);margin:0 0 14px;text-transform:uppercase;letter-spacing:2px;font-weight:700}
+</style>
+</head>
+<body>
+  <p class="lead">Brand · Würth Red</p>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background:var(--wurth-red)"></div><div class="meta"><div class="name">Würth Red</div><div class="hex">#cc0000</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--wurth-red-hover)"></div><div class="meta"><div class="name">Red · Press</div><div class="hex">#b00000</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--wurth-red-bg);border-bottom:1px solid var(--border)"></div><div class="meta"><div class="name">Red Tint</div><div class="hex">#fff7f7</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--wurth-red-bg-dk)"></div><div class="meta"><div class="name">Red Tint · Dark</div><div class="hex">#3b0d0d</div></div></div>
+  </div>
+</body>
+</html>
