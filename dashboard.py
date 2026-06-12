@@ -2608,6 +2608,23 @@ def get_web_html():
         'id="date-badge-btn"',
         'id="date-badge-btn" style="display:none"'
     ).replace(
+        # [WEB ESTÁTICO] frescura real: la edad sale del timestamp del snapshot,
+        # no de "0 si no hay error". Si el FTP dejó de subir, el dato es viejo.
+        "  const mspaSegs = data.mspa_error ? 9999 : 0;\n  const reactSegs = data.reactor_error ? 9999 : 0;",
+        "  let _snapAge=null;\n"
+        "  if(data.timestamp){const _m=String(data.timestamp).match(/(\\d{2})\\/(\\d{2})\\/(\\d{4})\\s+(\\d{2}):(\\d{2}):(\\d{2})/);"
+        "if(_m){const _sd=new Date(+_m[3],+_m[2]-1,+_m[1],+_m[4],+_m[5],+_m[6]);_snapAge=Math.round((Date.now()-_sd.getTime())/1000);}}\n"
+        "  const mspaSegs = data.mspa_error ? 9999 : (_snapAge==null?9999:_snapAge);\n"
+        "  const reactSegs = data.reactor_error ? 9999 : (_snapAge==null?9999:_snapAge);"
+    ).replace(
+        # [WEB ESTÁTICO] mostrar la hora del snapshot (no la del browser) y etiqueta honesta
+        "  document.getElementById('conn-mspa-txt').innerHTML=`MSPA ${connLabel(mSev)} · <b>${nowStr}</b>`;\n"
+        "  document.getElementById('conn-r-txt').innerHTML=`Reactor ${connLabel(rSev)} · <b>${nowStr}</b>`;",
+        "  const _stLbl=(s)=>s==='ok'?'OK':s==='slow'?'demorado':'DESACTUALIZADO';\n"
+        "  const _snapT=data.timestamp?String(data.timestamp).split(' ').pop().slice(0,5):nowStr;\n"
+        "  document.getElementById('conn-mspa-txt').innerHTML=`MSPA ${_stLbl(mSev)} · <b>${_snapT}</b>`;\n"
+        "  document.getElementById('conn-r-txt').innerHTML=`Reactor ${_stLbl(rSev)} · <b>${_snapT}</b>`;"
+    ).replace(
         # Kiosk apunta a kiosk.html
         "window.location.href='/kiosk'",
         "window.location.href='kiosk.html'"
@@ -2619,6 +2636,20 @@ def get_web_html():
     ).replace(
         "s.src='/static/chart.min.js';",
         "s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';"
+    ).replace(
+        # [WEB ESTÁTICO] el kiosk marca desactualizado si el snapshot tiene >10 min
+        "  DATOS_AL.mspaOk=!d.mspa_error; DATOS_AL.reactorOk=!d.reactor_error;",
+        "  let _kAge=null;\n"
+        "  if(d.timestamp){const _km=String(d.timestamp).match(/(\\d{2})\\/(\\d{2})\\/(\\d{4})\\s+(\\d{2}):(\\d{2}):(\\d{2})/);"
+        "if(_km){const _ks=new Date(+_km[3],+_km[2]-1,+_km[1],+_km[4],+_km[5],+_km[6]);_kAge=Math.round((Date.now()-_ks.getTime())/1000);}}\n"
+        "  const _kStale=(_kAge==null)||(_kAge>600);\n"
+        "  DATOS_AL.mspaOk=!d.mspa_error&&!_kStale; DATOS_AL.reactorOk=!d.reactor_error&&!_kStale;"
+    ).replace(
+        "MSPA ${DATOS_AL.mspaOk?'OK':'sin datos'}",
+        "MSPA ${DATOS_AL.mspaOk?'OK':'DESACTUALIZADO'}"
+    ).replace(
+        "Reactor ${DATOS_AL.reactorOk?'OK':'sin datos'}",
+        "Reactor ${DATOS_AL.reactorOk?'OK':'DESACTUALIZADO'}"
     ).replace(
         "window.location.href='/'",
         "window.location.href='index.html'"

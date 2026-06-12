@@ -9,10 +9,8 @@ echo.
 echo    1) WurthDashboard         - corre el dashboard con auto-restart
 echo    2) WurthDashboardWatchdog - reinicia el dashboard si se cuelga
 echo.
-echo  Windows necesita la contrasena de tu usuario (%USERNAME%) para
-echo  poder correr las tareas con la sesion cerrada.
-echo.
-set /p WINPASS=Contrasena de Windows para %USERNAME%:
+echo  Las tareas corren con la cuenta SYSTEM: no piden contrasena y
+echo  NUNCA se rompen porque venza o cambie la clave de un usuario.
 echo.
 
 :: ── Borra tareas viejas ─────────────────────────────────────────────────────
@@ -20,11 +18,11 @@ schtasks /Delete /TN "WurthDashboard" /F 2>nul
 schtasks /Delete /TN "WurthDashboardWatchdog" /F 2>nul
 
 :: ── 1) Dashboard principal — ONSTART, arranca al minuto del boot ────────────
+::    /RU SYSTEM = sin contrasena, no expira nunca
 schtasks /Create /TN "WurthDashboard" ^
   /TR "C:\taginfo\iniciar_dashboard.bat" ^
   /SC ONSTART ^
-  /RU "%USERNAME%" ^
-  /RP "%WINPASS%" ^
+  /RU "SYSTEM" ^
   /RL HIGHEST ^
   /DELAY 0001:00 ^
   /F
@@ -34,8 +32,7 @@ set ERR1=%ERRORLEVEL%
 schtasks /Create /TN "WurthDashboardWatchdog" ^
   /TR "C:\taginfo\watchdog_dashboard.bat" ^
   /SC ONSTART ^
-  /RU "%USERNAME%" ^
-  /RP "%WINPASS%" ^
+  /RU "SYSTEM" ^
   /RL HIGHEST ^
   /DELAY 0002:00 ^
   /F
